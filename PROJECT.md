@@ -3,38 +3,38 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-08
+**Last updated:** 2026-08-09
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** NOT STARTED
-**Next milestone:** Phase 1 kick-off
+**Phase status:** IN PROGRESS — P0-1 through P0-6 done and verified; P0-7 through P0-11 remain
+**Next milestone:** P0-7 (migration runner)
 
 ---
 
 ## 1. Snapshot
 
-| Item            | Value                                                      |
-| --------------- | ---------------------------------------------------------- |
-| Client          | AC / fridge / oven repair + spare parts shop, Malakand, KP |
-| Go-live target  | 2026-08-31 (billing + udhaar only)                         |
-| Hardware        | NOT YET PURCHASED — spec issued, awaiting confirmation     |
-| Data collection | Templates issued, awaiting rough data from client          |
-| Repo            | Not yet initialised                                        |
+| Item            | Value                                                                   |
+| --------------- | ----------------------------------------------------------------------- |
+| Client          | AC / fridge / oven repair + spare parts shop, Malakand, KP              |
+| Go-live target  | 2026-08-31 (billing + udhaar only)                                      |
+| Hardware        | NOT YET PURCHASED — spec issued, awaiting confirmation                  |
+| Data collection | Templates issued, awaiting rough data from client                       |
+| Repo            | Initialised 2026-08-09. 3 commits on `master`. Not yet pushed anywhere. |
 
 ---
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed |
-| ----- | ---------------------------- | ----------- | --------- |
-| 0     | Foundation & Environment     | NOT STARTED | —         |
-| 1     | Item master + import         | NOT STARTED | —         |
-| 2     | Purchases + suppliers        | NOT STARTED | —         |
-| 3     | Counter sale + udhaar        | NOT STARTED | —         |
-| 4     | Printing + reports           | NOT STARTED | —         |
-| 5     | Deploy + parallel run        | NOT STARTED | —         |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —         |
-| 7     | Staff, wages, expenses       | NOT STARTED | —         |
-| 8     | Bug-fix & hardening          | NOT STARTED | —         |
+| Phase | Name                         | Status      | Completed              |
+| ----- | ---------------------------- | ----------- | ---------------------- |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-6 (2026-08-09) |
+| 1     | Item master + import         | NOT STARTED | —                      |
+| 2     | Purchases + suppliers        | NOT STARTED | —                      |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                      |
+| 4     | Printing + reports           | NOT STARTED | —                      |
+| 5     | Deploy + parallel run        | NOT STARTED | —                      |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                      |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                      |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                      |
 
 ---
 
@@ -86,6 +86,29 @@ Fix: Add `'coverage'` to the `ignores` array in `eslint.config.js`.
 Status: UNFIXED — one-line config fix, outside this session's authorized
 fix categories (not a missing devDependency, barrel file, or `apps/*`
 package.json); needs explicit approval to edit `eslint.config.js`.
+
+### BUG-4: No `.gitattributes`; this machine's system-wide Git config (`core.autocrlf=true`) fights Prettier's `endOfLine: "lf"` — MEDIUM
+
+Found in: Phase 0, 2026-08-09
+Description: Confirmed via `git config --list --show-origin`: `core.autocrlf=true`
+is set at `C:/Program Files/Git/etc/gitconfig` (system-wide, not repo-local).
+The repo has no `.gitattributes` to override this per-repo. Result: `git
+checkout -- README.md` re-materialised the file with CRLF line endings even
+though `git diff` showed no content change against HEAD; `npm run
+format:check` then failed on a file nobody had actually edited. Confirmed the
+file had literal `\r\n` bytes via a direct Node buffer read.
+Impact: On any Windows machine with the common `core.autocrlf=true` default
+(this dev machine, and the client's shop PC is Windows per the deployment
+target in `docs/SYSTEM_DESIGN.md` §9), a fresh `git clone`, `git checkout`,
+or branch switch can silently reintroduce CRLF into every tracked text file,
+breaking `format:check`/`lint` for reasons that look unrelated to whatever
+the developer actually changed. `git diff` will not show it, which makes it
+confusing to debug — as it was here.
+Fix: Add a `.gitattributes` file pinning line endings, e.g. `* text=auto
+eol=lf`, so the repo's line-ending policy doesn't depend on each
+contributor's global Git config.
+Status: UNFIXED — needs a new file (`.gitattributes`) at repo root; outside
+this session's authorized fix categories, needs explicit approval.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
