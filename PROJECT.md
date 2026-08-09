@@ -67,6 +67,26 @@ Fix: Update `SYSTEM_DESIGN.md` §2 and §5 to say `apps/server` /
 Status: UNFIXED — waiting for a documentation cleanup pass (out of scope
 for the P0-1–P0-6 subtasks this session).
 
+### BUG-3: `eslint.config.js` does not ignore the generated `coverage/` directory — LOW
+
+Found in: Phase 0, 2026-08-09
+Description: `.gitignore` excludes `coverage/`, but `eslint.config.js`'s
+top-level `ignores` array (`['dist', 'out', 'release', 'node_modules',
+'**/*.config.js', '**/*.config.ts']`) does not. Confirmed: after running
+`npm run test:coverage`, `npm run lint` fails with 3 parsing errors on
+vitest's generated `coverage/block-navigation.js`, `coverage/prettify.js`,
+`coverage/sorter.js` ("was not found by the project service").
+Impact: Any local run of `npm run verify` (or a pre-commit hook) fails if
+`coverage/` exists on disk from a prior `test:coverage` run, even though
+nothing real is wrong. CI is unaffected today only because its `Lint` step
+runs before its `Test` step in `.github/workflows/ci.yml` — this is order
+dependent and will break the day that order changes. Worked around this
+session by deleting the generated `coverage/` directory before verifying.
+Fix: Add `'coverage'` to the `ignores` array in `eslint.config.js`.
+Status: UNFIXED — one-line config fix, outside this session's authorized
+fix categories (not a missing devDependency, barrel file, or `apps/*`
+package.json); needs explicit approval to edit `eslint.config.js`.
+
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 Found in:    Phase [X], [YYYY-MM-DD]
