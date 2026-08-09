@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Test
+        run: npm run test:coverage
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  guard-rails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject float money columns in migrations
+        run: |
+          if grep -rniE '(price|amount|cost|total|balance)[a-z_]*\s+(REAL|FLOAT|DOUBLE|NUMERIC|DECIMAL)' packages/db/src/migrations/ 2>/dev/null; then
+            echo "::error::Money column declared as a floating point type. See ADR-0003."
+            exit 1
+          fi
+          echo "OK - no float money columns"
+      - name: Reject UPDATE/DELETE on append-only tables
+        run: |
+          if grep -rniE "(update|delete\s+from)\s+.{0,20}(stock_movement|party_ledger)" packages/ apps/ --include=*.ts 2>/dev/null; then
+            echo "::error::stock_movement and party_ledger are append-only. See ADR-0004."
+            exit 1
+          fi
+          echo "OK - append-only respected"
+      - name: Reject committed database files
+        run: |
+          if git ls-files | grep -E '\.(db|sqlite3?)$'; then
+            echo "::error::Database file committed. Client data must never enter the repo."
+            exit 1
+          fi
+          echo "OK - no database files"
+
+  build-windows:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    needs: [verify, guard-rails]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release/*.exe
+          retention-days: 30

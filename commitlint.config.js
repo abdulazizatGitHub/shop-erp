@@ -1,0 +1,33 @@
+export default {
+  extends: ['@commitlint/config-conventional'],
+  rules: {
+    'scope-enum': [
+      2,
+      'always',
+      [
+        'shared',
+        'db',
+        'core',
+        'ui',
+        'desktop',
+        'renderer',
+        'sale',
+        'purchase',
+        'stock',
+        'party',
+        'job',
+        'expense',
+        'report',
+        'print',
+        'import',
+        'backup',
+        'auth',
+        'deps',
+        'ci',
+        'docs',
+      ],
+    ],
+    'subject-case': [2, 'never', ['upper-case', 'pascal-case']],
+    'header-max-length': [2, 'always', 100],
+  },
+};

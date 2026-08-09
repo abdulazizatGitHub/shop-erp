@@ -1,0 +1,24 @@
+{
+  "name": "@shop/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "@shop/contracts": "*",
+    "@shop/core": "*",
+    "@shop/db": "*",
+    "@shop/shared": "*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
+    "electron-vite": "^2.3.0"
+  }
+}
