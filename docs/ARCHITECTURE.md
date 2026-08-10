@@ -42,13 +42,13 @@ Treat the renderer as an untrusted client, because it is one.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ L4  PRESENTATION            apps/renderer, packages/ui       │
+│ L4  PRESENTATION            apps/client, packages/ui         │
 │     React screens, shared components, formatting, i18n       │
 │     Knows nothing about SQL or domain rules                  │
 └───────────────────────────┬──────────────────────────────────┘
                             │ typed IPC contract
 ┌───────────────────────────▼──────────────────────────────────┐
-│ L3  APPLICATION             apps/desktop/src/ipc             │
+│ L3  APPLICATION             apps/server/src/ipc              │
 │     Handlers. Zod validation, authorisation, orchestration.  │
 │     THIN. No business rules live here.                       │
 └───────────────────────────┬──────────────────────────────────┘
@@ -108,7 +108,7 @@ Cross-module access goes through the other module's service, never its tables.
 | `staff`    | attendance, wages, advances, commission                | 7     |
 
 ```
-apps/desktop/src/
+apps/server/src/
   main.ts                  bootstrap, window creation
   ipc/registry.ts          registers handlers, applies auth middleware
   ipc/sale.handlers.ts

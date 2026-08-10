@@ -122,7 +122,7 @@ Never trust the renderer. It is a browser context.
 | `packages/shared` (Money, Qty, IDs) | 100% coverage. Non-negotiable.                               |
 | `packages/core` (domain services)   | Every money/stock path tested against hand-calculated values |
 | `packages/db` (repositories)        | Integration tests against a real temp SQLite file            |
-| `apps/renderer`                     | Smoke tests for critical screens                             |
+| `apps/client`                       | Smoke tests for critical screens                             |
 
 **Every money or stock test must assert against a number calculated by hand and
 written in a comment.** A test that asserts the code equals itself proves nothing.

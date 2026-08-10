@@ -10,10 +10,10 @@ Supersedes the summary in `docs/ARCHITECTURE.md`. Read alongside
 Electron ships **one application containing two processes**. There is no
 separate server.
 
-| Process      | Runtime              | Responsibility                                                                                  |
-| ------------ | -------------------- | ----------------------------------------------------------------------------------------------- |
-| **Main**     | Node                 | The backend. Database, business logic, printing, backup, import, logging. Owns the SQLite file. |
-| **Renderer** | Chromium (sandboxed) | The UI only. React. No database, no filesystem, no Node APIs.                                   |
+| Process      | Directory     | Runtime              | Responsibility                                                                                  |
+| ------------ | ------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| **Main**     | `apps/server` | Node                 | The backend. Database, business logic, printing, backup, import, logging. Owns the SQLite file. |
+| **Renderer** | `apps/client` | Chromium (sandboxed) | The UI only. React. No database, no filesystem, no Node APIs.                                   |
 
 They communicate over **IPC through a narrow `contextBridge` API**. Treat that
 boundary exactly as you would a public HTTP API: the renderer is untrusted, and
@@ -29,11 +29,11 @@ becomes an HTTP server.
 ## 2. Layers
 
 ```
-  ┌─ Presentation ──────────── apps/renderer, packages/ui
+  ┌─ Presentation ──────────── apps/client, packages/ui
   │    React screens, shared components, formatting, i18n
   │    Knows: nothing about SQL or domain rules
   │
-  ├─ Boundary ──────────────── apps/desktop/src/ipc
+  ├─ Boundary ──────────────── apps/server/src/ipc
   │    Zod schemas, permission checks, error serialisation
   │    Knows: how to translate untrusted input into domain calls
   │
@@ -157,7 +157,7 @@ One namespaced channel per use case. Never a generic `db:query` channel — that
 would hand the renderer arbitrary database access.
 
 ```ts
-// apps/desktop/src/preload.ts — the entire renderer-visible surface
+// apps/server/src/preload.ts — the entire renderer-visible surface
 contextBridge.exposeInMainWorld('api', {
   item: { search, getById, create, update, importFile },
   stock: { onHand, movements, adjust },
