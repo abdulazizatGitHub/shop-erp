@@ -5,11 +5,8 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-6 done and verified. BUG-2
-resolved (docs were stale, code was correct). One naming question still open
-(`apps/server` → `apps/main`?) — owner deciding; not blocking, but P0-7
-starts next session once it's settled.
-**Next milestone:** P0-7 (migration runner)
+**Phase status:** IN PROGRESS — P0-1 through P0-8 done and verified.
+**Next milestone:** P0-9 (Electron shell + IPC)
 
 ---
 
@@ -29,7 +26,7 @@ starts next session once it's settled.
 
 | Phase | Name                         | Status      | Completed              |
 | ----- | ---------------------------- | ----------- | ---------------------- |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-6 (2026-08-09) |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-8 (2026-08-10) |
 | 1     | Item master + import         | NOT STARTED | —                      |
 | 2     | Purchases + suppliers        | NOT STARTED | —                      |
 | 3     | Counter sale + udhaar        | NOT STARTED | —                      |
@@ -52,7 +49,8 @@ file exists (confirmed: `ls` on both returns "No such file or directory").
 Impact: `npm run db:migrate` / `npm run db:reset` fail immediately. No
 impact on P0-1 through P0-6, which don't call them.
 Fix: Create both files as part of P0-7 (migration runner).
-Status: UNFIXED — waiting for P0-7.
+Status: FIXED — commit (P0-7 session), 2026-08-10. `packages/db/src/migrate.ts`
+and `reset.ts` created and verified — see P0-7 exit criteria below.
 
 ### BUG-2: Design docs described `apps/desktop`/`apps/renderer`; real code is `apps/client`/`apps/server`/`packages/contracts` — RESOLVED, was CRITICAL
 
@@ -139,6 +137,26 @@ not storage-time). Hook scripts confirmed LF at the byte level. Re-ran the
 bad-commit-message test after renormalizing: `pre-commit` and `commit-msg`
 both fired exactly as before.
 
+### BUG-5: `eslint.config.js` has no boundary-enforcement block for `packages/db` — LOW
+
+Found in: Phase 0, 2026-08-10, while building the P0-7 migration runner.
+Description: `shared`, `contracts`, `core`, `ui`, `apps/client`, and
+`apps/server` each have a `no-restricted-imports` block in
+`eslint.config.js`. `packages/db` does not — confirmed via
+`grep -n "packages/db" eslint.config.js`, zero matches. Per
+`docs/PROJECT_STRUCTURE.md` §2, `db` should be forbidden from importing
+`core`, `electron`, and `react`.
+Impact: Nothing today — the code written in `packages/db` this session
+(`migration-runner.ts`, `migrate.ts`, `reset.ts`) only imports `node:*`
+builtins and `better-sqlite3`, so the missing rule caught nothing wrong. The
+gap is real once `packages/db` code starts importing from other workspace
+packages.
+Fix: Add a `packages/db` block to `eslint.config.js` mirroring the existing
+five, forbidding `@shop/core`, `electron`, `react`.
+Status: UNFIXED — found mid-P0-7, documented rather than fixed to keep
+moving per this session's explicit instruction (finish Phase 0; don't let
+incidental findings become detours).
+
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 Found in:    Phase [X], [YYYY-MM-DD]
@@ -152,19 +170,49 @@ Status:      UNFIXED — waiting for [phase / migration / decision]
 
 ## 4. Open questions (blocking design — do NOT invent answers)
 
-| #   | Question                                                                                   | Blocks              | Asked      | Answer   |
-| --- | ------------------------------------------------------------------------------------------ | ------------------- | ---------- | -------- |
-| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                  | Item UoM conversion | 2026-08-08 | OPEN     |
-| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                               | Container tracking  | 2026-08-08 | OPEN     |
-| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                 | Pricing engine      | 2026-08-08 | OPEN     |
-| Q4  | Which items genuinely need serial tracking?                                                | Billing speed       | 2026-08-08 | OPEN     |
-| Q5  | Fridge warranty work — who pays for parts?                                                 | Payer model         | 2026-08-08 | OPEN     |
-| Q6  | Approximate SKU count (300–500 assumed)                                                    | Import effort       | 2026-08-08 | ~300–500 |
-| Q7  | Thermal printer model                                                                      | Print driver        | 2026-08-08 | OPEN     |
-| Q8  | PC specification                                                                           | Electron perf       | 2026-08-08 | OPEN     |
-| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?          | Unit P&L shape      | 2026-08-09 | OPEN     |
-| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                      | Overhead reporting  | 2026-08-09 | OPEN     |
-| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number) | P0-8 verification   | 2026-08-09 | OPEN     |
+| #   | Question                                                                                   | Blocks              | Asked      | Answer                               |
+| --- | ------------------------------------------------------------------------------------------ | ------------------- | ---------- | ------------------------------------ |
+| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                  | Item UoM conversion | 2026-08-08 | OPEN                                 |
+| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                               | Container tracking  | 2026-08-08 | OPEN                                 |
+| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                 | Pricing engine      | 2026-08-08 | OPEN                                 |
+| Q4  | Which items genuinely need serial tracking?                                                | Billing speed       | 2026-08-08 | OPEN                                 |
+| Q5  | Fridge warranty work — who pays for parts?                                                 | Payer model         | 2026-08-08 | OPEN                                 |
+| Q6  | Approximate SKU count (300–500 assumed)                                                    | Import effort       | 2026-08-08 | ~300–500                             |
+| Q7  | Thermal printer model                                                                      | Print driver        | 2026-08-08 | OPEN                                 |
+| Q8  | PC specification                                                                           | Electron perf       | 2026-08-08 | OPEN                                 |
+| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?          | Unit P&L shape      | 2026-08-09 | OPEN                                 |
+| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                      | Overhead reporting  | 2026-08-09 | OPEN                                 |
+| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number) | P0-8 verification   | 2026-08-09 | **42 tables, 11 views** (2026-08-10) |
+
+### P0-8 baseline (derived, not assumed)
+
+Applied all three migrations to a fresh SQLite file via
+`packages/db/src/migrate.ts`, then queried `sqlite_master` directly:
+
+- **42 tables**: `app_user`, `attendance`, `audit_log`, `brand`,
+  `business_unit`, `cash_session`, `category`, `contract_claim`,
+  `contract_claim_job`, `custody_reconciliation`, `document_sequence`,
+  `expense`, `expense_category`, `internal_transfer`,
+  `internal_transfer_line`, `item`, `item_barcode`, `item_price`,
+  `item_serial`, `job`, `job_part`, `job_status_history`, `party`,
+  `party_ledger`, `payment`, `payment_allocation`, `price_level`, `purchase`,
+  `purchase_line`, `sale`, `sale_line`, `schema_migration`,
+  `service_charge`, `service_contract`, `setting`, `stock_balance_cache`,
+  `stock_movement`, `sync_outbox`, `tenant`, `uom`,
+  `user_permission_override`, `warehouse`
+- **11 views**: `v_daily_sales`, `v_job_split`, `v_overhead_pool`,
+  `v_owner_drawings`, `v_party_balance`, `v_stock_on_hand`,
+  `v_technician_custody`, `v_unit_direct_expense`, `v_unit_direct_margin`,
+  `v_unit_pl`, `v_unit_revenue`
+- All 11 views execute without error on an empty database (asserted in
+  `packages/db/src/migration-runner.test.ts`).
+- Pragmas confirmed on a real connection via `openDatabase()`:
+  `journal_mode=wal`, `foreign_keys=1`, `synchronous=2` (FULL),
+  `busy_timeout=5000`.
+
+Matches the owner's independently-derived 42/11 exactly. Codified as a
+regression test, not just a one-time manual check — see
+`migration-runner.test.ts` "applies exactly 42 tables and 11 views".
 
 ---
 
