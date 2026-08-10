@@ -5,9 +5,11 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS, BLOCKED — P0-1 through P0-6 done and verified;
-P0-7 cannot start until BUG-2 (structural discrepancy, see §3) is resolved
-**Next milestone:** Resolve BUG-2, then P0-7 (migration runner)
+**Phase status:** IN PROGRESS — P0-1 through P0-6 done and verified. BUG-2
+resolved (docs were stale, code was correct). One naming question still open
+(`apps/server` → `apps/main`?) — owner deciding; not blocking, but P0-7
+starts next session once it's settled.
+**Next milestone:** P0-7 (migration runner)
 
 ---
 
@@ -52,35 +54,44 @@ impact on P0-1 through P0-6, which don't call them.
 Fix: Create both files as part of P0-7 (migration runner).
 Status: UNFIXED — waiting for P0-7.
 
-### BUG-2: Repo structure (`apps/client` + `apps/server`, `packages/contracts`) does not match what the owner authored (`apps/desktop` + `apps/renderer`, `@shop/desktop`) — CRITICAL, BLOCKING
+### BUG-2: Design docs described `apps/desktop`/`apps/renderer`; real code is `apps/client`/`apps/server`/`packages/contracts` — RESOLVED, was CRITICAL
 
-Found in: Phase 0, 2026-08-09. Escalated 2026-08-10.
-Description: `docs/SYSTEM_DESIGN.md` §2 and §5 reference `apps/desktop/src/ipc`
-and `apps/desktop/src/preload.ts`; the project owner independently confirmed
-they authored the scaffold with `apps/desktop`, `apps/renderer`, and a root
-`package.json` targeting `--workspace=@shop/desktop`, and that `packages/contracts`
-was never created by them. What exists on disk, confirmed repeatedly by
-direct `ls`/`cat`/`git show`, is `apps/client`, `apps/server`, and
-`packages/contracts`, consistently referenced across `package.json`,
-`eslint.config.js`, and now 7 commits.
-This repo was not a git repository when Session 1 began (no prior commit
-history to diff against). `git show 787c8cd --stat` (the repo's root commit)
-shows `apps/client`, `apps/server`, and `packages/contracts` were already
-present as the _initial_ commit's content — i.e. already on disk before
-`git init` ran. `git log --diff-filter=R --name-status --oneline` returns
-empty: no rename ever happened inside this session's git history. Whatever
-produced the `client`/`server`/`contracts` naming did so before Session 1,
-outside anything captured in `PROGRESS.md`'s Session 0 entry or in git.
-Impact: `docs/SYSTEM_DESIGN.md` describes a single Electron process (main =
-backend, sandboxed renderer, no server) — a `client`/`server` split reads as
-a web-application shape and, if real, would be an unapproved architecture
-change. Building P0-7+ on top of unverified structure risks compounding the
-divergence.
-Fix: Not decided. Owner is investigating how the on-disk names diverged from
-what they authored. No renaming or restructuring will happen until the owner
-directs a specific resolution.
-Status: BLOCKED — awaiting owner decision. **P0-7 must not start until this
-is resolved.**
+Found in: Phase 0, 2026-08-09. Escalated 2026-08-10. Resolved 2026-08-10.
+Description: `docs/SYSTEM_DESIGN.md`, `docs/ARCHITECTURE.md`, and
+`docs/CODING_STANDARDS.md` referenced `apps/desktop`/`apps/renderer`; the
+owner had authored the scaffold under those names and did not recognise
+`apps/client`/`apps/server`/`packages/contracts` as their own work. Raised as
+a possible unapproved architecture change (web client/server vs. Electron
+main/renderer).
+Investigation: raw `ls`, `cat package.json` (×3), `git log --oneline`,
+`git log --diff-filter=R --name-status --oneline` (empty — zero renames),
+`git show 787c8cd --stat` (the repo's root commit already contained
+`apps/client`/`apps/server`/`packages/contracts` as initial content — i.e.
+predates `git init` in this session). Then, to determine which architecture
+the code actually implements: `grep` across `apps/` and `packages/` for
+`BrowserWindow|contextBridge|ipcMain|ipcRenderer` and separately for
+`express|fastify|http.createServer|listen(` — both zero matches. Read
+`apps/server/package.json` (electron, electron-vite, electron-builder as
+devDependencies, `electron-builder --win` package script),
+`apps/client/package.json` (react + vite, no HTTP client), and
+`packages/contracts/package.json` (zod + `@shop/shared` only, no code files
+yet).
+Resolution: **the code was correct, the docs were stale.** No HTTP
+server/port exists or was ever wired up; `apps/server`'s only plausible role,
+given its devDependencies, is the Electron main process, packaged as a
+desktop app. Owner confirmed this reading and decided: docs change, code
+does not. See ADR-0011.
+Fix applied: `docs/SYSTEM_DESIGN.md` §1/§2/§5, `docs/ARCHITECTURE.md`
+(layers diagram + module map), `docs/CODING_STANDARDS.md` §7 updated to
+`apps/client`/`apps/server`. `CLAUDE.md`, `README.md`, and
+`docs/PROJECT_STRUCTURE.md` already used the correct names and needed no
+change. `eslint.config.js` boundary rules checked against the real paths —
+already correct (`apps/client`, `apps/server`, `packages/core`, no stale
+`apps/renderer`/`apps/desktop` patterns); enforcement proven with a
+deliberate violating import (`apps/client` importing `@shop/db`), which
+`no-restricted-imports` correctly rejected, then removed.
+Status: RESOLVED — commits `a77fa18` (docs), ADR-0011 (decision record). No
+code, directory, or package was renamed.
 
 ### BUG-3: `eslint.config.js` does not ignore the generated `coverage/` directory — LOW
 
@@ -171,6 +182,7 @@ Status:      UNFIXED — waiting for [phase / migration / decision]
 | 0008 | Flat item list; no product/variant matrix                                        | 2026-08-08 |
 | 0009 | Permissions are code, not a metadata engine                                      | 2026-08-08 |
 | 0010 | Peer business units + SHARED overhead pool, allocated at report time             | 2026-08-09 |
+| 0011 | `client`/`server`/`contracts` naming supersedes `desktop`/`renderer` in docs     | 2026-08-10 |
 
 ---
 
