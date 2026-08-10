@@ -41,6 +41,107 @@
 
 ---
 
+## [2026-08-10] Session 3 — Phase 0: architecture determined, BUG-2 resolved
+
+**Goal:** Determine whether `apps/server`/`apps/client` is really an Electron
+main/renderer split (code correct, docs stale) or a real client/server-over-
+HTTP architecture (undocumented, unapproved divergence) — the question BUG-2
+left open. Owner had already confirmed my prior structural findings were
+accurate, not confabulated, and downgraded BUG-2 from "possible
+confabulation" to "docs vs. code disagree, need to determine which is right."
+
+**Done:**
+
+- Ran the determination: `cat` on all three `package.json` files, `ls -R` on
+  all three `src` trees, `grep` for `BrowserWindow|contextBridge|ipcMain|
+ipcRenderer` (zero matches) and separately for `express|fastify|
+http.createServer|listen(` (zero matches) across `apps/` and `packages/`.
+  Conclusion: no HTTP server exists or was ever wired; `apps/server`'s
+  devDependencies (`electron`, `electron-vite`, `electron-builder`) only make
+  sense as an Electron main process. Owner confirmed: code is right, docs are
+  stale.
+- `docs/SYSTEM_DESIGN.md` §1 (added a Directory column naming
+  `apps/server`/`apps/client`), §2 (layers diagram), §5 (preload path) — `s/
+apps\/desktop/apps\/server/`, `s/apps\/renderer/apps\/client/`
+- `docs/ARCHITECTURE.md` — layers diagram (2 box-drawing lines, padding
+  recomputed to preserve exact width) and module map tree
+- `docs/CODING_STANDARDS.md` §7 — testing table, `apps/renderer` →
+  `apps/client` (found this one myself; wasn't in the owner's original list)
+- Checked `CLAUDE.md`, `README.md`, `docs/PROJECT_STRUCTURE.md` for the same
+  staleness — all three were **already correct**, no edit needed.
+  `PROJECT_STRUCTURE.md`'s dependency-direction table already matched the
+  target direction the owner specified, cross-checked line-by-line against
+  `eslint.config.js`'s actual enforced `no-restricted-imports` rules
+- `eslint.config.js` boundary paths checked against real directories — already
+  `apps/client`/`apps/server`, no stale `apps/renderer`/`apps/desktop`
+  patterns to fix. Proved enforcement anyway: wrote a deliberate violating
+  import (`apps/client` importing `@shop/db`), `npm run lint` correctly
+  rejected it (`no-restricted-imports`), removed the test file, lint clean again
+- `docs/decisions/ADR-0011-app-naming-and-contracts-package.md` — new;
+  records `client`/`server`/`contracts` as the permanent names, that `server`
+  is the Electron main process and not a network server, and that this
+  supersedes the `desktop`/`renderer` naming in earlier docs
+- `PROJECT.md` — added ADR-0011 to the decisions table; closed BUG-2 as
+  RESOLVED (not renamed — documentation was stale, code was correct)
+- `.vscode/settings.json` — added `"typescript.tsdk":
+"node_modules/typescript/lib"` to pin the editor to the workspace
+  TypeScript (5.9.3) instead of VS Code's bundled version, which was the
+  likely cause of the owner's editor showing a `baseUrl` deprecation error
+  that the terminal did not. Required a `.gitignore` exception
+  (`!.vscode/settings.json`) since `.vscode/*` was ignored by design; asked
+  before adding it since it changes repo policy, not just adds a file
+- Researched (did not act on) the owner's judgement-call question: cost of
+  renaming `apps/server` → `apps/main`. Fresh `grep` at time of asking: 8
+  files / 24 references would need editing (`docs/PROJECT_STRUCTURE.md` 9,
+  `CLAUDE.md` 4, `docs/SYSTEM_DESIGN.md` 3, `docs/ARCHITECTURE.md` 2,
+  `eslint.config.js` 2, root `package.json` 2, `apps/server/package.json` 1,
+  `README.md` 1), plus the directory move and `@shop/server`→`@shop/main`
+  package rename. `PROGRESS.md` (4 refs) and `ADR-0011` (6 refs) excluded —
+  historical record, not edited on rename. Zero build-tool hardcoding: no
+  `electron.vite.config.ts` or `electron-builder.yml` exists yet to reference
+  the name.
+
+**Verified:**
+
+- `grep` for stale naming in the three fixed docs — zero matches, pasted
+- `npm run format:check` — exit 0 after each edit round
+- `npm run verify` — exit 0, multiple times, pasted
+- Boundary enforcement — deliberate violation created, lint error shown,
+  violation removed, lint clean again — all pasted
+- Box-drawing width preservation in `ARCHITECTURE.md` — computed via a
+  Node one-liner comparing exact character lengths before writing, not
+  guessed
+
+**Not done / deferred:** P0-7 — owner said it starts "next session once this
+is settled." The `apps/server`→`apps/main` rename itself: reported cost,
+owner has not decided.
+
+**Bugs found:** none new. BUG-2 resolved (see `PROJECT.md`).
+
+**Decisions taken:** ADR-0011.
+
+**Blocked on:** Owner's decision on `apps/server`→`apps/main`; Q1–Q5, Q7,
+Q8, Q11 in `PROJECT.md`.
+
+**Next session should:** If the owner has decided on the `apps/server`→
+`apps/main` question, apply it first (8 files, 24 references, per the list
+above) — then start P0-7 (`packages/db/src/migrate.ts`,
+`packages/db/src/reset.ts`). If undecided, start P0-7 directly against the
+current `apps/server` name.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — P0-7 still not started (by design;
+      owner said to stop here)
+- [x] Any new bugs documented in PROJECT.md — none new; BUG-2 closed
+- [x] Test suite passing (`npm run verify` exit 0)
+
+---
+
 ## [2026-08-10] Session 2 — Phase 0: bug fixes, structural discrepancy raised
 
 **Goal:** Close BUG-3 and BUG-4 with owner-approved fixes; investigate a
