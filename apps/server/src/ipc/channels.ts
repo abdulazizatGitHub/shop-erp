@@ -31,6 +31,7 @@ export const channels = {
   },
   importData: { dryRun: 'import:dryRun', commit: 'import:commit' },
   backup: { now: 'backup:now', restore: 'backup:restore' },
+  system: { ping: 'system:ping' },
 } as const;
 
 export type Channel = typeof channels;

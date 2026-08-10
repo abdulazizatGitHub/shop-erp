@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Shop ERP — P0-9 smoke test</title>
+  </head>
+  <body>
+    <p id="hello">Hello</p>
+    <p id="result">(waiting for IPC round-trip...)</p>
+    <script>
+      window.api.system.ping().then((result) => {
+        document.getElementById('result').textContent =
+          'IPC round-trip OK. Real table count from SQLite: ' + result.tableCount;
+        console.log('IPC_ROUNDTRIP_RESULT', JSON.stringify(result));
+      });
+    </script>
+  </body>
+</html>
