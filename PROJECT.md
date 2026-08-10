@@ -5,8 +5,11 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-8 done and verified.
-**Next milestone:** P0-9 (Electron shell + IPC)
+**Phase status:** IN PROGRESS — P0-1 through P0-8 done and verified. P0-9
+code written, builds, typechecks, lints clean; live window/IPC launch not
+visually confirmed from this tool environment (BUG-7) — owner verification
+requested.
+**Next milestone:** P0-10 (CI), P0-11 (installer); owner to confirm P0-9 live
 
 ---
 
@@ -156,6 +159,63 @@ five, forbidding `@shop/core`, `electron`, `react`.
 Status: UNFIXED — found mid-P0-7, documented rather than fixed to keep
 moving per this session's explicit instruction (finish Phase 0; don't let
 incidental findings become detours).
+
+### BUG-6: `eslint.config.js` `ignores` patterns only matched root-level `dist`/`out`/`release`/`coverage`, not nested ones — LOW
+
+Found in: Phase 0, 2026-08-10, while building P0-9.
+Description: Same root cause as BUG-3, one layer deeper. `ignores: ['dist',
+'out', 'release', 'node_modules', 'coverage', ...]` — in ESLint flat config,
+a bare pattern like `'dist'` only matches a `dist` folder at the config
+root, not `apps/server/dist`. Confirmed: after `electron-vite build`
+produced `apps/server/dist/`, `npm run lint` failed with 2 parsing errors on
+the generated `.cjs` output files.
+Impact: Same as BUG-3 — any workspace package with its own build output
+directory (`apps/server/dist`, and later `apps/client/dist`,
+`packages/*/dist`) breaks `npm run lint` once it's built locally.
+Fix: Changed each pattern to `**/dist`, `**/out`, `**/release`,
+`**/node_modules`, `**/coverage` so they match at any depth.
+Status: FIXED — same commit as P0-9. Verified: `npm run verify` exit 0 with
+`apps/server/dist/` present on disk.
+
+### BUG-7: Cannot visually confirm the Electron window opens or complete a live launch from this tool environment — MEDIUM
+
+Found in: Phase 0, 2026-08-10, while verifying P0-9.
+Description: `apps/server/src/main.ts`, `preload.ts`, and the IPC handler
+are written, typecheck and lint clean, and build successfully via
+`electron-vite build` (verified: `dist/main/main.cjs`, `dist/preload/
+preload.cjs`, `dist/renderer/index.html` all produced). Launching the built
+app via `electron.exe` (both via `npx electron apps/server` and the direct
+binary path) does not crash, but `process.type` is `undefined` in the
+launched process (confirmed via a diagnostic script printing
+`process.type`, `process.versions.electron`, `process.execPath`) — meaning
+Electron's binary runs, correctly reports `process.versions.electron =
+33.4.11`, but never completes its normal "browser process" bootstrap, so
+`require('electron')` returns the path string convenience value instead of
+the `{ app, BrowserWindow, ipcMain }` API object, and `electron.app` is
+`undefined`. This reproduces even with a hand-written single-line script
+with no bundler involved, so it is not a bundling bug. Most likely cause:
+the process spawned by this tool's Bash environment lacks access to an
+interactive Windows window station, which Electron's GUI bootstrap needs —
+a known category of issue for GUI apps launched from non-interactive/service
+process contexts, even on a real desktop OS.
+Impact: Cannot produce the visual "window opens with Hello" proof, or the
+full live app.whenReady → createWindow → renderer → IPC → main → SQLite →
+IPC → renderer round-trip, from this tool environment. The **code path
+itself is proven correct piecewise**: `better-sqlite3` loads successfully
+under both plain system Node (v22.14.0, ABI 127) and Electron's bundled
+Node (v20.18.3, ABI 130) per direct `require()` tests; the migration runner
+and IPC handler logic are unit/integration tested; the bundle correctly
+externalizes `electron`/`better-sqlite3` while inlining `@shop/*` workspace
+packages (verified by reading the generated `dist/main/main.cjs`). What is
+NOT verified is the live window + full IPC round-trip specifically.
+Fix: None applicable — this needs to run on the owner's actual interactive
+desktop session, not this tool's process-spawning context. Owner should run
+`npm run dev --workspace=@shop/server` (or `npx electron apps/server` after
+`npm run build --workspace=@shop/server`) directly in their own terminal and
+confirm: a window opens showing "Hello", then "IPC round-trip OK. Real table
+count from SQLite: 42".
+Status: UNFIXED — blocked on the owner's environment, not on code. Owner
+verification requested.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
