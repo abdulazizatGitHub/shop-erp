@@ -18,14 +18,13 @@
     "verbatimModuleSyntax": true,
     "jsx": "react-jsx",
     "types": ["node", "vitest/globals"],
-    "baseUrl": ".",
     "paths": {
-      "@shop/shared": ["packages/shared/src/index.ts"],
-      "@shop/contracts": ["packages/contracts/src/index.ts"],
-      "@shop/db": ["packages/db/src/index.ts"],
-      "@shop/core": ["packages/core/src/index.ts"],
-      "@shop/ui": ["packages/ui/src/index.ts"],
-      "@/*": ["apps/client/src/*"]
+      "@shop/shared": ["./packages/shared/src/index.ts"],
+      "@shop/contracts": ["./packages/contracts/src/index.ts"],
+      "@shop/db": ["./packages/db/src/index.ts"],
+      "@shop/core": ["./packages/core/src/index.ts"],
+      "@shop/ui": ["./packages/ui/src/index.ts"],
+      "@/*": ["./apps/client/src/*"]
     }
   },
   "include": ["packages/*/src/**/*", "apps/*/src/**/*", "scripts/**/*"],
