@@ -3,7 +3,17 @@ import tseslint from 'typescript-eslint';
 
 /** Boundary rules enforce docs/PROJECT_STRUCTURE.md section 2. CI fails on violation. */
 export default tseslint.config(
-  { ignores: ['dist', 'out', 'release', 'node_modules', '**/*.config.js', '**/*.config.ts'] },
+  {
+    ignores: [
+      'dist',
+      'out',
+      'release',
+      'node_modules',
+      'coverage',
+      '**/*.config.js',
+      '**/*.config.ts',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
