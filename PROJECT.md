@@ -3,10 +3,11 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-10
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-6 done and verified; P0-7 through P0-11 remain
-**Next milestone:** P0-7 (migration runner)
+**Phase status:** IN PROGRESS, BLOCKED — P0-1 through P0-6 done and verified;
+P0-7 cannot start until BUG-2 (structural discrepancy, see §3) is resolved
+**Next milestone:** Resolve BUG-2, then P0-7 (migration runner)
 
 ---
 
@@ -51,21 +52,35 @@ impact on P0-1 through P0-6, which don't call them.
 Fix: Create both files as part of P0-7 (migration runner).
 Status: UNFIXED — waiting for P0-7.
 
-### BUG-2: `docs/SYSTEM_DESIGN.md` names `apps/desktop`; real directories are `apps/server` and `apps/client` — LOW
+### BUG-2: Repo structure (`apps/client` + `apps/server`, `packages/contracts`) does not match what the owner authored (`apps/desktop` + `apps/renderer`, `@shop/desktop`) — CRITICAL, BLOCKING
 
-Found in: Phase 0, 2026-08-09
+Found in: Phase 0, 2026-08-09. Escalated 2026-08-10.
 Description: `docs/SYSTEM_DESIGN.md` §2 and §5 reference `apps/desktop/src/ipc`
-and `apps/desktop/src/preload.ts`. Confirmed on disk: `apps/desktop` does not
-exist (`ls` returns "No such file or directory"); the real app workspaces are
-`apps/server` (Electron main / backend) and `apps/client` (renderer). Both
-`package.json` (`@shop/server`) and `eslint.config.js` already use the real
-names consistently — only the design doc is stale.
-Impact: Anyone following `SYSTEM_DESIGN.md` literally will look in the
-wrong directory for the IPC boundary and preload script.
-Fix: Update `SYSTEM_DESIGN.md` §2 and §5 to say `apps/server` /
-`apps/client` in place of `apps/desktop`.
-Status: UNFIXED — waiting for a documentation cleanup pass (out of scope
-for the P0-1–P0-6 subtasks this session).
+and `apps/desktop/src/preload.ts`; the project owner independently confirmed
+they authored the scaffold with `apps/desktop`, `apps/renderer`, and a root
+`package.json` targeting `--workspace=@shop/desktop`, and that `packages/contracts`
+was never created by them. What exists on disk, confirmed repeatedly by
+direct `ls`/`cat`/`git show`, is `apps/client`, `apps/server`, and
+`packages/contracts`, consistently referenced across `package.json`,
+`eslint.config.js`, and now 7 commits.
+This repo was not a git repository when Session 1 began (no prior commit
+history to diff against). `git show 787c8cd --stat` (the repo's root commit)
+shows `apps/client`, `apps/server`, and `packages/contracts` were already
+present as the _initial_ commit's content — i.e. already on disk before
+`git init` ran. `git log --diff-filter=R --name-status --oneline` returns
+empty: no rename ever happened inside this session's git history. Whatever
+produced the `client`/`server`/`contracts` naming did so before Session 1,
+outside anything captured in `PROGRESS.md`'s Session 0 entry or in git.
+Impact: `docs/SYSTEM_DESIGN.md` describes a single Electron process (main =
+backend, sandboxed renderer, no server) — a `client`/`server` split reads as
+a web-application shape and, if real, would be an unapproved architecture
+change. Building P0-7+ on top of unverified structure risks compounding the
+divergence.
+Fix: Not decided. Owner is investigating how the on-disk names diverged from
+what they authored. No renaming or restructuring will happen until the owner
+directs a specific resolution.
+Status: BLOCKED — awaiting owner decision. **P0-7 must not start until this
+is resolved.**
 
 ### BUG-3: `eslint.config.js` does not ignore the generated `coverage/` directory — LOW
 
@@ -83,9 +98,9 @@ runs before its `Test` step in `.github/workflows/ci.yml` — this is order
 dependent and will break the day that order changes. Worked around this
 session by deleting the generated `coverage/` directory before verifying.
 Fix: Add `'coverage'` to the `ignores` array in `eslint.config.js`.
-Status: UNFIXED — one-line config fix, outside this session's authorized
-fix categories (not a missing devDependency, barrel file, or `apps/*`
-package.json); needs explicit approval to edit `eslint.config.js`.
+Status: FIXED — commit `faebaab`, 2026-08-10. Verified: regenerated
+`coverage/` via `npm run test:coverage`, then `npm run lint` exited 0 with
+it present on disk.
 
 ### BUG-4: No `.gitattributes`; this machine's system-wide Git config (`core.autocrlf=true`) fights Prettier's `endOfLine: "lf"` — MEDIUM
 
@@ -107,8 +122,11 @@ confusing to debug — as it was here.
 Fix: Add a `.gitattributes` file pinning line endings, e.g. `* text=auto
 eol=lf`, so the repo's line-ending policy doesn't depend on each
 contributor's global Git config.
-Status: UNFIXED — needs a new file (`.gitattributes`) at repo root; outside
-this session's authorized fix categories, needs explicit approval.
+Status: FIXED — commit `3223b97`, 2026-08-10. `git add --renormalize .`
+found nothing to change (blobs were already LF; the risk was checkout-time,
+not storage-time). Hook scripts confirmed LF at the byte level. Re-ran the
+bad-commit-message test after renormalizing: `pre-commit` and `commit-msg`
+both fired exactly as before.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]

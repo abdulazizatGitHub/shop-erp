@@ -41,6 +41,72 @@
 
 ---
 
+## [2026-08-10] Session 2 — Phase 0: bug fixes, structural discrepancy raised
+
+**Goal:** Close BUG-3 and BUG-4 with owner-approved fixes; investigate a
+structural discrepancy the owner raised between what they authored
+(`apps/desktop`, `apps/renderer`, `@shop/desktop`) and what's on disk
+(`apps/client`, `apps/server`, `packages/contracts`).
+
+**Done:**
+
+- `eslint.config.js` — added `'coverage'` to `ignores` (closes BUG-3)
+- `.gitattributes` — added at repo root, pinning LF line endings (closes BUG-4)
+- `tsconfig.json` — removed deprecated `baseUrl`, prefixed all `paths` entries
+  with `./` (paths have resolved relative to the tsconfig location since TS 4.4)
+- Corrected prior session's error: `@eslint/js` is a genuine dependency of
+  `eslint` itself and was never a real problem — not logged as a bug, per
+  owner correction
+- Investigated the structural discrepancy: ran `ls -la apps/ packages/`,
+  `cat package.json`, `git log --oneline`, `git log --diff-filter=R
+--name-status --oneline`, `git show 787c8cd --stat`, all pasted raw.
+  Conclusion: `apps/client`, `apps/server`, `packages/contracts` were already
+  on disk before `git init` ran in Session 1 (this repo had no git history
+  before Session 1); `787c8cd` is the repo's root commit; zero renames exist
+  in git history. I did not create, rename, or move these directories.
+  Escalated as BUG-2 (CRITICAL, BLOCKING) — see `PROJECT.md` §3.
+
+**Verified:**
+
+- `npm run lint` — exit 0, both before removing the disposable `coverage/`
+  dir (proving the fix works) and after
+- `.gitattributes` renormalize — `git add --renormalize .` found nothing to
+  change (blobs were already LF); re-ran the bad-commit-message test,
+  `pre-commit` and `commit-msg` both fired identically to Session 1
+- `npm run typecheck` — exit 0 after `baseUrl` removal
+- `npm run verify` — exit 0
+- Hook scripts (`​.husky/pre-commit`, `.husky/commit-msg`) confirmed LF at
+  the byte level via direct Node buffer read
+
+**Not done / deferred:** P0-7 — explicitly blocked by the owner until BUG-2
+is resolved. Did not rename, move, or restructure anything in `apps/` or
+`packages/`.
+
+**Bugs found:** BUG-2 escalated to CRITICAL/BLOCKING (structural
+discrepancy). BUG-3 and BUG-4 fixed and closed.
+
+**Decisions taken:** none — owner explicitly has not decided how to resolve
+BUG-2 yet.
+
+**Blocked on:** BUG-2 (owner investigating on their end how `apps/client`,
+`apps/server`, `packages/contracts` came to exist under those names); Q1–Q5,
+Q7, Q8, Q11 in PROJECT.md.
+
+**Next session should:** Wait for the owner's decision on BUG-2 before
+touching P0-7 or anything in `apps/`/`packages/`.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — blocked on BUG-2
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (`npm run verify` exit 0)
+
+---
+
 ## [2026-08-09] Session 1 — Phase 0: P0-1 through P0-6
 
 **Goal:** Get through as much of Phase 0 (P0-1–P0-11) as could be properly
