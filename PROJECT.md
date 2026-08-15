@@ -297,6 +297,14 @@ installation to use`. I could not identify why the fast path stopped
    prebuild-install's fast path isn't being chosen on retry (possibly a
    `@electron/rebuild` cache issue — worth trying `--force` combined with
    clearing `~/.electron-gyp` and any prebuild-install cache directory).
+   **Additional data point**: pushed this fix to CI (run `31901939582`) —
+   `build-windows` (which now runs `npm run rebuild` before packaging)
+   **succeeded** on GitHub's clean `windows-latest` runner, producing an
+   85 MB installer. That runner has Visual Studio Build Tools pre-installed
+   by default, unlike this sandbox, which is consistent with (though
+   doesn't prove) the Visual-Studio-missing theory above. It's still not
+   proof the packaged app _launches_ — CI is headless too — only that the
+   build pipeline itself completes cleanly outside this sandbox.
    Impact: The repo-level fix (approved scripts, scoped rebuild-before-dev/
    package) is believed correct in shape and proven correct in mechanism, but
    **the automated rebuild step itself is not reliably repeatable** in this
