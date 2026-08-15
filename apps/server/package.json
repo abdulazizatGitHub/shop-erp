@@ -7,9 +7,10 @@
   "type": "module",
   "main": "dist/main/main.cjs",
   "scripts": {
-    "dev": "electron-vite dev",
+    "rebuild": "cd ../.. && electron-rebuild -f -w better-sqlite3",
+    "dev": "npm run rebuild && electron-vite dev",
     "build": "electron-vite build",
-    "package": "electron-vite build && electron-builder --win --publish never"
+    "package": "npm run rebuild && electron-vite build && electron-builder --win --publish never"
   },
   "build": {
     "appId": "com.shoperp.desktop",
