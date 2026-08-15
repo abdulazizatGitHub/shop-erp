@@ -3,41 +3,44 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-10
+**Last updated:** 2026-08-15
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-8 done and verified. P0-9
-code written, builds, typechecks, lints clean; live window/IPC launch not
-visually confirmed from this tool environment (BUG-7) — owner verification
-requested.
-**Next milestone:** P0-10 (CI), P0-11 (installer); owner to confirm P0-9 live
+**Phase status:** IN PROGRESS, effectively complete — P0-1 through P0-11 all
+done, built, and either directly verified or verified via CI. The one gap:
+nobody has visually confirmed the app window actually opens on a real
+interactive desktop (BUG-7) — this tool's environment cannot do that check.
+Owner verification of that one item is the only thing standing between here
+and closing Phase 0.
+**Next milestone:** Owner runs the app once on their own machine and confirms
+the window opens; then Phase 1 kickoff.
 
 ---
 
 ## 1. Snapshot
 
-| Item            | Value                                                                   |
-| --------------- | ----------------------------------------------------------------------- |
-| Client          | AC / fridge / oven repair + spare parts shop, Malakand, KP              |
-| Go-live target  | 2026-08-31 (billing + udhaar only)                                      |
-| Hardware        | NOT YET PURCHASED — spec issued, awaiting confirmation                  |
-| Data collection | Templates issued, awaiting rough data from client                       |
-| Repo            | Initialised 2026-08-09. 3 commits on `master`. Not yet pushed anywhere. |
+| Item            | Value                                                                                                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client          | AC / fridge / oven repair + spare parts shop, Malakand, KP                                                                                                            |
+| Go-live target  | 2026-08-31 (billing + udhaar only)                                                                                                                                    |
+| Hardware        | NOT YET PURCHASED — spec issued, awaiting confirmation                                                                                                                |
+| Data collection | Templates issued, awaiting rough data from client                                                                                                                     |
+| Repo            | Initialised 2026-08-09, pushed to [github.com/abdulazizatGitHub/shop-erp](https://github.com/abdulazizatGitHub/shop-erp) 2026-08-15. Default branch `main`. CI green. |
 
 ---
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed              |
-| ----- | ---------------------------- | ----------- | ---------------------- |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-8 (2026-08-10) |
-| 1     | Item master + import         | NOT STARTED | —                      |
-| 2     | Purchases + suppliers        | NOT STARTED | —                      |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                      |
-| 4     | Printing + reports           | NOT STARTED | —                      |
-| 5     | Deploy + parallel run        | NOT STARTED | —                      |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                      |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                      |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                      |
+| Phase | Name                         | Status      | Completed                                                |
+| ----- | ---------------------------- | ----------- | -------------------------------------------------------- |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-11 (2026-08-15); owner sign-off pending on BUG-7 |
+| 1     | Item master + import         | NOT STARTED | —                                                        |
+| 2     | Purchases + suppliers        | NOT STARTED | —                                                        |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                                                        |
+| 4     | Printing + reports           | NOT STARTED | —                                                        |
+| 5     | Deploy + parallel run        | NOT STARTED | —                                                        |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                        |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                                                        |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                                                        |
 
 ---
 
@@ -179,7 +182,8 @@ Status: FIXED — same commit as P0-9. Verified: `npm run verify` exit 0 with
 
 ### BUG-7: Cannot visually confirm the Electron window opens or complete a live launch from this tool environment — MEDIUM
 
-Found in: Phase 0, 2026-08-10, while verifying P0-9.
+Found in: Phase 0, 2026-08-10, while verifying P0-9. Reproduced 2026-08-15
+against the fully packaged installer while verifying P0-11.
 Description: `apps/server/src/main.ts`, `preload.ts`, and the IPC handler
 are written, typecheck and lint clean, and build successfully via
 `electron-vite build` (verified: `dist/main/main.cjs`, `dist/preload/
@@ -208,14 +212,43 @@ and IPC handler logic are unit/integration tested; the bundle correctly
 externalizes `electron`/`better-sqlite3` while inlining `@shop/*` workspace
 packages (verified by reading the generated `dist/main/main.cjs`). What is
 NOT verified is the live window + full IPC round-trip specifically.
+Same result against the packaged build (P0-11): launched
+`release/win-unpacked/Shop ERP.exe` via PowerShell `Start-Process`, got a
+real PID (36572) at launch, but `Get-Process -Id 36572` immediately
+afterward found nothing running and both stdout/stderr redirects were
+empty — the process started and silently exited, same signature as the dev
+build.
 Fix: None applicable — this needs to run on the owner's actual interactive
 desktop session, not this tool's process-spawning context. Owner should run
-`npm run dev --workspace=@shop/server` (or `npx electron apps/server` after
-`npm run build --workspace=@shop/server`) directly in their own terminal and
-confirm: a window opens showing "Hello", then "IPC round-trip OK. Real table
-count from SQLite: 42".
+`npm run dev --workspace=@shop/server` (or double-click `release/Shop ERP
+Setup 0.1.0.exe` and run the installed app) directly and confirm: a window
+opens showing "Hello", then "IPC round-trip OK. Real table count from
+SQLite: 42".
 Status: UNFIXED — blocked on the owner's environment, not on code. Owner
-verification requested.
+verification requested for both the dev build and the packaged installer.
+
+### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
+
+Found in: Phase 0, 2026-08-15, from the first real CI run on a pushed branch.
+Description: `"package": "electron-builder --win --publish never"` never
+ran `electron-vite build` first. Worked on my machine by accident because
+`dist/` already existed from earlier manual `electron-vite build` runs
+during P0-9 testing. CI does a fresh checkout + `npm ci`, so `dist/` never
+existed, and `electron-builder` failed with: `Application entry file
+"dist\main\main.cjs" in the ".../app.asar" does not exist.` Confirmed via
+the actual CI job log (run 31897891065, job `build-windows`), fetched using
+a token from the local git credential helper since unauthenticated log
+downloads return 403 on this repo.
+Impact: `npm run package` silently depended on undocumented prior state
+(a manual `electron-vite build` having been run earlier in the same
+session). Anyone running it fresh — including CI — got a confusing
+"entry file does not exist" error with no hint that a build step was
+missing.
+Fix: Changed the script to `"electron-vite build && electron-builder --win
+--publish never"`, so `npm run package` is correct standalone.
+Status: FIXED — commit `16c674a`. Verified: CI run 31898216763,
+`build-windows` job succeeded, produced a 84,972,762-byte `windows-installer`
+artifact.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
