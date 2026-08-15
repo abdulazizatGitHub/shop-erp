@@ -6,16 +6,26 @@ import { channels } from './ipc/channels.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+// docs/SYSTEM_DESIGN.md section 9: data lives under the OS app-data
+// directory, never inside the install directory. "ShopERP" (no space)
+// matches the doc's %APPDATA%\ShopERP\ layout.
+app.setName('ShopERP');
+
 function resolveDbPath(): string {
+  if (app.isPackaged) return path.join(app.getPath('userData'), 'shop.db');
   return process.env['DATABASE_PATH'] ?? './data/shop-dev.db';
 }
 
 function resolveBackupDir(): string {
+  if (app.isPackaged) return path.join(app.getPath('userData'), 'backups');
   return process.env['BACKUP_DIR'] ?? './backups';
 }
 
 function resolveMigrationsDir(): string {
-  return path.join(process.cwd(), 'packages/db/src/migrations');
+  // Relative to this file's own location, not process.cwd() — cwd is
+  // apps/server when launched via `npm run dev --workspace=@shop/server`,
+  // not the repo root, which silently pointed at the wrong directory.
+  return path.join(currentDir, '../../../../packages/db/src/migrations');
 }
 
 function registerIpcHandlers(): void {
@@ -51,7 +61,9 @@ function createWindow(): void {
 app
   .whenReady()
   .then(() => {
-    migrate(resolveDbPath(), resolveMigrationsDir(), resolveBackupDir());
+    const dbPath = resolveDbPath();
+    console.warn('Database path:', dbPath);
+    migrate(dbPath, resolveMigrationsDir(), resolveBackupDir());
     registerIpcHandlers();
     createWindow();
   })
