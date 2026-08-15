@@ -3,22 +3,23 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-15
+**Last updated:** 2026-08-16
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-8 and P0-10 are genuinely
-done and verified. **P0-9 and P0-11 are NOT done** — reopened. Previous
-session incorrectly reported the IPC round-trip as working; it had only
-been verified to build and bundle, never to run. The owner's real machine
-hit the exact native-module ABI failure this project's own P0-9 brief
-warned about. Fix designed and proven correct in mechanism (real
-NODE_MODULE_VERSION 130/127 evidence both directions), but the automated
-rebuild step (`npm run rebuild:electron`) became unreliable in this
-sandbox after repeated reinstalls and I could not identify why — see
-BUG-7. This sandbox also has 0 bytes free on `C:`, a likely contributing
-cause. Not repackaging until the fix is confirmed on real hardware.
-**Next milestone:** Owner runs the exact commands in BUG-7 on their own
-machine, confirms the window opens and the IPC round-trip returns 42, then
-repackages. Phase 0 does not close before that.
+**Phase status:** IN PROGRESS — P0-1 through P0-10 done and verified.
+**BUG-7 (native module ABI) is RESOLVED**, confirmed by the owner on real
+hardware — reached `new Database()` under Electron. That surfaced a
+second, smaller bug (nothing created the app-data directory before
+opening the database) — fixed same session, with a test. Repackaged;
+owner to confirm the window actually opens (P0-11's real exit criterion —
+"it builds" was never evidence "it works," per the owner's own correction
+last session). **BUG-10 newly found and documented, not fixed**: the
+packaged installer specifically (not `npm run dev`) will still fail at
+the migrations step, because the `.sql` files aren't copied into
+`app.asar`. Out of this session's explicit scope.
+**Next milestone:** Owner runs the repackaged installer, confirms the
+window opens and IPC returns 42. If it does, the next real blocker is
+BUG-10 (migrations not bundled) — expect it to surface then. Phase 0
+does not close until the window is confirmed.
 
 ---
 
@@ -36,17 +37,17 @@ repackages. Phase 0 does not close before that.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed                                                                |
-| ----- | ---------------------------- | ----------- | ------------------------------------------------------------------------ |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-8, P0-10 (2026-08-15). P0-9 and P0-11 reopened, blocked on BUG-7 |
-| 1     | Item master + import         | NOT STARTED | —                                                                        |
-| 2     | Purchases + suppliers        | NOT STARTED | —                                                                        |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                        |
-| 4     | Printing + reports           | NOT STARTED | —                                                                        |
-| 5     | Deploy + parallel run        | NOT STARTED | —                                                                        |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                        |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                        |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                        |
+| Phase | Name                         | Status      | Completed                                                                                    |
+| ----- | ---------------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-10 (2026-08-15). BUG-7 resolved 2026-08-16; P0-11 awaiting owner launch confirmation |
+| 1     | Item master + import         | NOT STARTED | —                                                                                            |
+| 2     | Purchases + suppliers        | NOT STARTED | —                                                                                            |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                                            |
+| 4     | Printing + reports           | NOT STARTED | —                                                                                            |
+| 5     | Deploy + parallel run        | NOT STARTED | —                                                                                            |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                                            |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                                            |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                                            |
 
 ---
 
@@ -186,7 +187,7 @@ Fix: Changed each pattern to `**/dist`, `**/out`, `**/release`,
 Status: FIXED — same commit as P0-9. Verified: `npm run verify` exit 0 with
 `apps/server/dist/` present on disk.
 
-### BUG-7: Cannot visually confirm the Electron window opens or complete a live launch from this tool environment — MEDIUM
+### BUG-7: Native module ABI mismatch prevented the Electron app from launching — RESOLVED, was MEDIUM
 
 Found in: Phase 0, 2026-08-10, while verifying P0-9. Reproduced 2026-08-15
 against the fully packaged installer while verifying P0-11. **Root cause
@@ -334,9 +335,30 @@ showing "Hello", then "IPC round-trip OK. Real table count from SQLite:
 42". Only after that succeeds: `npm run package` to produce a verified
 installer, then `npm install` again to restore the system-Node binary
 before running `npm test`.
-Status: CODE COMPLETE, LAUNCH UNVERIFIED. Not claiming P0-9 or P0-11 works.
-Owner verification requested; not spending further sessions on this
-sandbox's environment per explicit instruction.
+
+**RESOLVED 2026-08-15 by the owner, on real hardware.** The native module
+ABI fix works: the app now loads `better-sqlite3` under Electron and
+reaches `new Database()`. **The disk-space theory is retracted for the
+owner's machine** — confirmed it never had that problem; `C:` at 0 bytes
+free was specific to this tool's sandbox, not a general explanation.
+Immediately hit a second, distinct bug (nothing created the parent
+directory before opening the database) — see the top of this entry's
+replacement in `packages/db/src/connection.ts`, fixed same session, not
+tracked as a new bug number since it's a direct continuation of the same
+verification pass.
+Anomaly noted, not chased further (10-minute budget, explicitly not to be
+investigated from this sandbox): `node -e "require('better-sqlite3')"`
+exited silently (no ABI error) immediately after a standalone `npm run
+rebuild:electron` reported success, on the owner's machine. Likely the
+same fast-path/no-op flakiness documented above, just resolving
+differently there — `npm run dev`'s own embedded `rebuild` step (which
+runs a second, redundant `electron-rebuild` before launching) is the one
+that actually took effect, since the owner confirmed reaching `new
+Database()` under Electron afterward. Single command to check which ABI
+the on-disk binary currently targets: `node -e "require('better-sqlite3')"`
+— silent exit means it currently matches system Node; a thrown error
+names the exact `NODE_MODULE_VERSION` it was compiled for.
+Status: RESOLVED.
 
 ### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
 
@@ -408,6 +430,35 @@ BUG-7 native-module ABI question — recommend resolving BUG-7 first, on
 real hardware, before touching either.
 Status: LOGGED, NOT FIXED. Owner decides. `npm audit fix --force` was not
 run, per explicit instruction.
+
+### BUG-10: Migration `.sql` files are not bundled into the packaged app — MEDIUM, not fixed this session
+
+Found in: Phase 0, 2026-08-15, while fixing the missing-directory bug
+(P0-9), out of explicit scope for this session — documented, not fixed.
+Description: `apps/server/package.json`'s `build.files` is
+`["dist/**/*"]` only. `packages/db/src/migrations/*.sql` lives outside
+`apps/server` entirely and is never copied into `app.asar`. Separately,
+`resolveMigrationsDir()` in `main.ts` was fixed this session to compute a
+path relative to the running file's own location instead of
+`process.cwd()` (which was wrong for `npm run dev --workspace=@shop/server`
+too — cwd is `apps/server`, not the repo root). That fix makes the _path
+math_ correct for both dev and packaged contexts, but for the **packaged**
+app specifically, nothing exists at that path, because the files were
+never copied in by `electron-builder` in the first place.
+Impact: `npm run dev` should now find migrations correctly (path math
+fixed). **The packaged installer will still fail** — `migrate()` will
+throw trying to `readdirSync` a migrations directory that doesn't exist
+inside `app.asar`/`app.asar.unpacked`. This has not been hit yet in any
+verification this session, because verification stopped at the directory
+bug; it is the next thing that will surface once these bugs are fixed and
+the packaged installer (not `npm run dev`) is actually launched.
+Fix (not applied): add `"packages/db/src/migrations/**/*.sql"` (or the
+whole `packages/db/src/migrations` folder) to `build.files` in
+`apps/server/package.json`, and confirm the resulting path inside
+`resources/` at runtime via `process.resourcesPath`.
+Status: UNFIXED — out of this session's explicit scope. Will block
+launching the _packaged_ installer specifically; does not block `npm run
+dev`.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
