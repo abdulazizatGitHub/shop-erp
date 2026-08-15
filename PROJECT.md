@@ -5,14 +5,20 @@
 
 **Last updated:** 2026-08-15
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS, effectively complete — P0-1 through P0-11 all
-done, built, and either directly verified or verified via CI. The one gap:
-nobody has visually confirmed the app window actually opens on a real
-interactive desktop (BUG-7) — this tool's environment cannot do that check.
-Owner verification of that one item is the only thing standing between here
-and closing Phase 0.
-**Next milestone:** Owner runs the app once on their own machine and confirms
-the window opens; then Phase 1 kickoff.
+**Phase status:** IN PROGRESS — P0-1 through P0-8 and P0-10 are genuinely
+done and verified. **P0-9 and P0-11 are NOT done** — reopened. Previous
+session incorrectly reported the IPC round-trip as working; it had only
+been verified to build and bundle, never to run. The owner's real machine
+hit the exact native-module ABI failure this project's own P0-9 brief
+warned about. Fix designed and proven correct in mechanism (real
+NODE_MODULE_VERSION 130/127 evidence both directions), but the automated
+rebuild step (`npm run rebuild:electron`) became unreliable in this
+sandbox after repeated reinstalls and I could not identify why — see
+BUG-7. This sandbox also has 0 bytes free on `C:`, a likely contributing
+cause. Not repackaging until the fix is confirmed on real hardware.
+**Next milestone:** Owner runs the exact commands in BUG-7 on their own
+machine, confirms the window opens and the IPC round-trip returns 42, then
+repackages. Phase 0 does not close before that.
 
 ---
 
@@ -30,17 +36,17 @@ the window opens; then Phase 1 kickoff.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed                                                |
-| ----- | ---------------------------- | ----------- | -------------------------------------------------------- |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-11 (2026-08-15); owner sign-off pending on BUG-7 |
-| 1     | Item master + import         | NOT STARTED | —                                                        |
-| 2     | Purchases + suppliers        | NOT STARTED | —                                                        |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                                                        |
-| 4     | Printing + reports           | NOT STARTED | —                                                        |
-| 5     | Deploy + parallel run        | NOT STARTED | —                                                        |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                        |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                                                        |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                                                        |
+| Phase | Name                         | Status      | Completed                                                                |
+| ----- | ---------------------------- | ----------- | ------------------------------------------------------------------------ |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-8, P0-10 (2026-08-15). P0-9 and P0-11 reopened, blocked on BUG-7 |
+| 1     | Item master + import         | NOT STARTED | —                                                                        |
+| 2     | Purchases + suppliers        | NOT STARTED | —                                                                        |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                        |
+| 4     | Printing + reports           | NOT STARTED | —                                                                        |
+| 5     | Deploy + parallel run        | NOT STARTED | —                                                                        |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                        |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                        |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                        |
 
 ---
 
@@ -183,49 +189,146 @@ Status: FIXED — same commit as P0-9. Verified: `npm run verify` exit 0 with
 ### BUG-7: Cannot visually confirm the Electron window opens or complete a live launch from this tool environment — MEDIUM
 
 Found in: Phase 0, 2026-08-10, while verifying P0-9. Reproduced 2026-08-15
-against the fully packaged installer while verifying P0-11.
-Description: `apps/server/src/main.ts`, `preload.ts`, and the IPC handler
-are written, typecheck and lint clean, and build successfully via
-`electron-vite build` (verified: `dist/main/main.cjs`, `dist/preload/
-preload.cjs`, `dist/renderer/index.html` all produced). Launching the built
-app via `electron.exe` (both via `npx electron apps/server` and the direct
-binary path) does not crash, but `process.type` is `undefined` in the
-launched process (confirmed via a diagnostic script printing
-`process.type`, `process.versions.electron`, `process.execPath`) — meaning
-Electron's binary runs, correctly reports `process.versions.electron =
-33.4.11`, but never completes its normal "browser process" bootstrap, so
-`require('electron')` returns the path string convenience value instead of
-the `{ app, BrowserWindow, ipcMain }` API object, and `electron.app` is
-`undefined`. This reproduces even with a hand-written single-line script
-with no bundler involved, so it is not a bundling bug. Most likely cause:
-the process spawned by this tool's Bash environment lacks access to an
-interactive Windows window station, which Electron's GUI bootstrap needs —
-a known category of issue for GUI apps launched from non-interactive/service
-process contexts, even on a real desktop OS.
-Impact: Cannot produce the visual "window opens with Hello" proof, or the
-full live app.whenReady → createWindow → renderer → IPC → main → SQLite →
-IPC → renderer round-trip, from this tool environment. The **code path
-itself is proven correct piecewise**: `better-sqlite3` loads successfully
-under both plain system Node (v22.14.0, ABI 127) and Electron's bundled
-Node (v20.18.3, ABI 130) per direct `require()` tests; the migration runner
-and IPC handler logic are unit/integration tested; the bundle correctly
-externalizes `electron`/`better-sqlite3` while inlining `@shop/*` workspace
-packages (verified by reading the generated `dist/main/main.cjs`). What is
-NOT verified is the live window + full IPC round-trip specifically.
-Same result against the packaged build (P0-11): launched
-`release/win-unpacked/Shop ERP.exe` via PowerShell `Start-Process`, got a
-real PID (36572) at launch, but `Get-Process -Id 36572` immediately
-afterward found nothing running and both stdout/stderr redirects were
-empty — the process started and silently exited, same signature as the dev
-build.
-Fix: None applicable — this needs to run on the owner's actual interactive
-desktop session, not this tool's process-spawning context. Owner should run
-`npm run dev --workspace=@shop/server` (or double-click `release/Shop ERP
-Setup 0.1.0.exe` and run the installed app) directly and confirm: a window
-opens showing "Hello", then "IPC round-trip OK. Real table count from
-SQLite: 42".
-Status: UNFIXED — blocked on the owner's environment, not on code. Owner
-verification requested for both the dev build and the packaged installer.
+against the fully packaged installer while verifying P0-11. **Root cause
+corrected 2026-08-15** by the owner, who ran the app on real hardware.
+**My original diagnosis (a "window station" / `process.type` sandbox quirk)
+was wrong.** I had verified that the code built and bundled correctly and
+incorrectly reported that as evidence the IPC round-trip "worked in the
+code path." Those are different claims; only the second was the actual
+exit criterion, and I never verified it.
+Description: The owner's real error, from their own terminal:
+`The module better_sqlite3.node was compiled against a different Node.js
+version using NODE_MODULE_VERSION 127. This version of Node.js requires
+NODE_MODULE_VERSION 130. ERR_DLOPEN_FAILED` — 127 is system Node (used by
+`npm install`), 130 is Electron 33's ABI. The native module was never
+actually rebuilt for Electron; the `electron-builder install-app-deps` I
+ran manually mid-session either didn't take effect or was silently undone
+by a later plain `npm ci`, and I re-verified it with a `require()` smoke
+test that (per below) turns out not to be trustworthy evidence in this
+environment either.
+Contributing cause the owner also flagged: `npm install` was blocking
+install scripts (`npm warn allow-scripts ... not yet covered by
+allowScripts`) — including `better-sqlite3`'s own build script and
+`electron`'s postinstall (which downloads `electron.exe`). Confirmed real:
+`npm approve-scripts` is a genuine npm 11 core command (`npm help
+approve-scripts` / `npm approve-scripts --help` both resolve), and it
+writes an `allowScripts` map directly into `package.json` — committable,
+so a fresh clone can be pre-approved rather than silently skipping scripts.
+Fix applied: (1) `npm approve-scripts --all` — approved all 4 pending
+packages, committed the resulting `allowScripts` block in `package.json`.
+(2) Added `@electron/rebuild@^4.2.0` to root `devDependencies` and a root
+`"postinstall": "electron-rebuild -f -w better-sqlite3"` script, so the
+rebuild happens automatically on every `npm install`, on any machine —
+confirmed it fires automatically (`npm install` output shows the
+`postinstall` step running and reporting `✔ Rebuild Complete`).
+**What I could NOT verify, and why:** attempting to confirm the rebuilt
+binary's actual ABI, I hit a second, more fundamental problem in this
+sandbox: `require('better-sqlite3')` continues to succeed under **both**
+plain system Node and Electron's Node even after the rebuild — which is
+not physically possible if the ABI check is functioning normally, and was
+already true (though I misread it as reassuring) before this session's
+fix. Running `electron-rebuild` with `DEBUG=electron-rebuild` shows it
+completing in ~180ms via a "prebuild-install powered" path with no real
+network transfer — consistent with it not actually replacing the binary.
+Forcing a genuine from-source rebuild (`--build-from-source`) failed
+outright with `node-gyp ERR! ENOSPC: no space left on device` while
+extracting Node headers into `%TEMP%`. Checked disk space directly:
+**`C:` has 0 bytes free** (`D:` has 75GB, `E:`, where this repo lives, has
+148GB). `%TEMP%`/`%TMP%` both resolve to `C:\Users\...\AppData\Local\Temp`.
+This most likely explains why native-module rebuilds silently fail to take
+effect here, and quite plausibly also explains the original "window never
+opens" symptom, since Electron writes cache/userData files under
+`%LOCALAPPDATA%` (also on `C:`) during its own startup — a much more
+coherent unifying explanation than the window-station theory, though still
+unconfirmed. I am not attempting to free space on the owner's `C:` drive;
+that's outside repo scope and not mine to decide.
+**Update, same day — the fix mechanism is proven, but not reliably
+scriptable in this sandbox.** After the disk filled up mid-rebuild and
+corrupted the module entirely (`Could not locate the bindings file`,
+every candidate path), reinstalling and re-running the rebuild produced,
+for the first time, unambiguous proof in both directions:
+
+- Under plain system Node: `The module ... was compiled against a
+different Node.js version using NODE_MODULE_VERSION 130. This version
+of Node.js requires NODE_MODULE_VERSION 127.` — the exact inverse of the
+  owner's original error, meaning the binary is now genuinely
+  Electron-targeted.
+- Under Electron's own Node (`ELECTRON_RUN_AS_NODE=1 electron.exe -e
+"require('better-sqlite3')"`): loads successfully.
+  So the underlying mechanism (`electron-rebuild -f -w better-sqlite3`,
+  run correctly, with the previous binary actually gone rather than stale)
+  **does work.**
+  Two problems surfaced in making this automatic and repeatable:
+
+1. **A blanket root `postinstall` rebuilds for Electron on every `npm
+install`, which breaks `npm test` and CI's `verify` job** — vitest runs
+   under plain Node, which then correctly rejects the Electron-targeted
+   binary. Confirmed directly: after the postinstall-triggered rebuild, all
+   7 `packages/db` tests failed with the ABI-mismatch error. Redesigned:
+   removed the root `postinstall`; added `"rebuild:electron"` as a root
+   script and wired it into `apps/server`'s own `"dev"` and `"package"`
+   scripts (`"dev": "npm run rebuild && electron-vite dev"`, `"package":
+"npm run rebuild && electron-vite build && electron-builder ..."`),
+   since those are the only two commands that actually need the
+   Electron-targeted binary. `npm test`/`npm run db:migrate`/CI's `verify`
+   job keep the system-Node-targeted binary from a plain `npm install`, as
+   before. **Trade-off, not a defect:** running `npm run dev` or `npm run
+package` locally leaves `better-sqlite3` Electron-targeted, so `npm
+test` will fail with the ABI error until `npm install better-sqlite3
+--no-save` (or a full reinstall) restores the system-Node build. CI is
+   unaffected — each job gets its own fresh `npm ci`. This is a
+   well-known, accepted trade-off in real Electron + native-module
+   projects; documenting it rather than treating it as a bug.
+2. **`electron-rebuild` itself became unreliable after repeated
+   reinstalls in this session**: on the very first run (fresh from
+   `postinstall`) it took the fast "prebuild-install" path (~180ms, no
+   compiler needed) and worked. Every subsequent invocation — from the
+   workspace script, with `-m`, with `--prefix`, with a direct `cd`, with
+   `-t prod` only, even a completely bare `npx electron-rebuild` from repo
+   root — instead logs `Building modules: better-sqlite3, better-sqlite3`
+   (the name duplicated) and falls through to a from-source `node-gyp`
+   build, which fails outright: `Could not find any Visual Studio
+installation to use`. I could not identify why the fast path stopped
+   being selected, and stopped investigating per instruction — this is a
+   real, reproducible tool-behavior question, not obviously sandbox-only,
+   so **it may reproduce on the owner's machine too.** If it does, the
+   likely resolutions are: install Visual Studio Build Tools (C++ workload)
+   so the from-source fallback can succeed, or investigate why
+   prebuild-install's fast path isn't being chosen on retry (possibly a
+   `@electron/rebuild` cache issue — worth trying `--force` combined with
+   clearing `~/.electron-gyp` and any prebuild-install cache directory).
+   Impact: The repo-level fix (approved scripts, scoped rebuild-before-dev/
+   package) is believed correct in shape and proven correct in mechanism, but
+   **the automated rebuild step itself is not reliably repeatable** in this
+   environment, and untested in the owner's. The previously-built 85MB
+   installer (P0-11) was built before any of this and is confirmed built on
+   the broken native module — **not rebuilt this session**, since
+   repackaging on top of an unverified fix would repeat the same mistake.
+   Fix: Owner to run, on their own machine, after freeing space on `C:`:
+
+```
+npm install
+npm run rebuild:electron
+```
+
+If that fails with "Could not find any Visual Studio installation to use,"
+either install Visual Studio Build Tools (Desktop development with C++
+workload) or report the exact failure — do not assume `--build-from-source`
+will work without it. If it succeeds, confirm both directions:
+
+```
+node -e "require('better-sqlite3')"                                    # should now FAIL with NODE_MODULE_VERSION mismatch
+npx electron -e "require('better-sqlite3'); console.log('OK')" 2>&1     # should succeed
+```
+
+Then `npm run dev --workspace=@shop/server` and confirm a window opens
+showing "Hello", then "IPC round-trip OK. Real table count from SQLite:
+42". Only after that succeeds: `npm run package` to produce a verified
+installer, then `npm install` again to restore the system-Node binary
+before running `npm test`.
+Status: CODE COMPLETE, LAUNCH UNVERIFIED. Not claiming P0-9 or P0-11 works.
+Owner verification requested; not spending further sessions on this
+sandbox's environment per explicit instruction.
 
 ### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
 
@@ -248,7 +351,55 @@ Fix: Changed the script to `"electron-vite build && electron-builder --win
 --publish never"`, so `npm run package` is correct standalone.
 Status: FIXED — commit `16c674a`. Verified: CI run 31898216763,
 `build-windows` job succeeded, produced a 84,972,762-byte `windows-installer`
-artifact.
+artifact. **Caveat added 2026-08-15: that CI build predates the BUG-7 ABI
+fix and is built on the same broken native module the owner found on their
+machine. Treat that artifact as unverified too, not just the local one.**
+
+### BUG-9: 24 npm audit findings (3 critical, 15 high, 6 moderate) — not fixed this session, recommendation only
+
+Found in: Phase 0, 2026-08-15, `npm audit` run at the owner's request.
+Full breakdown (`npm audit --json`, 24 findings across `prod`: 67,
+`dev`: 893, `optional`: 138 dependencies):
+
+**Ships in the actual app (real runtime exposure):**
+
+| Package            | Severity | Direct?                             | Non-breaking fix?                                                                                                       |
+| ------------------ | -------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `kysely`           | HIGH     | direct (`packages/db`)              | No — needs `0.28`→`0.29` (major). Currently unused in any code path (all P0-7 SQL is raw `better-sqlite3`, not Kysely). |
+| `react-router-dom` | MODERATE | direct (`apps/client`)              | **Yes**                                                                                                                 |
+| `react-router`     | MODERATE | transitive (via `react-router-dom`) | **Yes**                                                                                                                 |
+
+**Electron itself — ships as the packaged app's actual runtime, distinct from build tooling:**
+
+| Package    | Severity | Direct? | Non-breaking fix?                                                                                                                                                                  |
+| ---------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `electron` | HIGH     | direct  | No — needs `33`→`43` (10 majors). Changes bundled Node/Chromium and therefore the native-module ABI target again; not a decision to make lightly or same-session as the BUG-7 fix. |
+
+**Dev-only / build tooling — never shipped to the client's machine:**
+
+| Package                                                                                                                                                                | Severity      | Direct?                       | Non-breaking fix?                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vitest`                                                                                                                                                               | CRITICAL      | direct                        | No — `vitest`→`4.x` (major)                                                                                                                 |
+| `@vitest/coverage-v8`                                                                                                                                                  | CRITICAL      | direct                        | No — same `vitest@4` bump                                                                                                                   |
+| `@vitest/mocker`, `vite-node`                                                                                                                                          | MODERATE      | transitive (vitest)           | No — same `vitest@4` bump                                                                                                                   |
+| `vite`                                                                                                                                                                 | HIGH          | direct (`apps/client`)        | No — `vite`→`8.x` (major)                                                                                                                   |
+| `esbuild`                                                                                                                                                              | MODERATE      | transitive (vite)             | No — same `vite@8` bump. (This CVE is about `vite dev`'s dev server being reachable from other websites — irrelevant to production builds.) |
+| `electron-vite`                                                                                                                                                        | MODERATE      | direct                        | No — `2.x`→`5.x` (major)                                                                                                                    |
+| `electron-builder`                                                                                                                                                     | HIGH          | direct                        | No — `25.x`→`26.15.3` (major)                                                                                                               |
+| `app-builder-lib`, `builder-util`, `builder-util-runtime`, `cacache`, `dmg-builder`, `make-fetch-happen`, `node-gyp`, `tar`, `extract-zip`                             | HIGH/CRITICAL | transitive (electron-builder) | No — all resolve via the same `electron-builder@26.15.3` bump                                                                               |
+| `@electron/rebuild` (nested inside `electron-builder`, **not** the root one added for BUG-7 — that one is already `^4.2.0`, above the vulnerable `3.2.10–4.0.2` range) | HIGH          | transitive                    | No — same `electron-builder@26.15.3` bump                                                                                                   |
+| `electron-builder-squirrel-windows`, `electron-publish`                                                                                                                | HIGH          | transitive (electron-builder) | **Yes** — fixable independently of the big `electron-builder` major bump                                                                    |
+
+**Recommendation (not acted on):** `npm audit fix` (without `--force`) would
+likely resolve the 4 packages marked "Yes" above (`react-router`,
+`react-router-dom`, `electron-builder-squirrel-windows`,
+`electron-publish`) with no major bumps. Everything else requires an
+explicit major-version decision, most consequentially `electron` (33→43)
+and `electron-builder` (25→26), both of which interact with the still-open
+BUG-7 native-module ABI question — recommend resolving BUG-7 first, on
+real hardware, before touching either.
+Status: LOGGED, NOT FIXED. Owner decides. `npm audit fix --force` was not
+run, per explicit instruction.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
