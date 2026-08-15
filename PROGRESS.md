@@ -41,6 +41,131 @@
 
 ---
 
+## [2026-08-15] Session 5 — Phase 0: P0-9 reopened, real ABI bug found and fixed, unverified
+
+**Goal:** The owner ran the app on real hardware and hit exactly the
+NODE_MODULE_VERSION mismatch P0-9's brief had warned about — proof that
+last session's "IPC round-trip verified" claim was wrong. I had only
+verified the code built and bundled, never that it ran. Reopen P0-9,
+find and fix the real cause, verify properly this time, then stop —
+explicitly told not to spend another session chasing this sandbox's
+environment.
+
+**Done:**
+
+- Investigated `npm warn allow-scripts` properly instead of dismissing it
+  again: `npm approve-scripts` is a real npm 11 core command
+  (`npm approve-scripts --help` resolves); it writes an `allowScripts` map
+  into `package.json`, which is committable. Approved all 4 pending
+  packages (`better-sqlite3`, `electron`, `esbuild` ×2).
+- Added `@electron/rebuild@^4.2.0` to root devDependencies (named and
+  justified per the dependency rule, though pre-authorized by the owner's
+  own instruction).
+- First attempt: a blanket root `postinstall` running
+  `electron-rebuild -f -w better-sqlite3`. Fired automatically, reported
+  success — but broke `npm test`/CI's `verify` job outright, since vitest
+  runs under plain Node and a correctly-Electron-targeted binary must fail
+  there. Real, concrete evidence forced a redesign rather than shipping a
+  fix that breaks the test suite.
+- Redesigned: removed the blanket postinstall; added a root
+  `"rebuild:electron"` script and wired it into `apps/server`'s own `dev`
+  and `package` scripts instead, since those are the only two commands
+  that actually need the Electron-targeted binary. Documented the
+  resulting trade-off (running `dev`/`package` locally leaves the binary
+  Electron-targeted until the next `npm install`) as expected, not a bug —
+  CI is unaffected since each job gets its own fresh `npm ci`.
+- Got real, unambiguous proof the underlying mechanism works: after a
+  disk-full node-gyp failure corrupted the module entirely (forcing a
+  genuine rebuild rather than a stale/cached one), the binary correctly
+  failed under plain Node with `NODE_MODULE_VERSION 130 ... requires 127`
+  (the exact inverse of the owner's original error) and loaded
+  successfully under `ELECTRON_RUN_AS_NODE=1 electron.exe`.
+- Could NOT make the rebuild step itself reliably repeatable: every
+  subsequent invocation (via the workspace script, `-m`, `--prefix`, a
+  direct `cd`, `-t prod` only, even a bare `npx electron-rebuild` from
+  repo root) logged the module name twice and fell through to a
+  from-source `node-gyp` build requiring Visual Studio, which isn't
+  installed here. Tried four different angles, all failed identically.
+  Stopped investigating per explicit instruction and documented it
+  plainly rather than declaring victory.
+- Found the likely root cause of the instability: **`C:` has 0 bytes free**
+  on this machine (`%TEMP%` resolves there). `node-gyp` failed explicitly
+  with `ENOSPC` during a forced from-source attempt, and it's a coherent
+  explanation for why rebuilds silently don't stick and — plausibly — why
+  the app window never opens either, since Electron writes cache/userData
+  under `%LOCALAPPDATA%` (also `C:`) at startup. Retracted the earlier
+  "window station" theory as likely wrong; did not touch the owner's `C:`
+  drive myself.
+- **Did not repackage.** The existing 85MB installer (and the CI-built one
+  from the previous session) both predate this fix and are confirmed
+  built on the broken native module. Repackaging on top of an unverified
+  fix would repeat the exact mistake being corrected this session.
+- **BUG-9**: ran `npm audit`, parsed and categorized all 24 findings by
+  hand (runtime vs. dev-only vs. Electron-chain, non-breaking fix or not).
+  Logged in `PROJECT.md` with the full breakdown. Did not run `npm audit
+fix` or `--force`, per explicit instruction — recommendation only.
+
+**Verified:**
+
+- `npm approve-scripts --help` — confirmed real npm 11 command, pasted
+- `allowScripts` block appearing in `package.json` after approval — pasted
+- `postinstall` firing automatically on `npm install`, reporting
+  `✔ Rebuild Complete` — pasted, then shown to be a false positive by the
+  subsequent test failures
+- All 7 `packages/db` tests failing with the ABI error after the
+  blanket-postinstall rebuild — pasted, this is what forced the redesign
+- `NODE_MODULE_VERSION 130 ... requires 127` under plain Node, and
+  successful load under `ELECTRON_RUN_AS_NODE` — both pasted, this is the
+  real proof the fix mechanism works
+- Four distinct rebuild-script invocation strategies, all producing the
+  identical "Building modules: X, X" + Visual-Studio-missing failure —
+  pasted
+- `Get-PSDrive` output showing `C:` at 0 GB free — pasted
+- Final state: reinstalled to restore the system-Node binary, `npm run
+verify` exit 0, 40/40 tests passing — pasted
+
+**Not done / deferred:** The actual fix verification (window opens, IPC
+round-trip returns 42) — blocked on the owner's own machine, same as last
+session, but this time for a root cause I could actually name and explain
+rather than guess at. Repackaging — deliberately not done until the above
+is confirmed.
+
+**Bugs found:** BUG-7 diagnosis corrected (root cause found: real ABI
+mismatch, not a window-station sandbox quirk); fix designed, proven
+correct in mechanism, unverified end-to-end. BUG-9 logged (npm audit,
+not fixed).
+
+**Decisions taken:** none new.
+
+**Blocked on:** Owner running the exact commands in `PROJECT.md` BUG-7 on
+their own machine, after confirming what's actually eating `C:`'s disk
+space; BUG-9's major-version decisions (`electron` 33→43 especially);
+Q1–Q5, Q7, Q8 in `PROJECT.md`.
+
+**Next session should:** Wait for the owner's verification. Do not attempt
+to re-diagnose BUG-7 again from this sandbox — the owner was explicit
+about that. If they confirm the window opens: repackage, close P0-9 and
+P0-11, close Phase 0, start Phase 1. If not: get their exact error text
+first, don't guess again.
+
+**Checklist:**
+
+- [x] All verification checks passed (`npm run verify` exit 0 in the final
+      restored state; the fix's own success is explicitly NOT claimed)
+- [x] No unresolved bugs introduced by this session's own changes that
+      weren't documented (the dev/package rebuild trade-off is documented,
+      not hidden)
+- [x] PROJECT.md updated with new status — including retracting last
+      session's incorrect claim, not just adding to it
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — explicitly not met; P0-9/P0-11
+      reopened
+- [x] Any new bugs documented in PROJECT.md (BUG-9; BUG-7 corrected)
+- [x] Test suite passing (`npm run verify` exit 0) — but see above: this
+      says nothing about whether the Electron app itself works
+
+---
+
 ## [2026-08-15] Session 4 — Phase 0: P0-7 through P0-11, Phase 0 effectively complete
 
 **Goal:** Finish Phase 0. Owner was explicit: three sessions of correct work
