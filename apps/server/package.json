@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package": "electron-builder --win --publish never"
+    "package": "electron-vite build && electron-builder --win --publish never"
   },
   "build": {
     "appId": "com.shoperp.desktop",
