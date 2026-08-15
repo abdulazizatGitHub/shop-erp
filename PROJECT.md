@@ -9,10 +9,16 @@
 **BUG-7 (native module ABI) is RESOLVED**, confirmed by the owner on real
 hardware — reached `new Database()` under Electron. That surfaced a
 second, smaller bug (nothing created the app-data directory before
-opening the database) — fixed same session, with a test. Repackaged;
-owner to confirm the window actually opens (P0-11's real exit criterion —
-"it builds" was never evidence "it works," per the owner's own correction
-last session). **BUG-10 newly found and documented, not fixed**: the
+opening the database) — fixed same session, with a test. **Repackaged via
+CI** (this sandbox still can't run the rebuild step locally — same
+Visual-Studio/disk-space wall as BUG-7 — so a local package would ship
+the wrong-ABI binary again; not doing that). Real installer:
+CI run [31902827093](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/31902827093),
+artifact `windows-installer`, 84,972,572 bytes, includes both this
+session's fixes. Owner to confirm the window actually opens (P0-11's real
+exit criterion — "it builds" was never evidence "it works," per the
+owner's own correction last session). **BUG-10 newly found and
+documented, not fixed**: the
 packaged installer specifically (not `npm run dev`) will still fail at
 the migrations step, because the `.sql` files aren't copied into
 `app.asar`. Out of this session's explicit scope.
