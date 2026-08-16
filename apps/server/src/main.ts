@@ -22,7 +22,10 @@ function resolveBackupDir(): string {
 }
 
 function resolveMigrationsDir(): string {
-  // Relative to this file's own location, not process.cwd() — cwd is
+  // Packaged: copied to resources/migrations via extraResources (see
+  // apps/server/package.json "build") — not inside app.asar.
+  if (app.isPackaged) return path.join(process.resourcesPath, 'migrations');
+  // Dev: relative to this file's own location, not process.cwd() — cwd is
   // apps/server when launched via `npm run dev --workspace=@shop/server`,
   // not the repo root, which silently pointed at the wrong directory.
   return path.join(currentDir, '../../../../packages/db/src/migrations');
@@ -62,8 +65,10 @@ app
   .whenReady()
   .then(() => {
     const dbPath = resolveDbPath();
+    const migrationsDir = resolveMigrationsDir();
     console.warn('Database path:', dbPath);
-    migrate(dbPath, resolveMigrationsDir(), resolveBackupDir());
+    console.warn('Migrations dir:', migrationsDir);
+    migrate(dbPath, migrationsDir, resolveBackupDir());
     registerIpcHandlers();
     createWindow();
   })

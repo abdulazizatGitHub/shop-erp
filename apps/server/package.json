@@ -23,6 +23,15 @@
     "files": [
       "dist/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "../../packages/db/src/migrations",
+        "to": "migrations",
+        "filter": [
+          "*.sql"
+        ]
+      }
+    ],
     "win": {
       "target": "nsis",
       "signAndEditExecutable": false
