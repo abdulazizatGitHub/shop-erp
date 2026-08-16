@@ -17,9 +17,9 @@ session** — pulled back into scope since it blocked the very next
 verification step; verified by inspecting the actual built `app.asar` and
 `resources/` contents, not by reading the config. **Repackaged via CI**
 (this sandbox's local package still hits the same space-in-path/no-VS-Build-Tools
-wall). Real installer:
-CI run [pending — see BUG-7/BUG-10 for the rebuild triggered this
-session], artifact `windows-installer`. Not claiming it launches.
+wall). Real installer, includes both this session's fixes: CI run
+[31938583260](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/31938583260),
+artifact `windows-installer`, 84,984,543 bytes. Not claiming it launches.
 **Next milestone:** Owner installs Build Tools + re-clones to a
 space-free path (in progress), runs the repackaged installer, confirms
 the window opens and IPC returns 42. Phase 0 does not close until then.
