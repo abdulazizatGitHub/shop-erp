@@ -7,25 +7,22 @@
 **Current phase:** Phase 0 — Foundation & Environment
 **Phase status:** IN PROGRESS — P0-1 through P0-10 done and verified.
 **BUG-7 (native module ABI) is RESOLVED**, confirmed by the owner on real
-hardware — reached `new Database()` under Electron. That surfaced a
-second, smaller bug (nothing created the app-data directory before
-opening the database) — fixed same session, with a test. **Repackaged via
-CI** (this sandbox still can't run the rebuild step locally — same
-Visual-Studio/disk-space wall as BUG-7 — so a local package would ship
-the wrong-ABI binary again; not doing that). Real installer:
-CI run [31902827093](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/31902827093),
-artifact `windows-installer`, 84,972,572 bytes, includes both this
-session's fixes. Owner to confirm the window actually opens (P0-11's real
-exit criterion — "it builds" was never evidence "it works," per the
-owner's own correction last session). **BUG-10 newly found and
-documented, not fixed**: the
-packaged installer specifically (not `npm run dev`) will still fail at
-the migrations step, because the `.sql` files aren't copied into
-`app.asar`. Out of this session's explicit scope.
-**Next milestone:** Owner runs the repackaged installer, confirms the
-window opens and IPC returns 42. If it does, the next real blocker is
-BUG-10 (migrations not bundled) — expect it to surface then. Phase 0
-does not close until the window is confirmed.
+hardware. Real root cause found (by the owner): this repo's path has a
+space in it (`node-gyp` has a known failure with that) plus no Visual
+Studio Build Tools installed — both now written up under BUG-7's
+"Development machine setup" section so future clones don't hit this cold.
+Neither affects the client's PC, which only ever runs a pre-built
+installer. **BUG-10 (migrations not bundled) is also FIXED this
+session** — pulled back into scope since it blocked the very next
+verification step; verified by inspecting the actual built `app.asar` and
+`resources/` contents, not by reading the config. **Repackaged via CI**
+(this sandbox's local package still hits the same space-in-path/no-VS-Build-Tools
+wall). Real installer:
+CI run [pending — see BUG-7/BUG-10 for the rebuild triggered this
+session], artifact `windows-installer`. Not claiming it launches.
+**Next milestone:** Owner installs Build Tools + re-clones to a
+space-free path (in progress), runs the repackaged installer, confirms
+the window opens and IPC returns 42. Phase 0 does not close until then.
 
 ---
 
@@ -352,19 +349,53 @@ directory before opening the database) — see the top of this entry's
 replacement in `packages/db/src/connection.ts`, fixed same session, not
 tracked as a new bug number since it's a direct continuation of the same
 verification pass.
-Anomaly noted, not chased further (10-minute budget, explicitly not to be
-investigated from this sandbox): `node -e "require('better-sqlite3')"`
-exited silently (no ABI error) immediately after a standalone `npm run
-rebuild:electron` reported success, on the owner's machine. Likely the
-same fast-path/no-op flakiness documented above, just resolving
-differently there — `npm run dev`'s own embedded `rebuild` step (which
-runs a second, redundant `electron-rebuild` before launching) is the one
-that actually took effect, since the owner confirmed reaching `new
-Database()` under Electron afterward. Single command to check which ABI
-the on-disk binary currently targets: `node -e "require('better-sqlite3')"`
-— silent exit means it currently matches system Node; a thrown error
-names the exact `NODE_MODULE_VERSION` it was compiled for.
-Status: RESOLVED.
+**Real root cause of the "Building modules: better-sqlite3, better-sqlite3"
+duplication and Visual-Studio fallback, found by the owner 2026-08-16:**
+two independent environment issues, not a code bug:
+
+1. This repo's path contains a space (`E:\My Repos\shop-erp` — and this
+   tool's sandbox path also has one). `node-gyp` has a long-standing,
+   well-known failure building native modules under a path with spaces.
+   Very likely what this sandbox hit too — **the disk-space theory is
+   retracted a second time**; the space-in-path is the more likely
+   explanation for the from-source-fallback failures throughout this
+   session, disk space notwithstanding.
+2. No Visual Studio Build Tools installed, so when the fast prebuild-install
+   path doesn't fire, there's no compiler for the from-source fallback to
+   use.
+   Owner is re-cloning to a space-free path (`E:\repos\shop-erp`) and
+   installing Build Tools. See "Development machine setup" below — this is
+   now written down so nobody hits this cold again.
+   My own 10-minute follow-up (time-boxed, not chased further): passing an
+   explicit absolute `--module-dir` to `electron-rebuild` **does** remove the
+   "building modules: X, X" duplication and restores the fast prebuild-install
+   path (`Building modules: better-sqlite3` — no duplication — `installed
+prebuilt module` in ~200ms). But it doesn't fix the actual bug: the
+   resulting binary still loaded under plain Node afterward, meaning the
+   rebuild silently targeted the wrong ABI even while "succeeding" — a
+   different, not-obviously-related failure mode. Not applying this change;
+   documenting it and moving on, since the owner's two real root causes above
+   better explain what's actually been happening.
+
+#### Development machine setup (prerequisites, not covered by `npm install`)
+
+**Applies to development machines only — anyone cloning this repo and
+running the Electron app locally.** Does **not** affect the client's shop
+PC, which receives a pre-built, already-compiled installer and never runs
+`npm install` or a native-module rebuild at all (see `docs/SYSTEM_DESIGN.md`
+§9 — install is by USB, updates via `electron-updater`, both ship
+pre-built binaries).
+
+Before your first `npm install` on this repo:
+
+1. **Clone to a path with no spaces.** `node-gyp` (used to rebuild
+   `better-sqlite3` for Electron's ABI) has a long-standing failure
+   building under a path containing a space. `E:\repos\shop-erp` works;
+   `E:\My Repos\shop-erp` does not.
+2. **Install Visual Studio Build Tools** (Desktop development with C++
+   workload) on Windows, so `electron-rebuild`'s from-source fallback has
+   a compiler available if the fast prebuild-install path doesn't fire.
+   Status: RESOLVED.
 
 ### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
 
@@ -437,10 +468,11 @@ real hardware, before touching either.
 Status: LOGGED, NOT FIXED. Owner decides. `npm audit fix --force` was not
 run, per explicit instruction.
 
-### BUG-10: Migration `.sql` files are not bundled into the packaged app — MEDIUM, not fixed this session
+### BUG-10: Migration `.sql` files are not bundled into the packaged app — FIXED, was MEDIUM
 
 Found in: Phase 0, 2026-08-15, while fixing the missing-directory bug
-(P0-9), out of explicit scope for this session — documented, not fixed.
+(P0-9). Fixed 2026-08-16 — owner pulled it back into scope since it
+blocked the very next verification step.
 Description: `apps/server/package.json`'s `build.files` is
 `["dist/**/*"]` only. `packages/db/src/migrations/*.sql` lives outside
 `apps/server` entirely and is never copied into `app.asar`. Separately,
@@ -458,13 +490,45 @@ inside `app.asar`/`app.asar.unpacked`. This has not been hit yet in any
 verification this session, because verification stopped at the directory
 bug; it is the next thing that will surface once these bugs are fixed and
 the packaged installer (not `npm run dev`) is actually launched.
-Fix (not applied): add `"packages/db/src/migrations/**/*.sql"` (or the
-whole `packages/db/src/migrations` folder) to `build.files` in
-`apps/server/package.json`, and confirm the resulting path inside
-`resources/` at runtime via `process.resourcesPath`.
-Status: UNFIXED — out of this session's explicit scope. Will block
-launching the _packaged_ installer specifically; does not block `npm run
-dev`.
+Fix: Added an `extraResources` entry to `apps/server/package.json`'s
+`build` config, copying `../../packages/db/src/migrations` (filtered to
+`*.sql`) to `resources/migrations` — outside `app.asar`, since these are
+plain data files read at runtime, not app code. `resolveMigrationsDir()`
+in `main.ts` now branches: `path.join(process.resourcesPath, 'migrations')`
+when `app.isPackaged`, the existing relative-to-file-location path
+otherwise.
+Verified by building and inspecting the actual output, not by reading the
+config: `npm run build --workspace=@shop/server` then `npx electron-builder
+--win --publish never` run from `apps/server` (NSIS itself still fails
+locally on the same disk-space "mmap" error as before — unrelated, the
+asar and resources are built before NSIS runs). Raw listing:
+
+```
+$ find release/win-unpacked/resources -maxdepth 2
+release/win-unpacked/resources/app.asar
+release/win-unpacked/resources/app.asar.unpacked
+release/win-unpacked/resources/elevate.exe
+release/win-unpacked/resources/migrations
+release/win-unpacked/resources/migrations/0001_init.sql
+release/win-unpacked/resources/migrations/0002_business_units.sql
+release/win-unpacked/resources/migrations/0003_shared_overhead.sql
+```
+
+All three `.sql` files present. Also checked `app.asar`'s actual contents
+(`npx asar list`) for the other runtime assets `main.ts` needs:
+`dist/main/main.cjs`, `dist/preload/preload.cjs`, `dist/renderer/index.html`
+all present; `better-sqlite3`'s native binary correctly unpacked at
+`app.asar.unpacked/node_modules/better-sqlite3/build/Release/
+better_sqlite3.node` (native binaries can't run from inside an asar).
+Nothing else found missing.
+**Observation, not fixed (not blocking startup):** the asar also contains
+unrelated bloat — our own workspace packages' full TypeScript source
+including `.test.ts` files, and `better-sqlite3`'s C source/deps — because
+electron-builder includes production `node_modules` by default regardless
+of the `files` glob. Doesn't stop the app from starting; worth trimming
+later with an explicit exclude pattern, not this session.
+Status: FIXED — commit (this session). Verified by inspecting the built
+artifact directly, not by reading the config.
 
 <!--
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
