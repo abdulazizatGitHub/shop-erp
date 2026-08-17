@@ -28,8 +28,8 @@ dev defaults were still relative, not absolute). Also removed the default
 menu and added a load-success/load-failure log so a blank window can
 never again be silently reported as working.
 Repackaged via CI (this sandbox still can't complete a local package):
-CI run [pending — see BUG-7 for the rebuild triggered this session],
-artifact `windows-installer`.
+CI run [32063655133](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/32063655133),
+artifact `windows-installer`, 84,984,909 bytes. Not claiming it launches.
 **Next milestone:** Owner runs both `npm run dev --workspace=@shop/server`
 and the newly repackaged installer — dev and packaged now take different
 code paths, so passing one is not evidence for the other. Phase 0 closes
