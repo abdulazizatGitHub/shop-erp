@@ -1,10 +1,16 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { migrate, openDatabase } from '@shop/db';
 import { channels } from './ipc/channels.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+// currentDir at runtime is dist/main (see electron.vite.config.ts) — four
+// levels up is the repo root. Used to make dev-mode paths absolute instead
+// of relative to whatever process.cwd() happens to be (already bit us once
+// for the migrations dir; the same class of bug for DATABASE_PATH/BACKUP_DIR
+// just hadn't been noticed yet).
+const repoRootDev = path.join(currentDir, '../../../../');
 
 // docs/SYSTEM_DESIGN.md section 9: data lives under the OS app-data
 // directory, never inside the install directory. "ShopERP" (no space)
@@ -13,12 +19,12 @@ app.setName('ShopERP');
 
 function resolveDbPath(): string {
   if (app.isPackaged) return path.join(app.getPath('userData'), 'shop.db');
-  return process.env['DATABASE_PATH'] ?? './data/shop-dev.db';
+  return path.resolve(repoRootDev, process.env['DATABASE_PATH'] ?? './data/shop-dev.db');
 }
 
 function resolveBackupDir(): string {
   if (app.isPackaged) return path.join(app.getPath('userData'), 'backups');
-  return process.env['BACKUP_DIR'] ?? './backups';
+  return path.resolve(repoRootDev, process.env['BACKUP_DIR'] ?? './backups');
 }
 
 function resolveMigrationsDir(): string {
@@ -28,7 +34,7 @@ function resolveMigrationsDir(): string {
   // Dev: relative to this file's own location, not process.cwd() — cwd is
   // apps/server when launched via `npm run dev --workspace=@shop/server`,
   // not the repo root, which silently pointed at the wrong directory.
-  return path.join(currentDir, '../../../../packages/db/src/migrations');
+  return path.join(repoRootDev, 'packages/db/src/migrations');
 }
 
 function registerIpcHandlers(): void {
@@ -58,12 +64,44 @@ function createWindow(): void {
     },
   });
 
-  void win.loadFile(path.join(currentDir, '../renderer/index.html'));
+  // Startup smoke check — a blank window must never be silently reported
+  // as success. did-fail-load is exactly what fired the first time this
+  // was wired wrong (loadFile against a URL that only exists in prod).
+  win.webContents.on('did-finish-load', () => {
+    console.warn('Renderer loaded OK');
+  });
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('RENDERER FAILED TO LOAD', { errorCode, errorDescription, validatedURL });
+  });
+
+  // Dev-only DevTools shortcut — no application menu for a shopkeeper to
+  // accidentally click into (see Menu.setApplicationMenu(null) below).
+  if (!app.isPackaged) {
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12') {
+        win.webContents.toggleDevTools();
+      }
+    });
+  }
+
+  // electron-vite dev serves the renderer from its own Vite dev server —
+  // it is never written to disk as dist/renderer/index.html the way main
+  // and preload are. Packaged builds have no dev server; loadFile is the
+  // only option there.
+  const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+  const loaded =
+    !app.isPackaged && devServerUrl
+      ? win.loadURL(devServerUrl)
+      : win.loadFile(path.join(currentDir, '../renderer/index.html'));
+  loaded.catch((error: unknown) => {
+    console.error('Failed to load renderer:', error);
+  });
 }
 
 app
   .whenReady()
   .then(() => {
+    Menu.setApplicationMenu(null);
     const dbPath = resolveDbPath();
     const migrationsDir = resolveMigrationsDir();
     console.warn('Database path:', dbPath);
