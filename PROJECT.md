@@ -6,23 +6,34 @@
 **Last updated:** 2026-08-16
 **Current phase:** Phase 0 — Foundation & Environment
 **Phase status:** IN PROGRESS — P0-1 through P0-10 done and verified.
-**BUG-7 (native module ABI) is RESOLVED**, confirmed by the owner on real
-hardware. Real root cause found (by the owner): this repo's path has a
-space in it (`node-gyp` has a known failure with that) plus no Visual
-Studio Build Tools installed — both now written up under BUG-7's
-"Development machine setup" section so future clones don't hit this cold.
-Neither affects the client's PC, which only ever runs a pre-built
-installer. **BUG-10 (migrations not bundled) is also FIXED this
-session** — pulled back into scope since it blocked the very next
-verification step; verified by inspecting the actual built `app.asar` and
-`resources/` contents, not by reading the config. **Repackaged via CI**
-(this sandbox's local package still hits the same space-in-path/no-VS-Build-Tools
-wall). Real installer, includes both this session's fixes: CI run
-[31938583260](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/31938583260),
-artifact `windows-installer`, 84,984,543 bytes. Not claiming it launches.
-**Next milestone:** Owner installs Build Tools + re-clones to a
-space-free path (in progress), runs the repackaged installer, confirms
-the window opens and IPC returns 42. Phase 0 does not close until then.
+**BUG-7 (native module ABI) is RESOLVED and confirmed on real hardware** —
+window opens, native module loads under Electron, database opens,
+migrations run. The environment factors around the intermittent rebuild
+duplication (path space, missing Build Tools) are recorded as risk
+factors under BUG-7's "Development machine setup" section, **not as a
+confirmed root cause** — the owner re-ran the exact same rebuild from the
+same spaced path afterward and it succeeded, so the real cause of the
+intermittent duplication is still unidentified. Neither factor affects
+the client's PC, which only ever runs a pre-built installer.
+**BUG-10 (migrations not bundled) FIXED**, verified by inspecting the
+actual built `app.asar`/`resources/` contents, not the config.
+**Found and fixed a third bug this session**: the renderer was loaded via
+`loadFile` unconditionally, but `electron-vite dev` serves it from a Vite
+dev server (`ELECTRON_RENDERER_URL`), never writing it to disk — window
+opened blank in dev. Same root pattern as the database-path and
+migrations-dir bugs (a path/URL resolved without branching on
+`app.isPackaged`) — grepped `apps/server/src` for every other instance;
+found and fixed two more of the same pattern (`DATABASE_PATH`/`BACKUP_DIR`
+dev defaults were still relative, not absolute). Also removed the default
+menu and added a load-success/load-failure log so a blank window can
+never again be silently reported as working.
+Repackaged via CI (this sandbox still can't complete a local package):
+CI run [pending — see BUG-7 for the rebuild triggered this session],
+artifact `windows-installer`.
+**Next milestone:** Owner runs both `npm run dev --workspace=@shop/server`
+and the newly repackaged installer — dev and packaged now take different
+code paths, so passing one is not evidence for the other. Phase 0 closes
+when both show the window with the IPC round-trip returning 42.
 
 ---
 
@@ -40,17 +51,17 @@ the window opens and IPC returns 42. Phase 0 does not close until then.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed                                                                                    |
-| ----- | ---------------------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-10 (2026-08-15). BUG-7 resolved 2026-08-16; P0-11 awaiting owner launch confirmation |
-| 1     | Item master + import         | NOT STARTED | —                                                                                            |
-| 2     | Purchases + suppliers        | NOT STARTED | —                                                                                            |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                                            |
-| 4     | Printing + reports           | NOT STARTED | —                                                                                            |
-| 5     | Deploy + parallel run        | NOT STARTED | —                                                                                            |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                                            |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                                            |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                                            |
+| Phase | Name                         | Status      | Completed                                                                                                               |
+| ----- | ---------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-10 (2026-08-15). BUG-7/BUG-10/BUG-11 resolved 2026-08-16; P0-11 awaiting owner confirmation on repackaged build |
+| 1     | Item master + import         | NOT STARTED | —                                                                                                                       |
+| 2     | Purchases + suppliers        | NOT STARTED | —                                                                                                                       |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                                                                       |
+| 4     | Printing + reports           | NOT STARTED | —                                                                                                                       |
+| 5     | Deploy + parallel run        | NOT STARTED | —                                                                                                                       |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                                                                       |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                                                                       |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                                                                       |
 
 ---
 
@@ -349,33 +360,34 @@ directory before opening the database) — see the top of this entry's
 replacement in `packages/db/src/connection.ts`, fixed same session, not
 tracked as a new bug number since it's a direct continuation of the same
 verification pass.
-**Real root cause of the "Building modules: better-sqlite3, better-sqlite3"
-duplication and Visual-Studio fallback, found by the owner 2026-08-16:**
-two independent environment issues, not a code bug:
+**Investigation into the "Building modules: better-sqlite3, better-sqlite3"
+duplication and Visual-Studio fallback, 2026-08-16 — not fully solved,
+recorded as risk factors, not a confirmed root cause.**
 
-1. This repo's path contains a space (`E:\My Repos\shop-erp` — and this
-   tool's sandbox path also has one). `node-gyp` has a long-standing,
-   well-known failure building native modules under a path with spaces.
-   Very likely what this sandbox hit too — **the disk-space theory is
-   retracted a second time**; the space-in-path is the more likely
-   explanation for the from-source-fallback failures throughout this
-   session, disk space notwithstanding.
-2. No Visual Studio Build Tools installed, so when the fast prebuild-install
-   path doesn't fire, there's no compiler for the from-source fallback to
-   use.
-   Owner is re-cloning to a space-free path (`E:\repos\shop-erp`) and
-   installing Build Tools. See "Development machine setup" below — this is
-   now written down so nobody hits this cold again.
-   My own 10-minute follow-up (time-boxed, not chased further): passing an
-   explicit absolute `--module-dir` to `electron-rebuild` **does** remove the
-   "building modules: X, X" duplication and restores the fast prebuild-install
-   path (`Building modules: better-sqlite3` — no duplication — `installed
-prebuilt module` in ~200ms). But it doesn't fix the actual bug: the
-   resulting binary still loaded under plain Node afterward, meaning the
-   rebuild silently targeted the wrong ABI even while "succeeding" — a
-   different, not-obviously-related failure mode. Not applying this change;
-   documenting it and moving on, since the owner's two real root causes above
-   better explain what's actually been happening.
+The owner initially found two candidate environment issues: (1) this
+repo's path contains a space (`E:\My Repos\shop-erp`), and `node-gyp` has
+a known, long-standing failure building native modules under a path with
+spaces; (2) no Visual Studio Build Tools installed, so when the fast
+prebuild-install path doesn't fire, there's no compiler for the
+from-source fallback. **The owner then re-ran the rebuild from the same
+spaced path and it succeeded, with no duplicated module name in the
+log.** So the space is not the sole or confirmed cause — something about
+the reinstall cleared whatever stale state was actually responsible.
+**Correction: treat the space-in-path as a known `node-gyp` risk factor
+worth avoiding cheaply, not a proven explanation for this session's
+failures.** The real cause of the intermittent duplication remains
+unidentified. Not investigating further — recorded, not solved.
+My own 10-minute follow-up (time-boxed, not chased further, and now known
+to be an incomplete lead for the same reason): passing an explicit
+absolute `--module-dir` to `electron-rebuild` removed the "building
+modules: X, X" duplication and restored the fast prebuild-install path in
+this sandbox, but the resulting binary then loaded under plain Node too —
+a different, likely-also-environment-specific failure mode. Not applying
+this change.
+Owner is installing Visual Studio Build Tools regardless, as a real,
+independently-useful prerequisite (needed whenever the from-source
+fallback path IS taken, for whatever reason it gets taken) — recorded
+under "Development machine setup" below.
 
 #### Development machine setup (prerequisites, not covered by `npm install`)
 
@@ -388,10 +400,12 @@ pre-built binaries).
 
 Before your first `npm install` on this repo:
 
-1. **Clone to a path with no spaces.** `node-gyp` (used to rebuild
-   `better-sqlite3` for Electron's ABI) has a long-standing failure
-   building under a path containing a space. `E:\repos\shop-erp` works;
-   `E:\My Repos\shop-erp` does not.
+1. **Prefer a path with no spaces**, e.g. `E:\repos\shop-erp` rather than
+   `E:\My Repos\shop-erp`. `node-gyp` (used to rebuild `better-sqlite3`
+   for Electron's ABI) has a long-standing, known failure mode building
+   under a path containing a space — **a risk factor, not a confirmed
+   cause here**: the rebuild has succeeded from `E:\My Repos\shop-erp`
+   too. Cheap to avoid regardless.
 2. **Install Visual Studio Build Tools** (Desktop development with C++
    workload) on Windows, so `electron-rebuild`'s from-source fallback has
    a compiler available if the fast prebuild-install path doesn't fire.
@@ -530,13 +544,67 @@ later with an explicit exclude pattern, not this session.
 Status: FIXED — commit (this session). Verified by inspecting the built
 artifact directly, not by reading the config.
 
-<!--
+### BUG-11: Renderer loaded via `loadFile` unconditionally — blank window in dev — FIXED, was HIGH
+
+Found in: Phase 0, 2026-08-16, by the owner on real hardware, immediately
+after confirming BUG-7 resolved (window opened but blank).
+Description: `createWindow()` called `win.loadFile(dist/renderer/
+index.html)` with no branch. `electron-vite dev` serves the renderer from
+its own Vite dev server (`ELECTRON_RENDERER_URL`, e.g.
+`http://localhost:5173`) and never writes it to `dist/renderer/` the way
+main and preload are written — only the packaged build has a real
+`index.html` on disk. Owner's exact error:
+`electron: Failed to load URL: file:///.../dist/renderer/index.html with
+error: ERR_FILE_NOT_FOUND`.
+This is the third instance of the same pattern in this file: a path or
+URL resolved without branching on `app.isPackaged` (after the database
+path and the migrations dir). Grepped the whole of `apps/server/src` for
+every `path.join`/`path.resolve`/`loadFile`/`loadURL`/`process.env`/
+`process.cwd`/`resourcesPath` occurrence — confirmed by search, not
+assumption, that `main.ts` is the only file resolving paths or URLs.
+Found two more instances of the _same_ pattern while grepping:
+`resolveDbPath()`/`resolveBackupDir()` already branched on
+`app.isPackaged`, but their **dev-mode side** still returned a relative
+path (`'./data/shop-dev.db'`, `'./backups'`) — the exact class of bug
+already hit once with the migrations dir, just not yet noticed for these
+two. The preload path (`path.join(currentDir, '../preload/preload.cjs')`)
+does **not** need a branch — it's already relative to the running file's
+own location, which is valid in both dev and packaged contexts, unlike
+the renderer.
+Fix:
+
+- `createWindow()`: reads `process.env['ELECTRON_RENDERER_URL']`
+  (electron-vite sets this automatically in dev); uses `win.loadURL()`
+  against it when not packaged, `win.loadFile()` otherwise. The load
+  promise is now caught and logged instead of discarded with `void`.
+- `resolveDbPath()`/`resolveBackupDir()`: dev-mode fallback now resolved
+  via `path.resolve(repoRootDev, ...)` where `repoRootDev` is computed
+  from the running file's own location (same technique already used for
+  the migrations dir) — absolute in both dev and prod, printed on
+  startup (`console.warn('Database path:', dbPath)` — already existed;
+  now the value is actually absolute).
+- Removed the default application menu (`Menu.setApplicationMenu(null)`)
+  — a shopkeeper has no use for File/Edit/View/Window/Help and it invites
+  accidental clicks. Kept a dev-only `F12` DevTools toggle
+  (`before-input-event`, guarded by `!app.isPackaged`) rather than a menu
+  item.
+- Added `did-finish-load`/`did-fail-load` listeners on `webContents` that
+  log explicitly (`console.warn('Renderer loaded OK')` /
+  `console.error('RENDERER FAILED TO LOAD', {...})`) — a blank window can
+  no longer be silently reported as a successful launch; this is exactly
+  the signal that would have caught this bug immediately.
+  Status: FIXED — commit (this session). Verification pending: owner to run
+  `npm run dev --workspace=@shop/server` and the newly repackaged installer
+  — **dev and packaged now take genuinely different code paths (loadURL vs
+  loadFile), so one passing is not evidence for the other.**
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
-Found in:    Phase [X], [YYYY-MM-DD]
+
+Found in: Phase [X], [YYYY-MM-DD]
 Description:
 Impact:
 Fix:
-Status:      UNFIXED — waiting for [phase / migration / decision]
+Status: UNFIXED — waiting for [phase / migration / decision]
 -->
 
 ---
