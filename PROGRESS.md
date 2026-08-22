@@ -41,6 +41,115 @@
 
 ---
 
+## [2026-08-20] Session 6 — Phase 0: BUG-7 resolved, BUG-10/BUG-11 found and fixed, Phase 0 CLOSED
+
+**Goal:** Get from Session 5's "code complete, launch unverified" to an
+actual confirmed launch on the owner's real hardware, in both dev and
+packaged form, then close Phase 0.
+
+**Done:**
+
+- `packages/db/src/connection.ts` — `openDatabase()` now `mkdirSync`s the
+  parent directory (recursive, guarded against `:memory:`) before opening
+  — a fresh install has no app-data directory yet; SQLite creates the
+  file, not the folder. Added `packages/db/src/connection.test.ts`.
+- `apps/server/src/main.ts` — `resolveDbPath()`/`resolveBackupDir()` now
+  resolve production paths via `app.getPath('userData')` per
+  `docs/SYSTEM_DESIGN.md` §9 (`app.setName('ShopERP')` to match the
+  `%APPDATA%\ShopERP\` layout), dev paths made absolute
+  (`path.resolve()` against the running file's own location, not
+  `process.cwd()` — cwd is `apps/server` under `npm run dev
+--workspace=@shop/server`, not the repo root). Resolved paths printed
+  on startup.
+- `apps/server/package.json` (`build` config) — pinned `electronVersion`
+  explicitly (sidesteps a broken auto-detection under npm workspace
+  hoisting), `npmRebuild: false`, `signAndEditExecutable: false` +
+  `forceCodeSigning: false` (unsigned is acceptable per explicit
+  instruction), added `extraResources` copying
+  `packages/db/src/migrations/*.sql` to `resources/migrations` (BUG-10 —
+  migrations were never bundled into the packaged app at all).
+- `apps/server/src/main.ts` — BUG-10's companion fix:
+  `resolveMigrationsDir()` branches to `process.resourcesPath` when
+  packaged.
+- `apps/server/src/main.ts` — BUG-11: `createWindow()` now branches
+  `win.loadURL(process.env.ELECTRON_RENDERER_URL)` in dev vs
+  `win.loadFile()` when packaged — `electron-vite dev` serves the
+  renderer from its own Vite dev server, never writing it to disk, so
+  `loadFile` alone produced a blank window with `ERR_FILE_NOT_FOUND` in
+  dev. Also: removed the default application menu
+  (`Menu.setApplicationMenu(null)`), added a dev-only `F12` DevTools
+  toggle, added `did-finish-load`/`did-fail-load` listeners that log
+  explicitly so a blank window can never again be silently reported as a
+  working launch.
+- Grepped all of `apps/server/src` for every `path.join`/`path.resolve`/
+  `loadFile`/`loadURL`/`process.env`/`process.cwd`/`resourcesPath`
+  occurrence, confirming `main.ts` is the only file resolving paths or
+  URLs and that no other instance of the "missing `app.isPackaged`
+  branch" pattern existed beyond the three found and fixed.
+- Repackaged twice via CI (this sandbox cannot complete a local package —
+  same environment wall as the native rebuild). Final run:
+  [32063655133](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/32063655133),
+  artifact `windows-installer`, 84,984,909 bytes.
+
+**Verified:**
+
+- Owner, on real hardware, both code paths independently:
+  `npm run dev --workspace=@shop/server` — window rendered, "Renderer
+  loaded OK" logged, IPC round-trip returned table count 42.
+  CI-built packaged installer — window rendered, IPC round-trip returned
+  table count 42. (Confirmed via direct follow-up question after the
+  owner's report contained an unfilled "[FILL IN after you run the
+  installer]" placeholder for the packaged half — did not record it as
+  verified until the owner explicitly confirmed the actual result.)
+- `npm run verify` — exit 0, 42/42 tests, throughout (modulo the
+  now-familiar better-sqlite3 ABI trade-off between packaging work and
+  running the local test suite — `npm install better-sqlite3 --no-save`
+  restores system-Node targeting each time, documented, not a bug).
+
+**Not done / deferred:**
+
+- BUG-12 (new) — packaged `app.asar` bundles `.test.ts` files and
+  `better-sqlite3`'s C source unnecessarily (install size + hygiene, LOW)
+  — logged, not fixed.
+- The intermittent `electron-rebuild` "Building modules: X, X"
+  duplication — real cause still unidentified. Space-in-path and missing
+  Visual Studio Build Tools were investigated as candidates; the owner
+  re-ran the same rebuild from the same spaced path and it succeeded
+  afterward, so neither is a confirmed root cause — both recorded under
+  BUG-7 as risk factors worth avoiding cheaply, not solved. Not
+  investigating further, per explicit instruction.
+- BUG-5, BUG-9, Electron 33→43 upgrade — out of scope throughout, per
+  explicit instruction, still open.
+
+**Bugs found:** BUG-10 and BUG-11 found and fixed this session; BUG-12
+found, logged, not fixed. BUG-7 resolved (root cause partially
+identified — see above).
+
+**Decisions taken:** none new.
+
+**Blocked on:** nothing — Phase 0 is closed. Phase 1 scope is being
+revised by the owner before the next session starts (see below).
+
+**Next session should:** Wait for the owner's cut-down Phase 1 plan.
+Delivered a Phase 1 scope assessment this session (item fields minimum,
+cut candidates, which of Q1–Q5 actually block billing) as requested, in
+chat only — no code, no files changed, per explicit instruction. Do not
+start Phase 1 work until the owner gives the revised plan.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output from the owner's own
+      hardware, not this sandbox
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status — Phase 0 marked COMPLETE
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — Phase 0 fully done; Phase 1 not
+      started, awaiting owner's revised scope by design
+- [x] Any new bugs documented in PROJECT.md — BUG-12
+- [x] Test suite passing (`npm run verify` exit 0)
+
+---
+
 ## [2026-08-15] Session 5 — Phase 0: P0-9 reopened, real ABI bug found and fixed, unverified
 
 **Goal:** The owner ran the app on real hardware and hit exactly the

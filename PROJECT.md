@@ -3,37 +3,22 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-16
+**Last updated:** 2026-08-20
 **Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** IN PROGRESS — P0-1 through P0-10 done and verified.
-**BUG-7 (native module ABI) is RESOLVED and confirmed on real hardware** —
-window opens, native module loads under Electron, database opens,
-migrations run. The environment factors around the intermittent rebuild
-duplication (path space, missing Build Tools) are recorded as risk
-factors under BUG-7's "Development machine setup" section, **not as a
-confirmed root cause** — the owner re-ran the exact same rebuild from the
-same spaced path afterward and it succeeded, so the real cause of the
-intermittent duplication is still unidentified. Neither factor affects
-the client's PC, which only ever runs a pre-built installer.
-**BUG-10 (migrations not bundled) FIXED**, verified by inspecting the
-actual built `app.asar`/`resources/` contents, not the config.
-**Found and fixed a third bug this session**: the renderer was loaded via
-`loadFile` unconditionally, but `electron-vite dev` serves it from a Vite
-dev server (`ELECTRON_RENDERER_URL`), never writing it to disk — window
-opened blank in dev. Same root pattern as the database-path and
-migrations-dir bugs (a path/URL resolved without branching on
-`app.isPackaged`) — grepped `apps/server/src` for every other instance;
-found and fixed two more of the same pattern (`DATABASE_PATH`/`BACKUP_DIR`
-dev defaults were still relative, not absolute). Also removed the default
-menu and added a load-success/load-failure log so a blank window can
-never again be silently reported as working.
-Repackaged via CI (this sandbox still can't complete a local package):
-CI run [32063655133](https://github.com/abdulazizatGitHub/shop-erp/actions/runs/32063655133),
-artifact `windows-installer`, 84,984,909 bytes. Not claiming it launches.
-**Next milestone:** Owner runs both `npm run dev --workspace=@shop/server`
-and the newly repackaged installer — dev and packaged now take different
-code paths, so passing one is not evidence for the other. Phase 0 closes
-when both show the window with the IPC round-trip returning 42.
+**Phase status:** ✅ COMPLETE — 2026-08-20. All of P0-1 through P0-11
+verified with real output. P0-9 (Electron shell + IPC) and P0-11 (Windows
+installer) confirmed on the owner's real hardware, both dev
+(`npm run dev --workspace=@shop/server`) and the CI-built packaged
+installer independently: window renders, "Renderer loaded OK" logged, IPC
+round-trip returns table count 42. BUG-7, BUG-10, and BUG-11 all
+RESOLVED/confirmed on real hardware. BUG-12 (asar bundles test files and
+native-module C source — install size + hygiene, LOW) newly logged, not
+fixed. Eight sessions total for Phase 0.
+**Next milestone:** Phase 1, scope to be revised by the owner before work
+starts — Phase 1 as written in `docs/PHASES.md` is too large for the
+2026-08-31 go-live with eleven days left. Not starting Phase 1 in this
+session; see `docs/PHASES.md`-based scope assessment delivered
+2026-08-20, awaiting the owner's cut-down plan.
 
 ---
 
@@ -51,17 +36,17 @@ when both show the window with the IPC round-trip returning 42.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed                                                                                                               |
-| ----- | ---------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 0     | Foundation & Environment     | IN PROGRESS | P0-1–P0-10 (2026-08-15). BUG-7/BUG-10/BUG-11 resolved 2026-08-16; P0-11 awaiting owner confirmation on repackaged build |
-| 1     | Item master + import         | NOT STARTED | —                                                                                                                       |
-| 2     | Purchases + suppliers        | NOT STARTED | —                                                                                                                       |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                                                                       |
-| 4     | Printing + reports           | NOT STARTED | —                                                                                                                       |
-| 5     | Deploy + parallel run        | NOT STARTED | —                                                                                                                       |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                                                                       |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                                                                       |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                                                                       |
+| Phase | Name                         | Status      | Completed                                                                      |
+| ----- | ---------------------------- | ----------- | ------------------------------------------------------------------------------ |
+| 0     | Foundation & Environment     | COMPLETE    | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both |
+| 1     | Item master + import         | NOT STARTED | —                                                                              |
+| 2     | Purchases + suppliers        | NOT STARTED | —                                                                              |
+| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                              |
+| 4     | Printing + reports           | NOT STARTED | —                                                                              |
+| 5     | Deploy + parallel run        | NOT STARTED | —                                                                              |
+| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                              |
+| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                              |
+| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                              |
 
 ---
 
@@ -409,7 +394,15 @@ Before your first `npm install` on this repo:
 2. **Install Visual Studio Build Tools** (Desktop development with C++
    workload) on Windows, so `electron-rebuild`'s from-source fallback has
    a compiler available if the fast prebuild-install path doesn't fire.
-   Status: RESOLVED.
+
+**Confirmed closed 2026-08-20, on real hardware, both paths:** `npm run
+dev --workspace=@shop/server` — window opened, "Renderer loaded OK"
+logged, IPC round-trip returned table count 42. The CI-built installer
+(BUG-11's fix, run `32063655133`) — window opened, IPC round-trip also
+returned 42. Dev and packaged take genuinely different code paths
+(`loadURL` vs `loadFile`, different `resolveDbPath`/`resolveMigrationsDir`
+branches); both were verified independently, not inferred from each other.
+Status: RESOLVED.
 
 ### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
 
@@ -540,9 +533,13 @@ unrelated bloat — our own workspace packages' full TypeScript source
 including `.test.ts` files, and `better-sqlite3`'s C source/deps — because
 electron-builder includes production `node_modules` by default regardless
 of the `files` glob. Doesn't stop the app from starting; worth trimming
-later with an explicit exclude pattern, not this session.
-Status: FIXED — commit (this session). Verified by inspecting the built
-artifact directly, not by reading the config.
+later with an explicit exclude pattern — logged separately as BUG-12.
+Confirmed 2026-08-20 on real hardware: the CI-built installer's migrate()
+step ran successfully against the bundled `.sql` files (owner ran the
+packaged installer, window opened, IPC round-trip returned 42 — which
+requires `migrate()` to have found and applied all three migrations).
+Status: RESOLVED — commit (2026-08-16 session), confirmed on real
+packaged hardware 2026-08-20.
 
 ### BUG-11: Renderer loaded via `loadFile` unconditionally — blank window in dev — FIXED, was HIGH
 
@@ -593,10 +590,39 @@ Fix:
   `console.error('RENDERER FAILED TO LOAD', {...})`) — a blank window can
   no longer be silently reported as a successful launch; this is exactly
   the signal that would have caught this bug immediately.
-  Status: FIXED — commit (this session). Verification pending: owner to run
-  `npm run dev --workspace=@shop/server` and the newly repackaged installer
-  — **dev and packaged now take genuinely different code paths (loadURL vs
-  loadFile), so one passing is not evidence for the other.**
+  Status: RESOLVED — confirmed 2026-08-20 on real hardware, both code
+  paths independently: `npm run dev --workspace=@shop/server` (window
+  rendered, "Renderer loaded OK" logged, IPC returned 42) and the
+  CI-built packaged installer (window rendered, IPC returned 42).
+
+### BUG-12: Packaged `app.asar` bundles `.test.ts` files and `better-sqlite3`'s C source — LOW, not fixed
+
+Found in: Phase 0, 2026-08-16, while verifying BUG-10 (inspecting the
+built `app.asar` directly via `npx asar list`).
+Description: `electron-builder` includes production `node_modules`
+dependencies by default regardless of the `build.files` glob
+(`["dist/**/*"]` only restricts what's pulled from the project directory
+itself). Confirmed by listing: the shipped `app.asar` contains our own
+workspace packages' full TypeScript source, including
+`packages/db/src/*.test.ts` and `packages/shared/src/*.test.ts`, plus
+`better-sqlite3`'s C/C++ source (`deps/sqlite3/sqlite3.c`, `src/
+better_sqlite3.cpp`, etc.) — none of which the running app ever requires.
+Impact: two effects, neither blocking startup (confirmed — the app runs
+correctly with this bloat present): (1) larger install size than
+necessary — the current installer is ~85MB, an unmeasured fraction of
+which is this dead weight; (2) information hygiene — test files and
+internal source ship to every install, including the client's shop PC,
+for no functional reason.
+Fix (not applied): add explicit exclude patterns to `build.files` in
+`apps/server/package.json` (e.g. `"!**/*.test.ts"`, `"!**/deps/**"`,
+`"!**/src/**/*.c"`, `"!**/src/**/*.cpp"`, `"!**/src/**/*.h"`), then
+re-verify via `npx asar list` that the app still starts correctly
+afterward — trimming inputs to a native-module build risks removing
+something the compiled `.node` binary still needs at runtime, so this
+needs the same "inspect the artifact, don't trust the config" verification
+BUG-10 used, not just editing the glob and assuming it worked.
+Status: LOGGED, NOT FIXED. Low severity, cosmetic/hygiene — do not fix
+this session.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
