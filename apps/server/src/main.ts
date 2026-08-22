@@ -1,8 +1,16 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
-import { migrate, openDatabase } from '@shop/db';
+import { migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
+
+// CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
+// .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
+const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+
+function resolveTenantId(): string {
+  return process.env['TENANT_ID'] ?? DEFAULT_TENANT_ID;
+}
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 // currentDir at runtime is dist/main (see electron.vite.config.ts) — four
@@ -107,6 +115,13 @@ app
     console.warn('Database path:', dbPath);
     console.warn('Migrations dir:', migrationsDir);
     migrate(dbPath, migrationsDir, resolveBackupDir());
+    const seedDb = openDatabase(dbPath);
+    try {
+      const seedResult = seed(seedDb, resolveTenantId());
+      console.warn('Seed result:', JSON.stringify(seedResult));
+    } finally {
+      seedDb.close();
+    }
     registerIpcHandlers();
     createWindow();
   })
