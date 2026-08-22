@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { CreateItemInput, ItemDto, ItemLookups, ItemSearchInput } from '@shop/contracts';
 import { channels } from './ipc/channels.js';
+
+interface CreateItemResult {
+  readonly id: string;
+  readonly itemCode: string;
+}
 
 /**
  * The ONLY renderer-visible surface. Never expose ipcRenderer directly —
@@ -9,5 +15,13 @@ contextBridge.exposeInMainWorld('api', {
   system: {
     ping: (): Promise<{ tableCount: number }> =>
       ipcRenderer.invoke(channels.system.ping) as Promise<{ tableCount: number }>,
+  },
+  item: {
+    create: (input: CreateItemInput): Promise<CreateItemResult> =>
+      ipcRenderer.invoke(channels.item.create, input) as Promise<CreateItemResult>,
+    search: (input: ItemSearchInput): Promise<readonly ItemDto[]> =>
+      ipcRenderer.invoke(channels.item.search, input) as Promise<readonly ItemDto[]>,
+    lookups: (): Promise<ItemLookups> =>
+      ipcRenderer.invoke(channels.item.lookups) as Promise<ItemLookups>,
   },
 });

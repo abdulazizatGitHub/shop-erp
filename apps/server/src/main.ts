@@ -3,13 +3,19 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
+import { registerItemHandlers } from './ipc/handlers/item.handler.js';
 
 // CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
 // .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
 const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+const DEFAULT_DEVICE_CODE = 'A';
 
 function resolveTenantId(): string {
   return process.env['TENANT_ID'] ?? DEFAULT_TENANT_ID;
+}
+
+function resolveDeviceCode(): string {
+  return process.env['DEVICE_CODE'] ?? DEFAULT_DEVICE_CODE;
 }
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +51,9 @@ function resolveMigrationsDir(): string {
   return path.join(repoRootDev, 'packages/db/src/migrations');
 }
 
-function registerIpcHandlers(): void {
+function registerIpcHandlers(dbPath: string): void {
+  registerItemHandlers({ dbPath, tenantId: resolveTenantId(), deviceCode: resolveDeviceCode() });
+
   ipcMain.handle(channels.system.ping, () => {
     const db = openDatabase(resolveDbPath());
     try {
@@ -122,7 +130,7 @@ app
     } finally {
       seedDb.close();
     }
-    registerIpcHandlers();
+    registerIpcHandlers(dbPath);
     createWindow();
   })
   .catch((error: unknown) => {
