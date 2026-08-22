@@ -1,3 +1,4 @@
+import react from '@vitejs/plugin-react';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 // @shop/* workspace packages are TS source only (no compiled entry point) —
@@ -30,10 +31,11 @@ export default defineConfig({
     },
   },
   renderer: {
-    root: 'src/renderer-stub',
+    root: '../client',
+    plugins: [react()],
     build: {
       outDir: 'dist/renderer',
-      rollupOptions: { input: 'src/renderer-stub/index.html' },
+      rollupOptions: { input: '../client/index.html' },
     },
   },
 });

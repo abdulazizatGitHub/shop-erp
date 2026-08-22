@@ -46,6 +46,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.1.0",
     "electron-vite": "^2.3.0"
