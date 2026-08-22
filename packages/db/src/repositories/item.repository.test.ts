@@ -208,4 +208,41 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.nameEn).toBe('Copper Pipe 10ft');
   });
+
+  it('filters by category (P1-3)', async () => {
+    // No UI sets category_id yet (P1-1 cut it; P1-2 import will) — set it
+    // directly to prove the filter itself is correct, independent of that.
+    const categoryId = 'aaaaaaaa-0000-0000-0000-000000000001';
+    rawDbInsertCategory(categoryId, 'Piping');
+
+    const piped = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Copper Pipe 10ft',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    await repo.createItem({
+      itemCode: null,
+      nameEn: 'Gas R-134a',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    rawDb.prepare(`UPDATE item SET category_id = ? WHERE id = ?`).run(categoryId, piped.id);
+
+    const results = await repo.searchItems({ query: '', categoryId });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.nameEn).toBe('Copper Pipe 10ft');
+  });
 });
+
+function rawDbInsertCategory(id: string, name: string): void {
+  rawDb
+    .prepare(`INSERT INTO category (id, tenant_id, name, sort_order) VALUES (?, ?, ?, 0)`)
+    .run(id, TENANT_ID, name);
+}

@@ -28,12 +28,13 @@ export function ItemsPage(): React.JSX.Element {
   const [items, setItems] = useState<readonly ItemDto[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchCategoryId, setSearchCategoryId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const runSearch = (query: string): void => {
+  const runSearch = (query: string, categoryId: string): void => {
     ipc.item
-      .search({ query, categoryId: null })
+      .search({ query, categoryId: categoryId.length > 0 ? categoryId : null })
       .then(setItems)
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Search failed');
@@ -54,7 +55,7 @@ export function ItemsPage(): React.JSX.Element {
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load lookups');
       });
-    runSearch('');
+    runSearch('', '');
   }, []);
 
   const handleSubmit = (event: React.FormEvent): void => {
@@ -87,7 +88,7 @@ export function ItemsPage(): React.JSX.Element {
           businessUnitId: prev.businessUnitId,
           stockUomId: prev.stockUomId,
         }));
-        runSearch(searchQuery);
+        runSearch(searchQuery, searchCategoryId);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to create item');
@@ -212,9 +213,27 @@ export function ItemsPage(): React.JSX.Element {
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
-            runSearch(e.target.value);
+            runSearch(e.target.value, searchCategoryId);
           }}
         />
+      </label>
+
+      <label>
+        Category
+        <select
+          value={searchCategoryId}
+          onChange={(e) => {
+            setSearchCategoryId(e.target.value);
+            runSearch(searchQuery, e.target.value);
+          }}
+        >
+          <option value="">All categories</option>
+          {lookups?.categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
       </label>
 
       <table>
