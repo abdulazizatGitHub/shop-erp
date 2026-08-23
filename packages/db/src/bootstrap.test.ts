@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('seed', () => {
-  it('inserts the tenant, three business units, one price level, four uoms', () => {
+  it('inserts the tenant, three business units, one price level, four uoms, one warehouse', () => {
     const db = new Database(dbPath);
     const result = seed(db, TENANT_ID);
     db.close();
@@ -33,6 +33,7 @@ describe('seed', () => {
       businessUnitsInserted: 3,
       priceLevelsInserted: 1,
       uomsInserted: 4,
+      warehousesInserted: 1,
     });
   });
 
@@ -47,7 +48,19 @@ describe('seed', () => {
       businessUnitsInserted: 0,
       priceLevelsInserted: 0,
       uomsInserted: 0,
+      warehousesInserted: 0,
     });
+  });
+
+  it('seeds exactly one default "Shop" warehouse', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const rows = db
+      .prepare(`SELECT name, is_default FROM warehouse WHERE tenant_id = ?`)
+      .all(TENANT_ID);
+    db.close();
+
+    expect(rows).toEqual([{ name: 'Shop', is_default: 1 }]);
   });
 
   it('seeds business_unit codes and flags exactly per ADR-0010', () => {

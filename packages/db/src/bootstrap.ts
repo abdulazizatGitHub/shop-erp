@@ -6,6 +6,7 @@ export interface SeedResult {
   readonly businessUnitsInserted: number;
   readonly priceLevelsInserted: number;
   readonly uomsInserted: number;
+  readonly warehousesInserted: number;
 }
 
 interface BusinessUnitSeed {
@@ -25,6 +26,7 @@ const BUSINESS_UNITS: readonly BusinessUnitSeed[] = [
 ];
 
 const DEFAULT_PRICE_LEVEL_NAME = 'Retail';
+const DEFAULT_WAREHOUSE_NAME = 'Shop';
 
 // P1-0's minimum set, per the owner's explicit instruction. More can be
 // added later through normal CRUD — this is only the bootstrap floor.
@@ -100,10 +102,25 @@ function seedUoms(db: Database.Database, tenantId: string): number {
   return inserted;
 }
 
+function seedWarehouse(db: Database.Database, tenantId: string): number {
+  const existing = db
+    .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND name = ?`)
+    .get(tenantId, DEFAULT_WAREHOUSE_NAME);
+  if (existing) return 0;
+  db.prepare(`INSERT INTO warehouse (id, tenant_id, name, is_default) VALUES (?, ?, ?, 1)`).run(
+    newId(),
+    tenantId,
+    DEFAULT_WAREHOUSE_NAME,
+  );
+  return 1;
+}
+
 /**
  * Idempotent first-launch bootstrap: tenant row, the three fixed business
- * units, the default Retail price level, and the base units of measure.
- * Safe to call on every startup — each piece is inserted only if missing.
+ * units, the default Retail price level, the base units of measure, and
+ * a default "Shop" warehouse (stock_movement.warehouse_id is required —
+ * P1-2's opening-stock import needs somewhere to post against). Safe to
+ * call on every startup — each piece is inserted only if missing.
  */
 export function seed(db: Database.Database, tenantId: string): SeedResult {
   const now = new Date().toISOString();
@@ -112,6 +129,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     businessUnitsInserted: 0,
     priceLevelsInserted: 0,
     uomsInserted: 0,
+    warehousesInserted: 0,
   };
 
   const runSeed = db.transaction(() => {
@@ -119,7 +137,14 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     const businessUnitsInserted = seedBusinessUnits(db, tenantId, now);
     const priceLevelsInserted = seedPriceLevel(db, tenantId);
     const uomsInserted = seedUoms(db, tenantId);
-    result = { tenantInserted, businessUnitsInserted, priceLevelsInserted, uomsInserted };
+    const warehousesInserted = seedWarehouse(db, tenantId);
+    result = {
+      tenantInserted,
+      businessUnitsInserted,
+      priceLevelsInserted,
+      uomsInserted,
+      warehousesInserted,
+    };
   });
   runSeed();
 
