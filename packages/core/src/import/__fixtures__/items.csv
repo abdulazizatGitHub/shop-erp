@@ -1,0 +1,9 @@
+Item Code,Item Name (English),Item Name (Urdu),Owning Business Unit,Category,Brand / Company,Variant / Spec,Selling Unit,Purchase Unit,Units per Purchase Unit,Track Stock? (Y/N),Has Serial No? (Y/N),Purchase Price (PKR),Retail Price (PKR),Wholesale Price (PKR),Low Stock Alert Qty,Shelf / Location,Notes
+,Gas R-134a,,Spare Parts,,,13.6kg cylinder,Kg,Cylinder,13.6,Y,N,35000,4200,4000,5,Shelf A1,
+,1.5 Ton Compressor,,Repair,,,1.5 Ton,Piece,Piece,1,Y,Y,8000,9500,9000,2,Shelf B2,
+CU-PIPE-01,Copper Pipe 10ft,,Spare Parts,,,10ft,Foot,Foot,1,Y,N,250,320,300,20,Shelf C1,
+BAD-CAT-01,Mystery Item,,Spare Parts,NonexistentCategory,,,Piece,Piece,1,Y,N,100,150,,,,
+CU-PIPE-01,Copper Pipe Duplicate,,Spare Parts,,,,Foot,Foot,1,Y,N,250,320,,,,duplicate test
+FAN-MOTOR-01,Fan Motor,,Repair,,,,Piece,Piece,1,Y,N,1200,1500,1400,3,Shelf D1,
+BAD-BU-01,Weird Unit Item,,Nonsense,,,,Piece,Piece,1,Y,N,100,150,,,,
+BAD-PRICE-01,No Price Item,,Spare Parts,,,,Piece,Piece,1,Y,N,100,,,,,

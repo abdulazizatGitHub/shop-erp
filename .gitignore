@@ -25,6 +25,8 @@ backups/
 *.xlsx
 *.csv
 !docs/**/*.csv
+# Synthetic import fixtures — fabricated data, not client data
+!packages/core/src/import/__fixtures__/*.csv
 
 .vscode/*
 !.vscode/extensions.json
