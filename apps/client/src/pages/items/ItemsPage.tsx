@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ItemDto, ItemLookups } from '@shop/contracts';
 import { Money } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
+import type { ImportResult } from '../../types/electron-api.js';
 
 interface FormState {
   itemCode: string;
@@ -31,6 +32,8 @@ export function ItemsPage(): React.JSX.Element {
   const [searchCategoryId, setSearchCategoryId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   const runSearch = (query: string, categoryId: string): void => {
     ipc.item
@@ -99,13 +102,30 @@ export function ItemsPage(): React.JSX.Element {
     lookups?.businessUnits.find((bu) => bu.id === id)?.name ?? id;
   const uomName = (id: string): string => lookups?.uoms.find((u) => u.id === id)?.name ?? id;
 
+  const runImport = (commit: boolean): void => {
+    setError(null);
+    setImportResult(null);
+    setImportBusy(true);
+    const call = commit ? ipc.importData.commit() : ipc.importData.dryRun();
+    call
+      .then((result) => {
+        setImportBusy(false);
+        if (result) {
+          setImportResult(result);
+          if (commit) runSearch(searchQuery, searchCategoryId);
+        }
+      })
+      .catch((err: unknown) => {
+        setImportBusy(false);
+        setError(err instanceof Error ? err.message : 'Import failed');
+      });
+  };
+
   return (
     <div>
       <h1>Items</h1>
-
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
-
       <form onSubmit={handleSubmit}>
         <div>
           <label>
@@ -204,9 +224,7 @@ export function ItemsPage(): React.JSX.Element {
         </div>
         <button type="submit">Create item</button>
       </form>
-
       <hr />
-
       <label>
         Search
         <input
@@ -217,7 +235,6 @@ export function ItemsPage(): React.JSX.Element {
           }}
         />
       </label>
-
       <label>
         Category
         <select
@@ -235,7 +252,6 @@ export function ItemsPage(): React.JSX.Element {
           ))}
         </select>
       </label>
-
       <table>
         <thead>
           <tr>
@@ -264,6 +280,42 @@ export function ItemsPage(): React.JSX.Element {
           ))}
         </tbody>
       </table>
+      <hr />
+      <h2>Bulk import</h2>
+      <p>Pick the Items CSV first; optionally Ctrl/Cmd-select the Opening Stock CSV too.</p>
+      <button
+        type="button"
+        disabled={importBusy}
+        onClick={() => {
+          runImport(false);
+        }}
+      >
+        Dry run (no changes saved)
+      </button>{' '}
+      <button
+        type="button"
+        disabled={importBusy}
+        onClick={() => {
+          runImport(true);
+        }}
+      >
+        Commit import
+      </button>
+      {importResult && (
+        <div role="status">
+          <p>
+            Items: {importResult.itemsAccepted} accepted, {importResult.itemsRejected} rejected,{' '}
+            {importResult.itemsSkipped} skipped. Report: {importResult.itemsReportPath}
+          </p>
+          {importResult.openingStockReportPath !== null && (
+            <p>
+              Opening stock: {importResult.openingStockAccepted} accepted,{' '}
+              {importResult.openingStockRejected} rejected, {importResult.openingStockSkipped}{' '}
+              skipped. Report: {importResult.openingStockReportPath}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

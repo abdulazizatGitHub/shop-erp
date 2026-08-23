@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { CreateItemInput, ItemDto, ItemLookups, ItemSearchInput } from '@shop/contracts';
 import { channels } from './ipc/channels.js';
+import type { ImportResult } from './ipc/handlers/import.handler.js';
 
 interface CreateItemResult {
   readonly id: string;
@@ -23,5 +24,11 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.item.search, input) as Promise<readonly ItemDto[]>,
     lookups: (): Promise<ItemLookups> =>
       ipcRenderer.invoke(channels.item.lookups) as Promise<ItemLookups>,
+  },
+  importData: {
+    dryRun: (): Promise<ImportResult | null> =>
+      ipcRenderer.invoke(channels.importData.dryRun) as Promise<ImportResult | null>,
+    commit: (): Promise<ImportResult | null> =>
+      ipcRenderer.invoke(channels.importData.commit) as Promise<ImportResult | null>,
   },
 });

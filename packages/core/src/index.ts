@@ -27,3 +27,4 @@ export type {
   NewOpeningStockRecord,
   OpeningStockRowResult,
 } from './import/opening-stock-import.js';
+export { formatItemImportReport, formatOpeningStockImportReport } from './import/report.js';

@@ -4,6 +4,7 @@ import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
 import { registerItemHandlers } from './ipc/handlers/item.handler.js';
+import { registerImportHandlers } from './ipc/handlers/import.handler.js';
 
 // CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
 // .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
@@ -41,6 +42,11 @@ function resolveBackupDir(): string {
   return path.resolve(repoRootDev, process.env['BACKUP_DIR'] ?? './backups');
 }
 
+function resolveLogDir(): string {
+  if (app.isPackaged) return path.join(app.getPath('userData'), 'logs');
+  return path.resolve(repoRootDev, process.env['LOG_DIR'] ?? './logs');
+}
+
 function resolveMigrationsDir(): string {
   // Packaged: copied to resources/migrations via extraResources (see
   // apps/server/package.json "build") — not inside app.asar.
@@ -52,7 +58,10 @@ function resolveMigrationsDir(): string {
 }
 
 function registerIpcHandlers(dbPath: string): void {
-  registerItemHandlers({ dbPath, tenantId: resolveTenantId(), deviceCode: resolveDeviceCode() });
+  const tenantId = resolveTenantId();
+  const deviceCode = resolveDeviceCode();
+  registerItemHandlers({ dbPath, tenantId, deviceCode });
+  registerImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
 
   ipcMain.handle(channels.system.ping, () => {
     const db = openDatabase(resolveDbPath());
