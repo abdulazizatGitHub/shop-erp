@@ -13,6 +13,12 @@ export interface ItemImportLookups {
   readonly brandIdByName: ReadonlyMap<string, string>;
   /** item codes already in the DB or already accepted earlier in this run */
   readonly existingItemCodes: ReadonlySet<string>;
+  /** normalized (trim+lowercase) name_en of items already in the DB or
+   * already accepted earlier in this run — used to skip re-importing a
+   * blank-code row that was already imported by name (item codes alone
+   * can't catch this: a blank code gets a fresh auto-generated code on
+   * every run). */
+  readonly existingItemNames: ReadonlySet<string>;
 }
 
 export interface NewItemImportRecord {
@@ -47,7 +53,12 @@ export interface ItemImportRejected {
   readonly status: 'rejected';
   readonly reason: string;
 }
-export type ItemImportRowResult = ItemImportAccepted | ItemImportRejected;
+export interface ItemImportSkipped {
+  readonly rowNumber: number;
+  readonly status: 'skipped';
+  readonly reason: string;
+}
+export type ItemImportRowResult = ItemImportAccepted | ItemImportRejected | ItemImportSkipped;
 
 const normalize = (value: string): string => value.trim().toLowerCase();
 
@@ -237,6 +248,16 @@ function validateRow(row: ParsedCsvRow, lookups: ItemImportLookups): ItemImportR
       reason: `Item Code "${itemCode}" already exists`,
     };
   }
+  // No code given: match on name_en instead, per "re-running the same
+  // import must not duplicate items." A blank code alone would get a
+  // fresh auto-generated code on every run, silently duplicating the item.
+  if (!itemCode && lookups.existingItemNames.has(normalize(nameEn))) {
+    return {
+      rowNumber: row.rowNumber,
+      status: 'skipped',
+      reason: `An item named "${nameEn}" already exists — not duplicated`,
+    };
+  }
 
   const costPerStockUnitPaisa =
     purchasePriceResult !== null
@@ -280,12 +301,18 @@ export function validateItemRows(
   lookups: ItemImportLookups,
 ): ItemImportRowResult[] {
   const seenCodes = new Set(lookups.existingItemCodes);
+  const seenNames = new Set(lookups.existingItemNames);
   const results: ItemImportRowResult[] = [];
   for (const row of rows) {
-    const result = validateRow(row, { ...lookups, existingItemCodes: seenCodes });
+    const result = validateRow(row, {
+      ...lookups,
+      existingItemCodes: seenCodes,
+      existingItemNames: seenNames,
+    });
     results.push(result);
-    if (result.status === 'accepted' && result.record.itemCode) {
-      seenCodes.add(result.record.itemCode);
+    if (result.status === 'accepted') {
+      if (result.record.itemCode) seenCodes.add(result.record.itemCode);
+      seenNames.add(normalize(result.record.nameEn));
     }
   }
   return results;

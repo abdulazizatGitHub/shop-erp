@@ -12,3 +12,5 @@ export type {
   UomOption,
   CategoryOption,
 } from './repositories/lookup.repository.js';
+export { KyselyImportRepository } from './repositories/import.repository.js';
+export type { InsertedImportItem } from './repositories/import.repository.js';

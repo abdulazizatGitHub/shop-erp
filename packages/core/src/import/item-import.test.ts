@@ -27,6 +27,7 @@ function baseLookups(): ItemImportLookups {
     categoryIdByName: new Map(),
     brandIdByName: new Map(),
     existingItemCodes: new Set(),
+    existingItemNames: new Set(),
   };
 }
 
@@ -121,5 +122,32 @@ describe('validateItemRows against the synthetic fixture', () => {
     if (compressor?.status !== 'accepted') throw new Error('expected accepted');
     expect(compressor.record.businessUnitId).toBe('bu-repair-id');
     expect(compressor.record.isSerialized).toBe(true); // Has Serial No? = Y
+  });
+});
+
+describe('re-running the same import does not duplicate blank-code items by name', () => {
+  it('skips a blank-code row whose name already exists in the DB', () => {
+    const lookups: ItemImportLookups = {
+      ...baseLookups(),
+      existingItemNames: new Set(['gas r-134a']), // already imported, different casing
+    };
+    const csvText = readFileSync(fixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, ITEM_COLUMNS);
+    const results = validateItemRows(rows, lookups);
+
+    const gasResult = results.find((r) => r.rowNumber === 2); // the Gas R-134a row
+    expect(gasResult?.status).toBe('skipped');
+  });
+
+  it('skips a second occurrence of the same blank-code name within one batch', () => {
+    const csvText = `Item Code,Item Name (English),Item Name (Urdu),Owning Business Unit,Category,Brand / Company,Variant / Spec,Selling Unit,Purchase Unit,Units per Purchase Unit,Track Stock? (Y/N),Has Serial No? (Y/N),Purchase Price (PKR),Retail Price (PKR),Wholesale Price (PKR),Low Stock Alert Qty,Shelf / Location,Notes
+,Repeat Item,,Spare Parts,,,,Piece,,,Y,N,,100,,,,
+,Repeat Item,,Spare Parts,,,,Piece,,,Y,N,,100,,,,
+`;
+    const { rows } = parseCsv(csvText, ITEM_COLUMNS);
+    const results = validateItemRows(rows, baseLookups());
+
+    expect(results[0]?.status).toBe('accepted');
+    expect(results[1]?.status).toBe('skipped');
   });
 });
