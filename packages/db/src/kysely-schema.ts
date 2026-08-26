@@ -127,6 +127,106 @@ export interface WarehouseTable {
   custodianPartyId: string | null;
 }
 
+export interface PartyTable {
+  id: string;
+  tenantId: string;
+  partyCode: string;
+  partyType: string;
+  name: string;
+  shopName: string | null;
+  phone: string | null;
+  cityArea: string | null;
+  paymentTerms: string | null;
+  notes: string | null;
+  isActive: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface PurchaseTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  supplierId: string;
+  warehouseId: string;
+  purchaseDate: string;
+  supplierInvoiceNo: string | null;
+  subtotal: number;
+  discountAmount: number;
+  freightAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  paymentMode: string | null;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  businessUnitId: string | null;
+}
+
+export interface PurchaseLineTable {
+  id: string;
+  tenantId: string;
+  purchaseId: string;
+  lineNo: number;
+  itemId: string;
+  quantity: number;
+  stockQuantity: number;
+  unitCost: number;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  lineTotal: number;
+  notes: string | null;
+}
+
+export interface PartyLedgerTable {
+  id: string;
+  tenantId: string;
+  partyId: string;
+  entryDate: string;
+  entryType: string;
+  amount: number;
+  runningNote: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  reversedById: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  billReference: string | null;
+  dueDate: string | null;
+  billNotes: string | null;
+}
+
+export interface AuditLogTable {
+  id: string;
+  tenantId: string;
+  tableName: string;
+  recordId: string;
+  action: string;
+  changedFields: string | null;
+  oldValues: string | null;
+  userId: string | null;
+  deviceCode: string | null;
+  createdAt: string;
+}
+
+export interface SyncOutboxTable {
+  id: string;
+  tenantId: string;
+  tableName: string;
+  recordId: string;
+  operation: string;
+  payload: string | null;
+  createdAt: string;
+  syncedAt: string | null;
+  syncAttempts: number;
+  lastError: string | null;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -138,4 +238,10 @@ export interface Database {
   category: CategoryTable;
   brand: BrandTable;
   warehouse: WarehouseTable;
+  party: PartyTable;
+  purchase: PurchaseTable;
+  purchaseLine: PurchaseLineTable;
+  partyLedger: PartyLedgerTable;
+  auditLog: AuditLogTable;
+  syncOutbox: SyncOutboxTable;
 }

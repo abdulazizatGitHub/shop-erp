@@ -1,5 +1,6 @@
 import type { ItemImportRowResult } from './item-import.js';
 import type { OpeningStockRowResult } from './opening-stock-import.js';
+import type { SupplierBalanceRowResult } from './supplier-balance-import.js';
 
 function csvField(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -29,6 +30,22 @@ export function formatItemImportReport(results: readonly ItemImportRowResult[]):
 }
 
 export function formatOpeningStockImportReport(results: readonly OpeningStockRowResult[]): string {
+  const accepted = results.filter((r) => r.status === 'accepted').length;
+  const rejected = results.filter((r) => r.status === 'rejected').length;
+  const skipped = results.filter((r) => r.status === 'skipped').length;
+
+  const lines = ['Row,Status,Reason'];
+  for (const r of results) {
+    const reason = r.status === 'accepted' ? '' : r.reason;
+    lines.push([String(r.rowNumber), r.status, csvField(reason)].join(','));
+  }
+
+  return [summaryLine(accepted, rejected, skipped), ...lines].join('\n') + '\n';
+}
+
+export function formatSupplierBalanceImportReport(
+  results: readonly SupplierBalanceRowResult[],
+): string {
   const accepted = results.filter((r) => r.status === 'accepted').length;
   const rejected = results.filter((r) => r.status === 'rejected').length;
   const skipped = results.filter((r) => r.status === 'skipped').length;

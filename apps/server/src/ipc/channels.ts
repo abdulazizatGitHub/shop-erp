@@ -30,7 +30,12 @@ export const channels = {
     stockValuation: 'report:stockValuation',
     cashBook: 'report:cashBook',
   },
-  importData: { dryRun: 'import:dryRun', commit: 'import:commit' },
+  importData: {
+    dryRun: 'import:dryRun',
+    commit: 'import:commit',
+    supplierBalanceDryRun: 'import:supplierBalance:dryRun',
+    supplierBalanceCommit: 'import:supplierBalance:commit',
+  },
   backup: { now: 'backup:now', restore: 'backup:restore' },
   system: { ping: 'system:ping' },
 } as const;

@@ -4,7 +4,9 @@ import type {
   ItemImportLookups,
   NewItemImportRecord,
   NewOpeningStockRecord,
+  NewSupplierBalanceRecord,
   OpeningStockImportLookups,
+  SupplierBalanceImportLookups,
 } from '@shop/core';
 import type { Database } from '../kysely-schema.js';
 
@@ -241,6 +243,61 @@ export class KyselyImportRepository {
           createdAt: now,
           createdBy: null,
           businessUnitId: null,
+        })),
+      )
+      .execute();
+  }
+
+  async getSupplierBalanceLookups(): Promise<SupplierBalanceImportLookups> {
+    const [suppliers, existingBills] = await Promise.all([
+      this.db
+        .selectFrom('party')
+        .select(['id', 'name'])
+        .where('tenantId', '=', this.tenantId)
+        .where('partyType', '=', 'supplier')
+        .where('deletedAt', 'is', null)
+        .execute(),
+      this.db
+        .selectFrom('partyLedger')
+        .select(['partyId', 'billReference'])
+        .where('tenantId', '=', this.tenantId)
+        .where('entryType', '=', 'opening_balance')
+        .where('billReference', 'is not', null)
+        .execute(),
+    ]);
+
+    return {
+      supplierIdByNormalizedName: new Map(suppliers.map((s) => [normalize(s.name), s.id])),
+      existingBillKeys: new Set(
+        existingBills
+          .filter((b): b is { partyId: string; billReference: string } => b.billReference !== null)
+          .map((b) => `${b.partyId}|${b.billReference}`),
+      ),
+    };
+  }
+
+  async insertSupplierOpeningBalances(records: readonly NewSupplierBalanceRecord[]): Promise<void> {
+    if (records.length === 0) return;
+    const now = new Date().toISOString();
+    await this.db
+      .insertInto('partyLedger')
+      .values(
+        records.map((r) => ({
+          id: newId(),
+          tenantId: this.tenantId,
+          partyId: r.partyId,
+          entryDate: r.entryDate,
+          entryType: 'opening_balance',
+          amount: r.amountPaisa,
+          runningNote: null,
+          sourceType: null,
+          sourceId: null,
+          reversedById: null,
+          createdAt: now,
+          createdBy: null,
+          billReference: r.billReference,
+          dueDate: r.dueDate,
+          billNotes: r.billNotes,
         })),
       )
       .execute();

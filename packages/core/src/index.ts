@@ -27,4 +27,33 @@ export type {
   NewOpeningStockRecord,
   OpeningStockRowResult,
 } from './import/opening-stock-import.js';
-export { formatItemImportReport, formatOpeningStockImportReport } from './import/report.js';
+export { SUPPLIER_BALANCE_COLUMNS } from './import/supplier-columns.js';
+export { validateSupplierBalanceRows } from './import/supplier-balance-import.js';
+export type {
+  SupplierBalanceImportLookups,
+  NewSupplierBalanceRecord,
+  SupplierBalanceRowResult,
+} from './import/supplier-balance-import.js';
+export {
+  formatItemImportReport,
+  formatOpeningStockImportReport,
+  formatSupplierBalanceImportReport,
+} from './import/report.js';
+
+export type {
+  PartyRepositoryPort,
+  NewSupplierInput,
+  NewSupplierResult,
+  SupplierRecord,
+  SupplierSearchQuery,
+} from './party/party.repository.port.js';
+
+export type {
+  PurchasePaymentMode,
+  PurchaseRepositoryPort,
+  NewPurchaseLineInput,
+  NewPurchaseInput,
+  NewPurchaseResult,
+  PurchaseLineRecord,
+  PurchaseRecord,
+} from './purchase/purchase.repository.port.js';

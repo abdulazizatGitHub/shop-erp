@@ -1,5 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { dialog, ipcMain } from 'electron';
 import {
   formatItemImportReport,
@@ -12,6 +11,7 @@ import {
 } from '@shop/core';
 import { createKyselyDb, KyselyImportRepository, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
+import { writeReportDual } from './report-writer.js';
 
 export interface ImportHandlerDeps {
   readonly dbPath: string;
@@ -31,35 +31,6 @@ export interface ImportResult {
   readonly openingStockAccepted: number | null;
   readonly openingStockRejected: number | null;
   readonly openingStockSkipped: number | null;
-}
-
-/**
- * Writes the report next to the source file (findable at a glance) AND
- * under the app's log directory (guaranteed writable — the source may be
- * a USB drive that gets unplugged, or a folder the app can't write to).
- * A failure writing the source-adjacent copy is logged, not fatal — the
- * log-dir copy is what actually guarantees the report is never lost.
- */
-function writeReportDual(
-  sourceFilePath: string,
-  logDir: string,
-  reportText: string,
-  suffix: string,
-): { sourceReportPath: string | null; logReportPath: string } {
-  let sourceReportPath: string | null = `${sourceFilePath}.report.csv`;
-  try {
-    writeFileSync(sourceReportPath, reportText, 'utf8');
-  } catch (error: unknown) {
-    console.error('Could not write report next to source file:', error);
-    sourceReportPath = null;
-  }
-
-  mkdirSync(logDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const logReportPath = path.join(logDir, `import-${suffix}-${stamp}.report.csv`);
-  writeFileSync(logReportPath, reportText, 'utf8');
-
-  return { sourceReportPath, logReportPath };
 }
 
 async function runImport(

@@ -5,6 +5,7 @@ import { migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
 import { registerItemHandlers } from './ipc/handlers/item.handler.js';
 import { registerImportHandlers } from './ipc/handlers/import.handler.js';
+import { registerSupplierBalanceImportHandlers } from './ipc/handlers/supplier-balance-import.handler.js';
 
 // CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
 // .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
@@ -62,6 +63,7 @@ function registerIpcHandlers(dbPath: string): void {
   const deviceCode = resolveDeviceCode();
   registerItemHandlers({ dbPath, tenantId, deviceCode });
   registerImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
+  registerSupplierBalanceImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
 
   ipcMain.handle(channels.system.ping, () => {
     const db = openDatabase(resolveDbPath());

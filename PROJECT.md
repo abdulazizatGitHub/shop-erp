@@ -3,22 +3,29 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-20
-**Current phase:** Phase 0 — Foundation & Environment
-**Phase status:** ✅ COMPLETE — 2026-08-20. All of P0-1 through P0-11
-verified with real output. P0-9 (Electron shell + IPC) and P0-11 (Windows
-installer) confirmed on the owner's real hardware, both dev
-(`npm run dev --workspace=@shop/server`) and the CI-built packaged
-installer independently: window renders, "Renderer loaded OK" logged, IPC
-round-trip returns table count 42. BUG-7, BUG-10, and BUG-11 all
-RESOLVED/confirmed on real hardware. BUG-12 (asar bundles test files and
-native-module C source — install size + hygiene, LOW) newly logged, not
-fixed. Eight sessions total for Phase 0.
-**Next milestone:** Phase 1, scope to be revised by the owner before work
-starts — Phase 1 as written in `docs/PHASES.md` is too large for the
-2026-08-31 go-live with eleven days left. Not starting Phase 1 in this
-session; see `docs/PHASES.md`-based scope assessment delivered
-2026-08-20, awaiting the owner's cut-down plan.
+**Last updated:** 2026-08-24
+**Current phase:** Phase 2 — Purchases + suppliers
+**Phase status:** ✅ COMPLETE (pending owner's real-hardware `npm run verify`
+confirmation) — 2026-08-24. Full cut-down scope built and verified:
+supplier CRUD (`SUP-A-000001` codes), migration 0004 (`party_ledger` bill
+metadata: `bill_reference`/`due_date`/`bill_notes`), migration 0005
+(`party.payment_terms` — a schema gap found before writing code, not in
+`0001_init.sql`), purchase entry (cash/credit, stock + ledger, runtime
+`business_unit_id` resolution, cancellation via reversing rows only, never
+an update/delete), and supplier opening-balance import (core+db+IPC+UI,
+dual-location report, idempotent on supplier + bill reference). 114 tests
+passing, all real-DB, in this sandbox (BUG-7's ABI mismatch did not
+reproduce this session after a `better-sqlite3` reinstall). Two real
+money-correctness conflicts were caught and resolved with the owner before
+writing code — see `docs/phases/PHASE_2.md` §5 Design Decisions: the
+`party_ledger` sign convention for credit purchases (negative, not the
+literal spec text's positive), and purchase cancellation never touching
+`reversed_by_id` (a direct contradiction between `CLAUDE.md` §3.3 and
+`docs/DATABASE_RULES.md` §3).
+**Next milestone:** Phase 3 — counter sale + udhaar. Budget explicit time
+for supplier/purchase UI+IPC wiring first (see `docs/phases/PHASE_2.md` §8
+"Notes for the next phase") — P2-1/P2-2 are DB-verified but not yet
+reachable from the running app.
 
 ---
 
@@ -39,8 +46,8 @@ session; see `docs/PHASES.md`-based scope assessment delivered
 | Phase | Name                         | Status      | Completed                                                                      |
 | ----- | ---------------------------- | ----------- | ------------------------------------------------------------------------------ |
 | 0     | Foundation & Environment     | COMPLETE    | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both |
-| 1     | Item master + import         | NOT STARTED | —                                                                              |
-| 2     | Purchases + suppliers        | NOT STARTED | —                                                                              |
+| 1     | Item master + import         | COMPLETE    | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified  |
+| 2     | Purchases + suppliers        | COMPLETE    | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                     |
 | 3     | Counter sale + udhaar        | NOT STARTED | —                                                                              |
 | 4     | Printing + reports           | NOT STARTED | —                                                                              |
 | 5     | Deploy + parallel run        | NOT STARTED | —                                                                              |
@@ -624,6 +631,176 @@ BUG-10 used, not just editing the glob and assuming it worked.
 Status: LOGGED, NOT FIXED. Low severity, cosmetic/hygiene — do not fix
 this session.
 
+### BUG-13: Import report's guaranteed `LOG_DIR` write is not wrapped in try/catch — MEDIUM, not fixed
+
+Severity raised LOW → MEDIUM, 2026-08-24 (Phase 2 housekeeping, P2-H):
+increased transaction volume through Phase 2 raises the cost of a
+silently-lost import confirmation.
+
+Found in: Phase 1, 2026-08-24, while confirming the import handler's error
+behaviour by reading `apps/server/src/ipc/handlers/import.handler.ts`
+(not by running it).
+Description: `writeReportDual()` wraps the source-adjacent report write
+(`${sourceFilePath}.report.csv`) in try/catch, falling back to
+`sourceReportPath = null` on failure — this is deliberate, since the
+source location (e.g. a USB drive) is expected to be unreliable. The
+second write, to the app's own `LOG_DIR` — the one the code's own comment
+calls "what actually guarantees the report is never lost" — is **not**
+wrapped: `mkdirSync(logDir, ...)` and the subsequent `writeFileSync` can
+throw uncaught. Nothing in `runImport`, `pickFilesAndRun`, or the
+`ipcMain.handle` registration catches it either, so the throw propagates
+as a rejected IPC promise straight to `ItemsPage.tsx`'s `.catch()`.
+Impact: On `commit`, `repo.insertImportedItems(accepted)` (and, for
+opening stock, `repo.insertOpeningStockMovements`) already runs and
+succeeds _before_ the report is written. If the `LOG_DIR` write then
+throws (disk full, permissions, AV lock — narrow but real), the user sees
+a generic error alert instead of the accept/reject/skip counts, even
+though the import actually committed to the database. The result is not
+lost from the database's point of view, but it is lost from the UI's
+point of view — the user has no way to know the import actually
+succeeded.
+Fix (not applied): wrap the `LOG_DIR` write in the same try/catch pattern
+as the source-adjacent write; if both fail, still return the in-memory
+counts to the UI with both paths `null`, rather than letting the whole
+IPC call reject.
+Status: LOGGED, NOT FIXED. Low severity/probability — do not fix this
+session, per explicit instruction to change nothing beyond what was asked.
+
+### BUG-14: `docs/DATABASE_RULES.md` §3 contradicts itself on whether append-only tables may ever be updated — MEDIUM, documentation bug, not code
+
+Found in: Phase 2, 2026-08-24, while designing purchase cancellation
+(P2-2) — needed to know how a reversing `stock_movement`/`party_ledger`
+row should link back to the row it corrects.
+Description: `docs/DATABASE_RULES.md` §3 "Append-only tables" states, in
+three consecutive bullets:
+
+1. "No `UPDATE`. No `DELETE`."
+2. "Corrections insert a reversing row and set `reversed_by_id` on the original."
+3. "Any code path that updates these tables is a **CRITICAL** bug."
+
+Bullet 2 is only satisfiable by updating the original row after it has
+already been inserted — there is no other way to "set" a column on an
+existing row. Bullets 1 and 3, in the same paragraph, explicitly forbid
+exactly that and call it a CRITICAL bug. The contradiction is entirely
+self-contained within this one section of this one document — it is not
+a cross-document conflict. `CLAUDE.md` §3.3 separately states
+"Corrections are new reversing rows, never edits or deletes" (consistent
+with bullets 1 and 3) but never mentions `reversed_by_id`, so it does not
+resolve which of `DATABASE_RULES.md`'s own three lines is correct.
+Impact: Any session implementing a reversal against `stock_movement` or
+`party_ledger` — this phase's purchase cancellation, Phase 3's sale
+cancellation, any future adjustment/write-off — hits the same ambiguity
+and could plausibly land on either reading: updating `reversed_by_id`
+(a real UPDATE to an append-only table — exactly what the surrounding
+text calls CRITICAL) or never touching it (leaving the column permanently
+unused, contradicting the sentence that introduces it). Left unresolved,
+different sessions could implement inconsistent reversal mechanisms
+across modules, breaking any future report that assumes one convention
+over the other.
+Fix: Edit `docs/DATABASE_RULES.md` §3, bullet 2, so it no longer describes
+an UPDATE. Phase 2 resolved this in code (see `docs/phases/PHASE_2.md`
+§5/§5b): `reversed_by_id` is never set by any code path; a reversal is
+discoverable via the reversing row's own `source_type`/`source_id`
+(shared with the original document, not a new column) plus
+`movement_type`/`entry_type` distinguishing direction — the same
+aggregation pattern `v_stock_on_hand` and `v_party_balance` already use.
+The docs fix should describe that mechanism, or an equivalent, instead of
+the update bullet 2 currently implies.
+Status: UNFIXED — documentation-only; does not block Phase 2, whose code
+follows the no-update reading throughout. Should be corrected before
+Phase 3 builds sale cancellation, so the next session doesn't have to
+re-derive this resolution or, worse, land on the opposite one.
+
+### BUG-15: No concurrent-write handling anywhere — two IPC calls racing a write to the same row fail fast with a raw SQLITE_BUSY, not a graceful retry — HIGH
+
+Found in: Phase 2, 2026-08-24/25, while verifying purchase cancellation's
+double-cancel guard (P2-2). Full investigation, with real measured
+evidence (timing, a corrected step-by-step trace, and a controlling
+two-OS-process comparison test), is in `docs/phases/PHASE_2.md` §5c —
+this entry exists so the finding is visible to whoever triages work next,
+not only to whoever reads that phase doc.
+Description: Every IPC handler in this codebase opens a fresh
+`better-sqlite3` connection per call (`apps/server/src/ipc/handlers/item.handler.ts`:
+`openDatabase(deps.dbPath)` per handler, `db.close()` in a `finally`).
+`packages/db/src/connection.ts` sets `busy_timeout = 5000` on every
+connection, per `docs/DATABASE_RULES.md` §1 — but that pragma does not
+behave the way its name implies in this app. Proven, not assumed: two
+genuinely separate `openDatabase()` connections racing a conflicting
+write (`purchase.repository.test.ts`, "two concurrent cancel calls from
+SEPARATE connections") produce a raw `SqliteError: database is locked`,
+`.code === 'SQLITE_BUSY'` (checked directly, not the message text — ruled
+out `SQLITE_BUSY_SNAPSHOT`, a different failure class), landing in under
+2ms — not after waiting anywhere near the configured 5-second timeout.
+Root cause, demonstrated via a controlling comparison across two genuine
+OS processes (not just two connections in one process): this whole
+application is a **single Node.js process on a single thread** (true in
+dev, true in the packaged Electron main process, which is also
+single-threaded). better-sqlite3 calls are synchronous. For the losing
+connection's retry to ever succeed, the winning connection's paused async
+continuation would need the event loop to resume it and reach `COMMIT` —
+but the losing connection's own blocking native retry call does not
+yield to that event loop. The lock can never be observed clearing, so
+SQLite's busy-handler gives up almost immediately. The two-process
+control test (process A holds a write lock for a real, measured 300ms;
+process B waits 80ms then attempts a conflicting write) confirms
+`busy_timeout` works exactly as documented across real process
+boundaries — B waited ~232ms and succeeded — which rules out "`busy_timeout`
+doesn't apply to this lock type" and confirms the fast-fail is specific
+to same-thread contention.
+Impact: **Not narrow to purchase cancellation.** Any future IPC handler
+that performs a write and could plausibly race a second concurrent write
+to the same row — Phase 3's sale cancellation, any adjustment/write-off,
+`purchase:cancel` once it gets an IPC handler, a user double-clicking a
+button, two staff actions landing close together — will hit the identical
+fast-fail `SQLITE_BUSY` with **no existing handling anywhere in the
+codebase**: no retry, no clean error translation, no shared pattern. A
+raw native SQLite error would reach the renderer as-is unless each
+handler independently remembers to guard against it. Rated HIGH, not
+MEDIUM, because this is a _pattern gap that recurs every time a new
+write-path handler is added_ through Phase 3–7, not a single narrow spot
+— left unaddressed, it will resurface repeatedly as confusing,
+un-user-friendly errors on ordinary staff actions (not just contrived
+races), and different handlers are likely to "fix" it inconsistently if
+each reinvents its own handling. The underlying data is not at risk —
+verified for purchase cancellation specifically that the invariant holds
+(never more than one reversal) regardless of which call wins.
+Fix (not applied): build one shared helper — a retry-with-backoff wrapper
+around `db.transaction()` for write paths, or at minimum a
+`SQLITE_BUSY`-aware error normalizer — used by every write-issuing IPC
+handler, rather than reimplemented (or omitted) per handler. Candidate
+location: `packages/db` (repository layer) or a thin wrapper in
+`apps/server/src/ipc`, decided when Phase 3 needs its first concurrent
+write path.
+
+**Design constraint on the fix, not optional — read before implementing:**
+the retry helper MUST restart the entire transaction on `SQLITE_BUSY`,
+re-running every read inside it, not just retry the single statement that
+threw. This is not a style preference. `document_sequence`'s
+read-then-write (`SELECT nextNumber`, then `UPDATE`/`INSERT`) is proven
+safe against duplicate document numbers (`docs/phases/PHASE_2.md` §5d)
+**only because a `SQLITE_BUSY` failure currently discards the whole
+transaction, including the already-executed `SELECT`** — the caller's
+next attempt starts over with a fresh read of the current value. A
+retry-the-failed-statement-only helper would instead resume with the
+`nextNumber` value already captured in JS from the _original_, now-stale
+`SELECT`, and blindly retry just the `UPDATE`/`INSERT` against it —
+silently reintroducing the exact duplicate-document-number race §5d
+proved doesn't currently exist. Whoever implements this fix needs to see
+this constraint before writing it, not discover it by causing a
+production collision. See `docs/phases/PHASE_2.md` §5d for the full
+proof this guarantee depends on.
+Status: UNFIXED — logged, not built this session (no IPC handlers exist
+yet for the affected write paths — see the P2-1/P2-2 IPC/UI gap in
+`docs/phases/PHASE_2.md` §8). Should be resolved before or alongside
+Phase 3's first write-path IPC handler, not deferred indefinitely.
+Related but distinct: `document_sequence`'s read-then-write code
+(supplier/purchase numbering) has the identical shape and was checked
+separately for the SAME race — found NOT vulnerable to producing
+duplicate document numbers, by the same underlying mechanism this bug
+describes (see `docs/phases/PHASE_2.md` §5d). Do not treat that as
+evidence this bug is safe to ignore elsewhere — §5d's finding is
+specific to that code's statement ordering, not a general exemption.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]
@@ -637,19 +814,20 @@ Status: UNFIXED — waiting for [phase / migration / decision]
 
 ## 4. Open questions (blocking design — do NOT invent answers)
 
-| #   | Question                                                                                   | Blocks              | Asked      | Answer                               |
-| --- | ------------------------------------------------------------------------------------------ | ------------------- | ---------- | ------------------------------------ |
-| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                  | Item UoM conversion | 2026-08-08 | OPEN                                 |
-| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                               | Container tracking  | 2026-08-08 | OPEN                                 |
-| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                 | Pricing engine      | 2026-08-08 | OPEN                                 |
-| Q4  | Which items genuinely need serial tracking?                                                | Billing speed       | 2026-08-08 | OPEN                                 |
-| Q5  | Fridge warranty work — who pays for parts?                                                 | Payer model         | 2026-08-08 | OPEN                                 |
-| Q6  | Approximate SKU count (300–500 assumed)                                                    | Import effort       | 2026-08-08 | ~300–500                             |
-| Q7  | Thermal printer model                                                                      | Print driver        | 2026-08-08 | OPEN                                 |
-| Q8  | PC specification                                                                           | Electron perf       | 2026-08-08 | OPEN                                 |
-| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?          | Unit P&L shape      | 2026-08-09 | OPEN                                 |
-| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                      | Overhead reporting  | 2026-08-09 | OPEN                                 |
-| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number) | P0-8 verification   | 2026-08-09 | **42 tables, 11 views** (2026-08-10) |
+| #   | Question                                                                                                                                                             | Blocks                   | Asked      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                                                                                            | Item UoM conversion      | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                                                                                                         | Container tracking       | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                                                                                           | Pricing engine           | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q4  | Which items genuinely need serial tracking?                                                                                                                          | Billing speed            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q5  | Fridge warranty work — who pays for parts?                                                                                                                           | Payer model              | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q6  | Approximate SKU count (300–500 assumed)                                                                                                                              | Import effort            | 2026-08-08 | ~300–500                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q7  | Thermal printer model                                                                                                                                                | Print driver             | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q8  | PC specification                                                                                                                                                     | Electron perf            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?                                                                                    | Unit P&L shape           | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                                                                                                | Overhead reporting       | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                           | P0-8 verification        | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q12 | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it? | Phase 4 cash-book design | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
 
 ### P0-8 baseline (derived, not assumed)
 
@@ -683,7 +861,7 @@ regression test, not just a one-time manual check — see
 
 ---
 
-## 5. Decisions taken (full ADRs in `docs/decisions/`)
+## 5. Decisions taken (full ADRs in `docs/decisions/`, indexed in [`docs/decisions/README.md`](docs/decisions/README.md))
 
 | ADR  | Decision                                                                         | Date       |
 | ---- | -------------------------------------------------------------------------------- | ---------- |

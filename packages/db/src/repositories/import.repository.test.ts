@@ -6,15 +6,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ITEM_COLUMNS,
   OPENING_STOCK_COLUMNS,
+  SUPPLIER_BALANCE_COLUMNS,
   parseCsv,
   validateItemRows,
   validateOpeningStockRows,
+  validateSupplierBalanceRows,
 } from '@shop/core';
 import { openDatabase } from '../connection.js';
 import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
 import { KyselyImportRepository } from './import.repository.js';
+import { KyselyPartyRepository } from './party.repository.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../migrations');
 const itemsFixturePath = path.join(
@@ -24,6 +27,10 @@ const itemsFixturePath = path.join(
 const openingStockFixturePath = path.join(
   import.meta.dirname,
   '../../../core/src/import/__fixtures__/opening_stock.csv',
+);
+const supplierBalanceFixturePath = path.join(
+  import.meta.dirname,
+  '../../../core/src/import/__fixtures__/supplier_balances.csv',
 );
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const DEVICE_CODE = 'A';
@@ -142,5 +149,73 @@ describe('full import pipeline against the real DB', () => {
       .prepare(`SELECT COUNT(*) AS n FROM stock_movement WHERE movement_type = 'opening'`)
       .get() as { n: number };
     expect(count.n).toBe(4); // not 8 — the second run posted nothing new
+  });
+});
+
+describe('supplier opening balance import against the real DB', () => {
+  it('posts exactly the 1 matched bill, rejects the unmatched supplier, skips the zero-balance bill', async () => {
+    const partyRepo = new KyselyPartyRepository(createKyselyDb(rawDb), TENANT_ID, DEVICE_CODE);
+    const supplier = await partyRepo.createSupplier({
+      partyCode: null,
+      name: 'Metro Refrigeration Traders',
+      shopName: null,
+      phone: '03001234567',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    const csvText = readFileSync(supplierBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, SUPPLIER_BALANCE_COLUMNS);
+    const lookups = await repo.getSupplierBalanceLookups();
+    const results = validateSupplierBalanceRows(rows, lookups);
+    expect(results.filter((r) => r.status === 'accepted')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'skipped')).toHaveLength(1);
+
+    const accepted = results.filter((r) => r.status === 'accepted').map((r) => r.record);
+    await repo.insertSupplierOpeningBalances(accepted);
+
+    const ledgerRows = rawDb
+      .prepare(`SELECT * FROM party_ledger WHERE party_id = ?`)
+      .all(supplier.id) as Array<Record<string, unknown>>;
+    expect(ledgerRows).toHaveLength(1);
+    const row = ledgerRows[0] as Record<string, unknown>;
+    expect(row['entry_type']).toBe('opening_balance');
+    // Fixture: Original 45000, Paid 15000 -> (15000 - 45000) * 100 = -3,000,000 paisa
+    expect(row['amount']).toBe(-3_000_000);
+    expect(row['bill_reference']).toBe('BILL-2024-001');
+    expect(row['due_date']).toBe('2026-02-15');
+    expect(row['bill_notes']).toBe('Compressor stock opening balance');
+  });
+
+  it('is idempotent on supplier + bill reference — re-running the same import posts zero new rows', async () => {
+    const partyRepo = new KyselyPartyRepository(createKyselyDb(rawDb), TENANT_ID, DEVICE_CODE);
+    await partyRepo.createSupplier({
+      partyCode: null,
+      name: 'Metro Refrigeration Traders',
+      shopName: null,
+      phone: '03001234567',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    const csvText = readFileSync(supplierBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, SUPPLIER_BALANCE_COLUMNS);
+
+    const lookups1 = await repo.getSupplierBalanceLookups();
+    const results1 = validateSupplierBalanceRows(rows, lookups1);
+    const accepted1 = results1.filter((r) => r.status === 'accepted').map((r) => r.record);
+    await repo.insertSupplierOpeningBalances(accepted1);
+
+    const lookups2 = await repo.getSupplierBalanceLookups();
+    const results2 = validateSupplierBalanceRows(rows, lookups2);
+    expect(results2.filter((r) => r.status === 'accepted')).toHaveLength(0);
+
+    const count = rawDb
+      .prepare(`SELECT COUNT(*) AS n FROM party_ledger WHERE entry_type = 'opening_balance'`)
+      .get() as { n: number };
+    expect(count.n).toBe(1); // not 2 — the second run posted nothing new
   });
 });

@@ -13,6 +13,14 @@ export interface ImportResult {
   readonly openingStockSkipped: number | null;
 }
 
+export interface SupplierBalanceImportResult {
+  readonly reportPath: string;
+  readonly logReportPath: string;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly skipped: number;
+}
+
 export interface ElectronApi {
   readonly system: {
     readonly ping: () => Promise<{ tableCount: number }>;
@@ -25,6 +33,10 @@ export interface ElectronApi {
   readonly importData: {
     readonly dryRun: () => Promise<ImportResult | null>;
     readonly commit: () => Promise<ImportResult | null>;
+  };
+  readonly importSupplierBalance: {
+    readonly dryRun: () => Promise<SupplierBalanceImportResult | null>;
+    readonly commit: () => Promise<SupplierBalanceImportResult | null>;
   };
 }
 

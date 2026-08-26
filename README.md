@@ -15,6 +15,16 @@ npm run db:migrate
 npm run dev
 ```
 
+## Development machine notes
+
+`npm run dev` and `npm run package` rebuild the `better-sqlite3` native
+module for Electron's Node ABI before running. If you then run `npm test`,
+it will fail with a `NODE_MODULE_VERSION` mismatch, because tests run under
+plain Node, which needs the module built for a different ABI. Fix: run
+`npm install` (no rebuild step needed) before running tests again. This is a
+known, accepted trade-off of using a native module in an Electron app — see
+BUG-7 in `PROJECT.md`.
+
 ## Commands
 
 | Command              | Does                                                  |
@@ -31,14 +41,14 @@ npm run dev
 **Read `CLAUDE.md` first.** It contains the operating rules and the technical
 non-negotiables (integer money, append-only ledgers, package boundaries).
 
-| File                    | Purpose                                    |
-| ----------------------- | ------------------------------------------ |
-| `CLAUDE.md`             | Rules. Read every session.                 |
-| `PROJECT.md`            | Current status, open questions, known bugs |
-| `PROGRESS.md`           | Session log                                |
-| `docs/PHASES.md`        | Phase plan and exit criteria               |
-| `docs/SYSTEM_DESIGN.md` | Layers, modules, IPC contract, key flows   |
-| `docs/decisions/`       | ADRs — why things are the way they are     |
+| File                       | Purpose                                              |
+| -------------------------- | ---------------------------------------------------- |
+| `CLAUDE.md`                | Rules. Read every session.                           |
+| `PROJECT.md`               | Current status, open questions, known bugs           |
+| `PROGRESS.md`              | Session log                                          |
+| `docs/PHASES.md`           | Phase plan and exit criteria                         |
+| `docs/SYSTEM_DESIGN.md`    | Layers, modules, IPC contract, key flows             |
+| `docs/decisions/README.md` | Index of every ADR — why things are the way they are |
 
 ## Structure
 

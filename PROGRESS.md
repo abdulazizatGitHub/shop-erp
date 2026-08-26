@@ -41,6 +41,368 @@
 
 ---
 
+## [2026-08-24] Session 8 — Phase 2: purchases + suppliers, Phase 2 CLOSED
+
+**Goal:** Build the owner's cut-down Phase 2 plan (P2-1 supplier CRUD,
+P2-1b migration 0004, P2-2 purchase entry cash/credit + cancellation, P2-3
+supplier opening-balance import, P2-H housekeeping) after the owner
+approved the plan and answered the STEP 3 blocking question (cash
+purchases post no `party_ledger` row; Phase 4's cash-book reads
+`purchase.payment_mode='cash'` directly, no schema change now). Extended
+well past initial build-and-verify into a multi-round adversarial review
+with the owner that surfaced two real findings beyond the original
+task list — see Bugs found below.
+
+**Done:**
+
+- `packages/db/src/migrations/0005_party_payment_terms.sql` — new
+  migration adding nullable `party.payment_terms TEXT`, found missing from
+  `0001_init.sql` by reading the live schema before writing P2-1 (Golden
+  Rule 5/6) rather than folding it into `notes`. Owner approved before
+  building.
+- `packages/db/src/migrations/0004_party_ledger_bill_metadata.sql` — the
+  spec's own P2-1b migration: nullable `bill_reference`/`due_date`/
+  `bill_notes` on `party_ledger`.
+- `packages/core/src/party/party.repository.port.ts`,
+  `packages/db/src/repositories/party.repository.ts` — supplier
+  create/get/search, `SUP-A-000001` codes via `document_sequence`
+  (`doc_type='supplier'`), independent of the item sequence.
+- `packages/core/src/purchase/purchase.repository.port.ts`,
+  `packages/db/src/repositories/purchase.repository.ts` — purchase
+  create (one transaction: `purchase`+`purchase_line`+`stock_movement`+
+  `party_ledger` for credit only+`audit_log`+`sync_outbox`, plus
+  `item.last_purchase_cost`/`avg_cost` overwrite) and cancel (reversing
+  `stock_movement`/`party_ledger` rows only, `purchase.status='cancelled'`,
+  never an update/delete on the append-only tables). `business_unit_id`
+  resolved at runtime from `business_unit WHERE code='PARTS'`, never
+  hardcoded.
+- `packages/core/src/import/supplier-columns.ts`,
+  `supplier-balance-import.ts`, plus a `report.ts` addition
+  (`formatSupplierBalanceImportReport`) — pure validation for the supplier
+  opening-balance sheet, same dry-run/reject/skip pattern as Phase 1's
+  item/opening-stock importers.
+- `packages/db/src/repositories/import.repository.ts` — extended with
+  `getSupplierBalanceLookups`/`insertSupplierOpeningBalances`.
+- `apps/server/src/ipc/handlers/report-writer.ts` — extracted
+  `writeReportDual` out of `import.handler.ts` into a shared module so the
+  new supplier-balance handler doesn't duplicate the dual-write logic.
+- `apps/server/src/ipc/handlers/supplier-balance-import.handler.ts`,
+  `channels.ts`, `main.ts`, `preload.ts` — new IPC channel pair
+  (`import:supplierBalance:dryRun`/`commit`), registered and exposed.
+- `apps/client/src/pages/parties/SuppliersImportPage.tsx`, `App.tsx` — a
+  minimal two-tab UI (Items / Suppliers) so the owner can actually run the
+  supplier-balance import from the running app; no full supplier
+  list/edit UI built (out of P2-1's stated scope — its own verification
+  was DB-level only).
+- `packages/db/src/kysely-schema.ts` — added `PartyTable`, `PurchaseTable`,
+  `PurchaseLineTable`, `PartyLedgerTable`, `AuditLogTable`,
+  `SyncOutboxTable`.
+- `packages/db/src/migration-runner.test.ts` — added two tests specific to
+  P2-1b's exact verification requirement (apply 0004 to a fresh DB; apply
+  0004 to a DB already at 0003 and confirm a pre-existing `party_ledger`
+  row's new columns are NULL and its other columns are untouched); updated
+  the three pre-existing hardcoded migration-file-list assertions to
+  include 0004 and 0005 (a direct, expected consequence of adding two
+  migrations this session, not a new bug).
+- `PROJECT.md` — BUG-13 severity LOW → MEDIUM (only the tag line + one
+  added note line changed, diff-confirmed); Q12 added and resolved
+  (cash-book gap — no schema change, Phase 4 reads `purchase.payment_mode`
+  directly); BUG-14 and BUG-15 logged (see Bugs found below).
+- `docs/phases/PHASE_2.md` §5a–§5d — four worked-evidence subsections added
+  during owner review, each with real pasted output rather than assertions:
+  the `party_ledger` sign convention proven against the real
+  `v_party_balance` view; the exact reversal-linkage mechanism (shared
+  `source_type`/`source_id`, no new column, no `reversed_by_id` update);
+  the double-cancel concurrency investigation (BUG-15's evidence); and the
+  `document_sequence` race investigation (§5d, see Verified below).
+
+**Verified:**
+
+- `npm run verify` — genuine green run in this sandbox, repeatedly,
+  culminating in the final state: **13 test files, 121 tests, all passing,
+  exit 0.** BUG-7's ABI mismatch did not reproduce this session after
+  `npm install better-sqlite3 --no-save`; still logged per the owner's
+  explicit instruction as unconfirmed until they independently run it on
+  their own machine (see `docs/phases/PHASE_2.md` Exit Criteria).
+- Supplier CRUD: created supplier, queried `party` directly — every field
+  and `SUP-A-000001`/`SUP-A-000002` auto-codes confirmed; explicit codes
+  bypass the sequence; duplicates rejected via the UNIQUE constraint;
+  supplier queries never return customer/staff rows.
+- Purchase entry: two purchases (cash + credit), each with a 1:1 item and
+  a gas-cylinder→kg conversion item, same hand-verified numbers as Phase 1
+  (13.6 kg/cylinder, Rs 35,000/cylinder → 257,353 paisa/kg). Queried
+  `stock_movement`, `party_ledger`, `item.last_purchase_cost`/`avg_cost`
+  directly and asserted against hand calculations. Cash purchase: zero
+  `party_ledger` rows. Credit purchase: exactly one, `amount=-500000`
+  paisa for a Rs 5,000 line (negative — see Design Decisions), and this
+  exact scenario re-verified through the real `v_party_balance` view
+  (`balance_paisa: -500000`, `balance_pkr: -5000`), not a hand-simulated
+  equivalent. A dedicated test re-seeds `business_unit`'s PARTS row with a
+  _different_ id mid-test and confirms the purchase code resolves against
+  the new id, proving no hardcoded UUID anywhere in the path.
+- Cancellation: for both cash and credit purchases, confirmed reversing
+  `stock_movement` rows exist (2 original + 2 reversing = 4 rows, never an
+  update/delete), net stock returns to exactly 0 (confirmed via
+  `v_stock_on_hand` directly, not just the raw rows), `reversed_by_id`
+  stays NULL on every row, `purchase.status='cancelled'`. Credit
+  purchase's reversing `party_ledger` row brings net balance to exactly 0
+  (confirmed via `v_party_balance`). Re-cancelling an already-cancelled
+  purchase is rejected.
+- **Double-cancel concurrency (the bulk of this session's owner-review
+  rounds) — see BUG-15.** Two genuinely concurrent `cancelPurchase` calls
+  (`Promise.allSettled`, not sequential awaits) tested both same-connection
+  and separate-connection (the real per-call-connection pattern every IPC
+  handler in this codebase actually uses). Same-connection: Kysely's
+  `SqliteDriver` mutex (read directly from its source) fully serializes
+  before either callback runs — no real race window opens. Separate
+  connections: genuinely races, and the loser fails with `SQLITE_BUSY`
+  (`.code` checked explicitly, not the message text — ruled out
+  `SQLITE_BUSY_SNAPSHOT`) in ~2ms despite `busy_timeout=5000` being
+  confirmed set via pragma readback on both connections. Root cause
+  isolated via three independent measurements: wall-clock timing, a
+  step-by-step trace correctly reproducing Kysely's per-statement
+  microtask-yield shape (a first attempt at this trace was itself wrong —
+  it ran fully sequential because it forgot to yield between statements,
+  and had to be rebuilt), and a controlling comparison across two
+  **genuine separate OS processes** (`child_process.spawn`) proving
+  `busy_timeout` works exactly as documented given real process
+  boundaries (a held lock: process B waited ~232ms and succeeded once
+  process A released it at ~303ms) — ruling out "`busy_timeout` doesn't
+  apply to this lock type" and confirming the fast-fail is specific to
+  this app's single Node.js thread (true in dev and in the real Electron
+  main process). Every run — 10+ repetitions of the same-connection case,
+  8+ of the separate-connection case — showed the same data invariant:
+  exactly one call fulfilled, exactly one `purchase_return` row of each
+  kind, never two.
+- **`document_sequence` race, checked separately because the consequence
+  class differs (§5d).** `nextSupplierCode`/`nextPurchaseDocNo` have the
+  identical read-then-write shape investigated above. Fired N concurrent
+  `createSupplier`/`createPurchase` calls (8 and 5 respectively), both
+  same-connection and separate-connection, checked both what the calls
+  _returned_ and what actually _persisted in the DB_ (the UNIQUE
+  constraint would only stop a duplicate INSERT, not stop two callers from
+  computing the same code first). Repeated 5 full times for consistency.
+  Result: never a duplicate, in either scenario — because SQLite's write
+  lock in this app is whole-database, held for the winning connection's
+  _entire_ transaction, so a losing connection's own first write (whatever
+  it is) collides and fails outright before it could ever use a stale
+  cached `nextNumber`. Explicitly documented as contingent, not a
+  permanent guarantee: it depends on today's all-or-nothing
+  transaction-discard-on-`SQLITE_BUSY` behavior, which BUG-15's eventual
+  fix must preserve (see the design constraint added to BUG-15's entry).
+- Supplier opening-balance import: synthetic fixture
+  (`packages/core/src/import/__fixtures__/supplier_balances.csv`) with one
+  matched row (Original 45000, Paid 15000 → -3,000,000 paisa), one
+  unmatched supplier name (rejected, exact string named), one zero-balance
+  bill (skipped, not posted). Queried `party_ledger` directly including
+  the three new 0004 columns — exact match, no truncation. Re-running the
+  same import posted zero new rows (idempotent on party + bill reference).
+- `apps/client` renderer bundle builds cleanly via `vite build` (58
+  modules, no errors) — the furthest UI verification possible in this
+  sandbox; the actual Electron window launch is the same known sandbox
+  limitation documented under BUG-7, confirmable only on the owner's real
+  hardware, consistent with every prior phase.
+
+**Not done / deferred:**
+
+- IPC/UI wiring for P2-1 (supplier CRUD) and P2-2 (purchase entry) — the
+  pre-existing `party.*`/`purchase.*` channel placeholders in `channels.ts`
+  remain unregistered. Explicitly scoped out this session (asked the
+  owner; their own spec text for P2-1/P2-2 had no equivalent "wire it into
+  the app" requirement, unlike P2-3's explicit "dual-location report
+  writing" line) — flagged clearly in `docs/phases/PHASE_2.md` §8 as real
+  follow-up work, not silently dropped.
+- `docs/DATABASE_RULES.md` §3 still describes setting `reversed_by_id` on
+  the original row, which now directly contradicts both `CLAUDE.md` §3.3
+  and this phase's actual implementation. Docs-only fix, out of Phase 2's
+  task list — flagged for a documentation pass.
+- BUG-15's shared retry/error-normalizing helper — not built (no
+  write-path IPC handlers exist yet for it to protect). Logged with a
+  binding design constraint for whoever builds it (see Bugs found).
+
+**Bugs found:**
+
+- **BUG-14** (MEDIUM, documentation bug) — `docs/DATABASE_RULES.md` §3
+  contradicts itself across three consecutive bullets on whether
+  `stock_movement`/`party_ledger` may ever be updated ("No UPDATE" /
+  "set `reversed_by_id` on the original" / "CRITICAL bug" if you do).
+  Phase 2's own code follows the no-update reading throughout.
+- **BUG-15** (HIGH, code/architecture) — this app's single-threaded main
+  process makes `busy_timeout` fail fast rather than queue-and-retry
+  whenever two IPC calls race a write to the same row. Not narrow to
+  purchase cancellation — every future write-path IPC handler with a
+  plausible concurrent-write scenario will hit the identical fast-fail
+  `SQLITE_BUSY`. Carries a binding constraint on its own fix: the eventual
+  shared retry helper MUST restart the entire transaction (including
+  reads like `document_sequence`'s lookup), not just retry the failed
+  statement, or it silently reintroduces the duplicate-document-number
+  race that §5d proved doesn't currently exist.
+- Three earlier design conflicts (missing `payment_terms` column, the
+  `party_ledger` sign convention, the `reversed_by_id` doc contradiction
+  underlying BUG-14) were caught and resolved with the owner _before_ any
+  code shipped, not discovered afterward — not logged as separate bugs.
+
+**Decisions taken:** none promoted to a full ADR this session; recorded
+instead in `docs/phases/PHASE_2.md` §5 (ledger sign convention, reversal
+linkage, payment_terms migration) and as BUG-14/BUG-15 in `PROJECT.md`
+(the two findings serious enough to need triage visibility, not just a
+phase-doc footnote).
+
+**Blocked on:** nothing for Phase 2 itself. The owner's real-hardware
+`npm run verify` confirmation is the one item keeping Phase 2's Exit
+Criteria from being 100% checked.
+
+**Next session should:** Start Phase 3 (counter sale + udhaar) per
+`docs/PHASES.md`, but budget explicit time first for: (1) the P2-1/P2-2
+IPC+UI gap — Phase 3 will need supplier and purchase screens reachable for
+a complete billing workflow before the 2026-08-31 deadline; (2) BUG-15's
+shared concurrent-write helper — Phase 3's sale cancellation is exactly
+the kind of write path that needs it, and should not reimplement its own
+ad hoc handling; read BUG-15's design constraint before writing that
+helper, not after causing a production collision.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted throughout, not
+      "looks correct"
+- [x] No unresolved bugs introduced by this phase (BUG-14, BUG-15 found
+      and logged, not introduced by a defect in this session's own code —
+      both are pre-existing architectural/documentation realities this
+      session's rigor surfaced)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — mostly: Phase 3 can start, but see
+      "Next session should" above for the IPC/UI gap and BUG-15 helper to
+      budget for first
+- [x] Any new bugs documented in PROJECT.md — BUG-13 severity updated,
+      BUG-14 and BUG-15 newly logged
+- [x] Test suite passing — 121/121 in this sandbox; owner's real-hardware
+      confirmation still outstanding (see Blocked on / Exit Criteria)
+
+---
+
+## [2026-08-24] Session 7 — Phase 1: cut-down item master + import, Phase 1 CLOSED
+
+**Goal:** Build exactly the owner's cut-down Phase 1 (P1-0 through P1-3)
+against the 2026-08-31 go-live deadline: idempotent seed, minimal item CRUD,
+bulk CSV import with dry-run/commit, item search — no serials, no full price
+levels, no UoM-conversion deferral (Q1 ruled non-deferrable).
+
+**Done:**
+
+- `packages/db/src/bootstrap.ts` — idempotent seed: tenant, 3 business units
+  (PARTS/REPAIR/SHARED), 1 default price level, 4 UOMs, 1 default warehouse.
+- `packages/db/src/kysely-db.ts`, `kysely-schema.ts` — first real use of
+  Kysely (typed SQL, `CamelCasePlugin`) in this codebase, wrapping
+  `better-sqlite3`.
+- `packages/core/src/item/*`, `packages/db/src/repositories/item.repository.ts`
+  — dependency-inverted item repository port + Kysely implementation;
+  `ITM-<device>-000001` auto-code via `document_sequence`, explicit codes
+  skip the sequence, duplicates rejected.
+- `packages/core/src/import/*` — pure CSV parser (header row found by
+  ≥60% name match, not fixed position), `ITEM_COLUMNS`/`OPENING_STOCK_COLUMNS`
+  exact-header contracts, `validateItemRows`/`validateOpeningStockRows`
+  (reject unmatched category/brand/UOM/business-unit, never auto-create),
+  `computeCostPerStockUnitPaisa` for purchase-unit → stock-unit cost
+  conversion, dual-location report writing (source-adjacent best-effort +
+  guaranteed `LOG_DIR` copy).
+- `apps/client/src/pages/items/ItemsPage.tsx` — first real UI screen: item
+  create form, search + category filter, results table, bulk import
+  (dry run / commit) with accept/reject/skip counts and report path shown
+  in the UI.
+- Wired the previously-dead `apps/client` renderer into the real Vite build
+  (`electron.vite.config.ts` was pointing at a stub) and into IPC
+  (`item:create/search/lookups`, `import:dryRun/commit`).
+
+**Verified:**
+
+- 82 tests total across `packages/core`/`packages/db`; all pure-logic
+  tests pass. Real-DB integration tests (`item.repository.test.ts`,
+  `import.repository.test.ts`, `bootstrap.test.ts`,
+  `migration-runner.test.ts`, `connection.test.ts` — 28 tests) currently
+  fail in this sandbox with the exact `NODE_MODULE_VERSION` mismatch
+  BUG-7 already documents; `npm install` did not restore the system-Node
+  binary here (consistent with BUG-7's own note that the rebuild
+  mechanism is unreliable in this specific sandbox). Not a regression
+  introduced this session — these same tests were passing earlier in the
+  conversation when the binary was correctly system-Node-targeted; the
+  ABI drifted again at some point in between, for the same
+  already-documented reason. All 21 import-module tests that don't touch
+  a real DB pass (54/54 pure-logic tests total).
+- Gas-cylinder UoM-conversion hand calculation, same rigor as
+  `money.test.ts`: 1 cylinder @ Rs 35,000, 13.6 kg/cylinder →
+  `purchaseToStockFactorMilli=13_600`, `costPerStockUnitPaisa=257_353`
+  (Rs 2,573.53/kg) — asserted, not just "row accepted."
+  `stock_movement.quantity_milli` for a matching opening-stock row of
+  40 kg = `40_000` milli-units, confirmed via the same test.
+- Re-import idempotency bug found and fixed mid-session: blank-item-code
+  rows were being re-inserted as new duplicates on every re-run (only
+  `item_code` was checked, not name). Fixed by adding
+  `existingItemNames` tracking + a `skipped` status; verified end-to-end
+  against a real SQLite DB — running the same import twice left exactly
+  4 items, not 8.
+- Investigated the owner's reported "`Units per PurchaseUnit`" fixture
+  typo: byte-level inspection (Node buffer read, BOM check, JSON-escaped
+  line dump) showed the committed `items.csv`/`opening_stock.csv` headers
+  were already correct — did not apply a "fix" that would have broken a
+  working file. Applied the one fix that was independently valid
+  (`13.6kg cylinder` → `13.6 kg cylinder` spacing).
+- Real end-to-end import run (real `parseCsv` → `validateItemRows`/
+  `validateOpeningStockRows` → `formatItemImportReport`/
+  `formatOpeningStockImportReport`, the same functions
+  `import.handler.ts` calls) against the fixtures: items
+  `accepted=4 rejected=4 skipped=0`, opening stock
+  `accepted=4 rejected=1 skipped=0` — report contents match the fixture's
+  designed accept/reject reasons exactly.
+- Confirmed by reading the code (not running it): a hard `parseCsv`
+  failure (bad header) reaches the UI as a readable string —
+  `ItemsPage.tsx`'s `runImport().catch()` sets `error`, rendered via
+  `<p role="alert">`. Not console-only.
+
+**Not done / deferred:**
+
+- Serials, full price-level matrix, keyboard-driven fast search — cut from
+  Phase 1 scope by the owner's 2026-08-20 revision; tracked for a later
+  phase, not forgotten.
+
+**Bugs found:**
+
+- Re-import duplication bug — found and fixed same session (see above),
+  not tracked as a numbered bug since it was fixed before any commit
+  shipped it.
+- BUG-13 (see PROJECT.md, logged this entry's follow-up session): the
+  `LOG_DIR` copy of the import report is written without a try/catch,
+  unlike the source-adjacent copy — a failure there (not just a source-side
+  USB-unplug) loses the in-memory import result even though DB writes on
+  commit already succeeded.
+
+**Decisions taken:** none new (Q1 resolution and cut scope were the
+owner's, given 2026-08-20)
+
+**Blocked on:** nothing
+
+**Next session should:** implement Phase 2 (cut scope) per the plan given
+2026-08-24 — supplier CRUD, purchase entry, supplier opening-balance
+import — after the owner approves it.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase (BUG-13 is a real gap,
+      logged, not fixed — narrow/low-probability, not introduced by this
+      session's fixture work)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [ ] Test suite passing — 54/82 pass in this sandbox (all pure-logic
+      tests); 28 real-DB integration tests fail on the pre-existing BUG-7
+      ABI mismatch, not a regression from this session's work. Owner
+      should confirm `npm test` is green on their own machine, where
+      BUG-7 is resolved.
+
+---
+
 ## [2026-08-20] Session 6 — Phase 0: BUG-7 resolved, BUG-10/BUG-11 found and fixed, Phase 0 CLOSED
 
 **Goal:** Get from Session 5's "code complete, launch unverified" to an

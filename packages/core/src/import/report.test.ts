@@ -4,9 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { parseCsv } from './csv.js';
 import { ITEM_COLUMNS } from './item-columns.js';
 import { validateItemRows, type ItemImportLookups } from './item-import.js';
-import { formatItemImportReport } from './report.js';
+import { SUPPLIER_BALANCE_COLUMNS } from './supplier-columns.js';
+import {
+  validateSupplierBalanceRows,
+  type SupplierBalanceImportLookups,
+} from './supplier-balance-import.js';
+import { formatItemImportReport, formatSupplierBalanceImportReport } from './report.js';
 
 const fixturePath = path.join(import.meta.dirname, '__fixtures__/items.csv');
+const supplierFixturePath = path.join(import.meta.dirname, '__fixtures__/supplier_balances.csv');
 
 describe('formatItemImportReport', () => {
   it('summarises the exact 4-accepted/4-rejected split from the fixture', () => {
@@ -47,5 +53,24 @@ describe('formatItemImportReport', () => {
       { rowNumber: 2, status: 'rejected', reason: 'Bad, weird value' },
     ]);
     expect(report).toContain('"Bad, weird value"');
+  });
+});
+
+describe('formatSupplierBalanceImportReport', () => {
+  it('summarises the exact 1-accepted/1-rejected/1-skipped split from the fixture', () => {
+    const lookups: SupplierBalanceImportLookups = {
+      supplierIdByNormalizedName: new Map([['metro refrigeration traders', 'party-metro']]),
+      existingBillKeys: new Set(),
+    };
+    const csvText = readFileSync(supplierFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, SUPPLIER_BALANCE_COLUMNS);
+    const results = validateSupplierBalanceRows(rows, lookups);
+
+    const report = formatSupplierBalanceImportReport(results);
+
+    expect(report).toContain('# 1 accepted, 1 rejected, 1 skipped');
+    expect(report).toContain('No supplier found matching name');
+    expect(report).toContain('zero balance');
+    expect(report.split('\n').filter((line) => /^\d+,/.exec(line))).toHaveLength(3);
   });
 });
