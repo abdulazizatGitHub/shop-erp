@@ -4,10 +4,12 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  CUSTOMER_BALANCE_COLUMNS,
   ITEM_COLUMNS,
   OPENING_STOCK_COLUMNS,
   SUPPLIER_BALANCE_COLUMNS,
   parseCsv,
+  validateCustomerBalanceRows,
   validateItemRows,
   validateOpeningStockRows,
   validateSupplierBalanceRows,
@@ -31,6 +33,10 @@ const openingStockFixturePath = path.join(
 const supplierBalanceFixturePath = path.join(
   import.meta.dirname,
   '../../../core/src/import/__fixtures__/supplier_balances.csv',
+);
+const customerBalanceFixturePath = path.join(
+  import.meta.dirname,
+  '../../../core/src/import/__fixtures__/customer_balances.csv',
 );
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const DEVICE_CODE = 'A';
@@ -217,5 +223,113 @@ describe('supplier opening balance import against the real DB', () => {
       .prepare(`SELECT COUNT(*) AS n FROM party_ledger WHERE entry_type = 'opening_balance'`)
       .get() as { n: number };
     expect(count.n).toBe(1); // not 2 — the second run posted nothing new
+  });
+});
+
+describe('customer opening balance import against the real DB', () => {
+  async function createAliTraders(): Promise<string> {
+    const partyRepo = new KyselyPartyRepository(createKyselyDb(rawDb), TENANT_ID, DEVICE_CODE);
+    const customer = await partyRepo.createCustomer({
+      partyCode: null,
+      name: 'Ali Traders',
+      shopName: null,
+      phone: '0300-1234567',
+      customerType: 'retail',
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    return customer.id;
+  }
+
+  it('test 1 — posts the correct paisa amount for the matched bill', async () => {
+    const customerId = await createAliTraders();
+
+    const csvText = readFileSync(customerBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, CUSTOMER_BALANCE_COLUMNS);
+    const lookups = await repo.getCustomerBalanceLookups();
+    const results = validateCustomerBalanceRows(rows, lookups);
+    const accepted = results.filter((r) => r.status === 'accepted').map((r) => r.record);
+    expect(accepted).toHaveLength(1);
+
+    await repo.insertCustomerOpeningBalances(accepted);
+
+    // (45000 - 15000) = 30000 PKR; 30000 * 100 = 3,000,000 paisa
+    const ledgerRow = rawDb
+      .prepare(`SELECT * FROM party_ledger WHERE party_id = ?`)
+      .get(customerId) as Record<string, unknown>;
+    expect(ledgerRow['entry_type']).toBe('opening_balance');
+    expect(ledgerRow['amount']).toBe(3_000_000);
+    expect(ledgerRow['source_type']).toBe('import');
+    expect(ledgerRow['party_id']).toBe(customerId);
+  });
+
+  it('test 2 — unknown customer name is rejected, naming the exact string', async () => {
+    await createAliTraders();
+
+    const csvText = readFileSync(customerBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, CUSTOMER_BALANCE_COLUMNS);
+    const lookups = await repo.getCustomerBalanceLookups();
+    const results = validateCustomerBalanceRows(rows, lookups);
+
+    const rejected = results.find((r) => r.status === 'rejected');
+    if (rejected?.status !== 'rejected') throw new Error('expected a rejected row');
+    expect(rejected.reason).toBe('No customer found matching name "Unknown Shop"');
+  });
+
+  it('test 3 — re-running the same file posts zero new rows (idempotent on customer + bill reference)', async () => {
+    await createAliTraders();
+    const csvText = readFileSync(customerBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, CUSTOMER_BALANCE_COLUMNS);
+
+    const lookups1 = await repo.getCustomerBalanceLookups();
+    const results1 = validateCustomerBalanceRows(rows, lookups1);
+    const accepted1 = results1.filter((r) => r.status === 'accepted').map((r) => r.record);
+    await repo.insertCustomerOpeningBalances(accepted1);
+
+    // Idempotency key: customer party_id + bill_reference — same as
+    // supplier import (see getCustomerBalanceLookups/getSupplierBalanceLookups).
+    const lookups2 = await repo.getCustomerBalanceLookups();
+    const results2 = validateCustomerBalanceRows(rows, lookups2);
+    const accepted2 = results2.filter((r) => r.status === 'accepted').map((r) => r.record);
+    await repo.insertCustomerOpeningBalances(accepted2);
+
+    const count = rawDb
+      .prepare(`SELECT COUNT(*) AS n FROM party_ledger WHERE entry_type = 'opening_balance'`)
+      .get() as { n: number };
+    expect(count.n).toBe(1); // not 2 — the second run posted nothing new
+  });
+
+  it('test 4 — an already-paid bill is skipped, not rejected, and posts zero rows', async () => {
+    const customerId = await createAliTraders();
+
+    const csvText = readFileSync(customerBalanceFixturePath, 'utf8');
+    const { rows } = parseCsv(csvText, CUSTOMER_BALANCE_COLUMNS);
+    const lookups = await repo.getCustomerBalanceLookups();
+    const results = validateCustomerBalanceRows(rows, lookups);
+
+    const settledRow = results.find(
+      (r) =>
+        r.status !== 'accepted' &&
+        r.rowNumber === rows.find((row) => row.cells['Bill Reference'] === 'BILL-003')?.rowNumber,
+    );
+    if (!settledRow) throw new Error('expected to find the BILL-003 row result');
+    expect(settledRow.status).toBe('skipped');
+    if (settledRow.status === 'skipped') {
+      expect(settledRow.reason).toContain('already settled');
+    }
+    expect(
+      results.some((r) => r.status === 'rejected' && r.rowNumber === settledRow.rowNumber),
+    ).toBe(false);
+
+    const accepted = results.filter((r) => r.status === 'accepted').map((r) => r.record);
+    await repo.insertCustomerOpeningBalances(accepted);
+
+    const ledgerRows = rawDb
+      .prepare(
+        `SELECT bill_reference FROM party_ledger WHERE party_id = ? AND entry_type = 'opening_balance'`,
+      )
+      .all(customerId) as Array<{ bill_reference: string }>;
+    expect(ledgerRows.some((r) => r.bill_reference === 'BILL-003')).toBe(false);
   });
 });

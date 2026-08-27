@@ -332,3 +332,201 @@ describe('document_sequence concurrency — does racing createSupplier ever prod
     }
   });
 });
+
+describe('KyselyPartyRepository — customer', () => {
+  function retailPriceLevelId(): string {
+    const row = rawDb
+      .prepare(`SELECT id FROM price_level WHERE tenant_id = ? AND name = 'Retail'`)
+      .get(TENANT_ID) as { id: string };
+    return row.id;
+  }
+
+  it('creates a customer, CUS-A-000001, every field matches input — queried from the party table directly', async () => {
+    const priceLevelId = retailPriceLevelId();
+
+    const result = await repo.createCustomer({
+      partyCode: null,
+      name: 'Naeem Fridge Repairs',
+      shopName: 'Naeem Electronics',
+      phone: '03007654321',
+      customerType: 'retail',
+      priceLevelId,
+      creditLimitPaisa: 500000,
+      notes: 'Pays on the 1st of every month',
+    });
+
+    expect(result.partyCode).toBe('CUS-A-000001');
+
+    const row = rawDb.prepare(`SELECT * FROM party WHERE id = ?`).get(result.id) as Record<
+      string,
+      unknown
+    >;
+    expect(row['party_type']).toBe('customer');
+    expect(row['party_code']).toBe('CUS-A-000001');
+    expect(row['name']).toBe('Naeem Fridge Repairs');
+    expect(row['shop_name']).toBe('Naeem Electronics');
+    expect(row['phone']).toBe('03007654321');
+    expect(row['customer_type']).toBe('retail');
+    expect(row['price_level_id']).toBe(priceLevelId);
+    expect(row['credit_limit']).toBe(500000);
+    expect(row['notes']).toBe('Pays on the 1st of every month');
+    expect(row['is_active']).toBe(1);
+  });
+
+  it('second customer gets CUS-A-000002 — sequence increments', async () => {
+    const first = await repo.createCustomer({
+      partyCode: null,
+      name: 'Customer One',
+      shopName: null,
+      phone: '0300',
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    const second = await repo.createCustomer({
+      partyCode: null,
+      name: 'Customer Two',
+      shopName: null,
+      phone: '0301',
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    expect(first.partyCode).toBe('CUS-A-000001');
+    expect(second.partyCode).toBe('CUS-A-000002');
+  });
+
+  it('respects an explicit party code and does not consume the sequence', async () => {
+    const explicit = await repo.createCustomer({
+      partyCode: 'WALKIN-HAND-CODED',
+      name: 'Hand Coded Customer',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    expect(explicit.partyCode).toBe('WALKIN-HAND-CODED');
+
+    const nextRow = rawDb
+      .prepare(
+        `SELECT next_number FROM document_sequence WHERE tenant_id = ? AND doc_type = 'customer' AND device_code = 'A'`,
+      )
+      .get(TENANT_ID) as { next_number: number } | undefined;
+    // No row at all is equally valid proof — the sequence was never
+    // touched by an explicit code, exactly like createSupplier's
+    // equivalent test.
+    expect(nextRow === undefined || nextRow.next_number === 1).toBe(true);
+
+    const auto = await repo.createCustomer({
+      partyCode: null,
+      name: 'Auto After Manual',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    expect(auto.partyCode).toBe('CUS-A-000001');
+  });
+
+  it('rejects a duplicate party code via the UNIQUE constraint', async () => {
+    await repo.createCustomer({
+      partyCode: 'DUP-CUST-001',
+      name: 'First',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    await expect(
+      repo.createCustomer({
+        partyCode: 'DUP-CUST-001',
+        name: 'Second',
+        shopName: null,
+        phone: null,
+        customerType: null,
+        priceLevelId: null,
+        creditLimitPaisa: null,
+        notes: null,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('search returns only customer-type rows, never supplier or staff', async () => {
+    await repo.createCustomer({
+      partyCode: null,
+      name: 'Matching Customer',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    await repo.createSupplier({
+      partyCode: null,
+      name: 'Matching Supplier',
+      shopName: null,
+      phone: '0300',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+    rawDb
+      .prepare(
+        `INSERT INTO party (id, tenant_id, party_code, party_type, name, staff_role, is_active, created_at, updated_at)
+         VALUES (?, ?, 'STF-A-000001', 'staff', 'Matching Staff', 'technician', 1, ?, ?)`,
+      )
+      .run(
+        '33333333-0000-1000-8000-000000000001',
+        TENANT_ID,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+    const results = await repo.searchCustomers({ query: 'Matching' });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.name).toBe('Matching Customer');
+  });
+
+  it('getCustomerBalance reads through v_party_balance', async () => {
+    const customer = await repo.createCustomer({
+      partyCode: null,
+      name: 'Balance Test Customer',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    // +250000 paisa = Rs 2,500.00, customer owes the shop this much —
+    // CF-2's sign convention (+ve = party owes shop more).
+    rawDb
+      .prepare(
+        `INSERT INTO party_ledger (id, tenant_id, party_id, entry_date, entry_type, amount, source_type, source_id, created_at)
+         VALUES (?, ?, ?, ?, 'sale', 250000, 'sale', 'scratch-sale-id', ?)`,
+      )
+      .run(
+        '44444444-0000-1000-8000-000000000001',
+        TENANT_ID,
+        customer.id,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+    const customerBalance = await repo.getCustomerBalance(customer.id);
+    expect(customerBalance.customerId).toBe(customer.id);
+    expect(customerBalance.balancePaisa).toBe(250000);
+  });
+});

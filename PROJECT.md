@@ -3,29 +3,31 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-24
-**Current phase:** Phase 2 — Purchases + suppliers
-**Phase status:** ✅ COMPLETE (pending owner's real-hardware `npm run verify`
-confirmation) — 2026-08-24. Full cut-down scope built and verified:
-supplier CRUD (`SUP-A-000001` codes), migration 0004 (`party_ledger` bill
-metadata: `bill_reference`/`due_date`/`bill_notes`), migration 0005
-(`party.payment_terms` — a schema gap found before writing code, not in
-`0001_init.sql`), purchase entry (cash/credit, stock + ledger, runtime
-`business_unit_id` resolution, cancellation via reversing rows only, never
-an update/delete), and supplier opening-balance import (core+db+IPC+UI,
-dual-location report, idempotent on supplier + bill reference). 114 tests
-passing, all real-DB, in this sandbox (BUG-7's ABI mismatch did not
-reproduce this session after a `better-sqlite3` reinstall). Two real
-money-correctness conflicts were caught and resolved with the owner before
-writing code — see `docs/phases/PHASE_2.md` §5 Design Decisions: the
-`party_ledger` sign convention for credit purchases (negative, not the
-literal spec text's positive), and purchase cancellation never touching
-`reversed_by_id` (a direct contradiction between `CLAUDE.md` §3.3 and
-`docs/DATABASE_RULES.md` §3).
-**Next milestone:** Phase 3 — counter sale + udhaar. Budget explicit time
-for supplier/purchase UI+IPC wiring first (see `docs/phases/PHASE_2.md` §8
-"Notes for the next phase") — P2-1/P2-2 are DB-verified but not yet
-reachable from the running app.
+**Last updated:** 2026-08-27
+**Current phase:** Phase 3 — Counter sale + udhaar
+**Phase status:** ⏳ ALL SUB-PHASES BUILT AND VERIFIED IN SANDBOX
+(P3-0–P3-4) — 2026-08-27. **Not marked COMPLETE**: the one remaining exit
+criterion (a full sale timed ≤30 seconds keyboard-only) requires real
+hardware and cannot be verified in this sandbox — see
+`docs/phases/PHASE_3.md` §4. Built this phase: shared `withRetry`/
+`withError` helper (BUG-15's fix — restarts the entire transaction on
+`SQLITE_BUSY`, never a raw SqliteError to the renderer), customer CRUD
+(`CUS-A-000001` codes), counter sale (price resolution with a 4-case
+fallback order, credit-limit/negative-stock/unit-cost-missing warnings
+that never block a commit, cancellation via reversing rows only), a
+keyboard-driven sale screen (item search → qty → cart → checkout →
+warning gate → success, F10/Enter/Escape/C/U shortcuts, mouse optional
+everywhere), payment received (customer payments, `payment.amount`
+unsigned + `direction` vs `party_ledger.amount` signed — two different,
+intentionally incompatible conventions), and customer opening-balance
+import (dry-run/commit, idempotent on customer + bill reference,
+DB-layer SELECT-before-INSERT idempotency check, already-settled bills
+skipped silently). 160 tests passing, all real-DB, in this sandbox.
+**Next milestone:** get the real-hardware timing number from the owner
+and close Phase 3, then Phase 4 (printing + reports) — but first budget
+time for the P2-1/P2-2 IPC+UI gap (supplier CRUD, purchase entry
+reachability), deferred out of Phase 3 by an explicit scope decision and
+still not reachable from the running app three phases later.
 
 ---
 
@@ -43,17 +45,17 @@ reachable from the running app.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status      | Completed                                                                      |
-| ----- | ---------------------------- | ----------- | ------------------------------------------------------------------------------ |
-| 0     | Foundation & Environment     | COMPLETE    | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both |
-| 1     | Item master + import         | COMPLETE    | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified  |
-| 2     | Purchases + suppliers        | COMPLETE    | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                     |
-| 3     | Counter sale + udhaar        | NOT STARTED | —                                                                              |
-| 4     | Printing + reports           | NOT STARTED | —                                                                              |
-| 5     | Deploy + parallel run        | NOT STARTED | —                                                                              |
-| 6     | Repair jobs (two-unit split) | NOT STARTED | —                                                                              |
-| 7     | Staff, wages, expenses       | NOT STARTED | —                                                                              |
-| 8     | Bug-fix & hardening          | NOT STARTED | —                                                                              |
+| Phase | Name                         | Status                                               | Completed                                                                      |
+| ----- | ---------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 0     | Foundation & Environment     | COMPLETE                                             | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both |
+| 1     | Item master + import         | COMPLETE                                             | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified  |
+| 2     | Purchases + suppliers        | COMPLETE                                             | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                     |
+| 3     | Counter sale + udhaar        | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4     |
+| 4     | Printing + reports           | NOT STARTED                                          | —                                                                              |
+| 5     | Deploy + parallel run        | NOT STARTED                                          | —                                                                              |
+| 6     | Repair jobs (two-unit split) | NOT STARTED                                          | —                                                                              |
+| 7     | Staff, wages, expenses       | NOT STARTED                                          | —                                                                              |
+| 8     | Bug-fix & hardening          | NOT STARTED                                          | —                                                                              |
 
 ---
 

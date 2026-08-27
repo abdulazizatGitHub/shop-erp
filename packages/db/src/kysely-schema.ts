@@ -137,6 +137,10 @@ export interface PartyTable {
   phone: string | null;
   cityArea: string | null;
   paymentTerms: string | null;
+  // customer-specific — added P3-1. See 0001_init.sql's party table.
+  customerType: string | null;
+  priceLevelId: string | null;
+  creditLimit: number | null;
   notes: string | null;
   isActive: number;
   createdAt: string;
@@ -183,6 +187,45 @@ export interface PurchaseLineTable {
   notes: string | null;
 }
 
+export interface SaleTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  customerId: string | null;
+  warehouseId: string;
+  priceLevelId: string;
+  saleDate: string;
+  saleType: string;
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  paymentMode: string | null;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+}
+
+export interface SaleLineTable {
+  id: string;
+  tenantId: string;
+  saleId: string;
+  lineNo: number;
+  itemId: string;
+  description: string | null;
+  quantity: number;
+  unitPrice: number;
+  unitCost: number | null;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  lineTotal: number;
+  businessUnitId: string | null;
+}
+
 export interface PartyLedgerTable {
   id: string;
   tenantId: string;
@@ -199,6 +242,21 @@ export interface PartyLedgerTable {
   billReference: string | null;
   dueDate: string | null;
   billNotes: string | null;
+}
+
+export interface PaymentTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  direction: string;
+  partyId: string;
+  paymentDate: string;
+  amount: number;
+  method: string;
+  referenceNo: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
 }
 
 export interface AuditLogTable {
@@ -239,9 +297,12 @@ export interface Database {
   brand: BrandTable;
   warehouse: WarehouseTable;
   party: PartyTable;
+  sale: SaleTable;
+  saleLine: SaleLineTable;
   purchase: PurchaseTable;
   purchaseLine: PurchaseLineTable;
   partyLedger: PartyLedgerTable;
+  payment: PaymentTable;
   auditLog: AuditLogTable;
   syncOutbox: SyncOutboxTable;
 }

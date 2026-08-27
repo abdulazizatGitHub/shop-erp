@@ -22,6 +22,12 @@ export const channels = {
     ledger: 'party:ledger',
     balance: 'party:balance',
   },
+  customer: {
+    create: 'customer:create',
+    search: 'customer:search',
+    get: 'customer:get',
+    balance: 'customer:balance',
+  },
   purchase: { create: 'purchase:create', cancel: 'purchase:cancel' },
   payment: { receive: 'payment:receive', pay: 'payment:pay' },
   report: {
@@ -35,6 +41,8 @@ export const channels = {
     commit: 'import:commit',
     supplierBalanceDryRun: 'import:supplierBalance:dryRun',
     supplierBalanceCommit: 'import:supplierBalance:commit',
+    customerBalanceDryRun: 'import:customerBalance:dryRun',
+    customerBalanceCommit: 'import:customerBalance:commit',
   },
   backup: { now: 'backup:now', restore: 'backup:restore' },
   system: { ping: 'system:ping' },

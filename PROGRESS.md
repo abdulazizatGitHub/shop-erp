@@ -41,6 +41,130 @@
 
 ---
 
+## [2026-08-27] Session 9 — Phase 3: counter sale + udhaar, all sub-phases (P3-0–P3-4) built
+
+**Goal:** Build the full owner-approved Phase 3 plan across seven sub-phases
+(P3A–P3G): the shared BUG-15 retry/error helper, customer CRUD, counter
+sale (core + repository + IPC + keyboard-driven UI), payment received,
+and customer opening-balance import — each sub-phase gated on its own
+tests-first checkpoint before the next began.
+
+**Done:**
+
+- `packages/db/src/retry.ts`, `apps/server/src/ipc/middleware/with-error.ts`
+  — P3-0. `withRetry()` restarts the entire passed closure (every read and
+  write) on `SQLITE_BUSY`, never retries other errors, throws a typed
+  `DbBusyError` after exhausting attempts. `withError()`/`toIpcError()`
+  normalize any thrown error into `{code, message, details}` before it
+  reaches the renderer — the shape `docs/SYSTEM_DESIGN.md` §5 already
+  documented but no handler had implemented.
+- `packages/core/src/party/*`, `packages/db/src/repositories/party.repository.ts`,
+  `apps/server/src/ipc/handlers/customer.handler.ts` — P3-1. Customer
+  CRUD reusing the `party` table (`party_type='customer'`), `CUS-A-000001`
+  codes via `document_sequence`. `PartyTable` (kysely-schema) was missing
+  `customerType`/`priceLevelId`/`creditLimit` entirely — added.
+- `packages/core/src/sale/*`, `packages/db/src/repositories/sale.repository.ts`,
+  `apps/server/src/ipc/handlers/sale.handler.ts`,
+  `apps/client/src/pages/sales/{SalePage,SearchSelect,CartTable}.tsx` —
+  P3-2. Price resolution (customer price level → default Retail → fallback
+  Retail → throw if no Retail row at all), credit-limit/negative-stock/
+  unit-cost-missing warnings (never block a commit), cancellation via
+  reversing rows only. Keyboard-driven sale screen: autofocus item search,
+  arrow-key/Enter selection, F10 or empty-Enter checkout, C/U payment-mode
+  hotkeys, a warning gate (Enter keeps the sale, Escape calls `sale:cancel`
+  to reverse it), success state that clears the cart without navigating
+  away. `SaleTable`/`SaleLineTable` added to kysely-schema (didn't exist).
+- `packages/core/src/payment/*`, `packages/db/src/repositories/payment.repository.ts`,
+  `apps/server/src/ipc/handlers/payment.handler.ts` — P3-3. Customer
+  payments only; `direction` is never a caller input, always `'in'`.
+  `PaymentTable` added to kysely-schema.
+- `packages/core/src/import/{customer-columns,customer-balance-import}.ts`,
+  `packages/db/src/repositories/import.repository.ts` (extended),
+  `apps/server/src/ipc/handlers/customer-balance-import.handler.ts`,
+  `apps/client/src/pages/parties/CustomersImportPage.tsx` — P3-4. Same
+  dry-run/commit/dual-report pattern as P2-3's supplier importer, with two
+  deliberate divergences (both stated explicitly in `docs/phases/PHASE_3.md`
+  §5, not silent): `party_ledger.source_type='import'`/`source_id=<bill
+reference>` are set (P2-3 leaves both NULL), and the DB-layer repository
+  method does its own SELECT-before-INSERT idempotency check rather than
+  trusting the caller's pre-fetched lookups alone.
+- `apps/client/src/types/electron-api.d.ts` — found stale relative to the
+  real `apps/server/src/preload.ts` since P3-1 (no `customer`/`sale`
+  entries existed at all); fixed as a blocking prerequisite the first time
+  it was hit, kept current through every subsequent sub-phase.
+- `docs/phases/PHASE_3.md` — created (never existed on disk before this
+  session; the plan-lock draft had only ever been shown as text). Fully
+  updated through P3-4's close.
+
+**Verified:**
+
+- `npm run verify` — 121 (Phase 2 baseline) → 128 (P3A) → 134 (P3B) → 144
+  (P3C) → unchanged at 144 (P3D, code-review checkpoint) → unchanged at
+  144 (P3E, build checkpoint) → 147 (P3F) → 160 (P3G). Every step exit 0,
+  real output pasted at each checkpoint, not summarized.
+- Every repository-layer sub-phase (P3A, P3B, P3C, P3F, P3G) had its tests
+  written first and confirmed failing (`Cannot find module` / `is not a
+function`) before any implementation, per Golden Rule 1.
+- Money/stock hand calculations verified against real SQLite queries, not
+  just test assertions, at P3C (credit sale + cancellation: stock_movement
+  -1000/+1000, party_ledger +1,500,000/-1,500,000), P3F (payment: balance
+  Rs 20,000 → Rs 15,000 for a Rs 5,000 payment, `payment` row
+  `direction='in', amount=500000` vs `party_ledger` row `amount=-500000`),
+  and P3G (opening balance: `(45000-15000)*100=3,000,000` paisa, `party_ledger`
+  row with `source_type='import', source_id='BILL-001'`, re-run idempotency
+  count 1→1).
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0 at P3E and again at P3G.
+- P3D and P3E's checkpoints were code-review/build-only by explicit
+  agreement (no new repository logic in P3D beyond one small
+  `listSalesByDate` read; P3E is UI with no testable core logic of its
+  own) — stated up front, not a shortcut discovered after the fact.
+
+**Not done / deferred:**
+
+- **The real-hardware timing run** — the one item keeping Phase 3 from
+  being marked COMPLETE. Someone needs to time one full keyboard-only
+  sale on the owner's actual machine and paste the result into this file.
+- P2-1/P2-2 (supplier CRUD, purchase entry) IPC+UI — explicitly scoped
+  out of Phase 3 in the plan-lock turn; still not reachable from the
+  running app. Recommended as the first work after Phase 3 closes.
+- No dedicated UI screen for payment received (P3-3 has IPC + repository
+  only) or for looking up a customer's balance outside the sale screen's
+  search — neither was requested this phase.
+
+**Bugs found:** none. (`electron-api.d.ts`'s drift was a gap that
+directly blocked in-progress work each time it was hit, not an unrelated
+finding — fixed inline, not logged as a numbered bug.)
+
+**Decisions taken:** none promoted to a full ADR; seven design decisions
+recorded in `docs/phases/PHASE_3.md` §5 (the `withRetry`-must-wrap-the-whole-closure
+pattern applied consistently across P3C/P3F/P3G, channel-naming reuse over
+duplication in P3D/P3F, the cart's Retail-price-preview-only convention,
+`payment.amount`/`party_ledger.amount`'s intentionally incompatible sign
+conventions, and the two stated P3G divergences from P2-3's supplier
+importer).
+
+**Blocked on:** the owner's real-hardware timing run — nothing else.
+
+**Next session should:** get the timing number, paste it here, mark Phase
+3 COMPLETE in `PROJECT.md`/`docs/phases/PHASE_3.md`, then start on the
+P2-1/P2-2 IPC+UI gap before any Phase 4 feature work — it's now three
+phases overdue.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted throughout,
+      not "looks correct"
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — Phase 3 itself isn't fully closed
+      yet (real-hardware timing outstanding), so Phase 4 hasn't started
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing — 160/160 in this sandbox
+
+---
+
 ## [2026-08-24] Session 8 — Phase 2: purchases + suppliers, Phase 2 CLOSED
 
 **Goal:** Build the owner's cut-down Phase 2 plan (P2-1 supplier CRUD,

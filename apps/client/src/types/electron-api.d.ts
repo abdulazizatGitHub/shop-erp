@@ -1,4 +1,16 @@
-import type { CreateItemInput, ItemDto, ItemLookups, ItemSearchInput } from '@shop/contracts';
+import type {
+  CancelSaleInput,
+  CreateItemInput,
+  CreatePaymentInput,
+  CreateSaleInput,
+  CustomerDto,
+  CustomerSearchInput,
+  ItemDto,
+  ItemLookups,
+  ItemSearchInput,
+  PaymentDto,
+  SaleResult,
+} from '@shop/contracts';
 
 export interface ImportResult {
   readonly itemsReportPath: string;
@@ -21,6 +33,14 @@ export interface SupplierBalanceImportResult {
   readonly skipped: number;
 }
 
+export interface CustomerBalanceImportResult {
+  readonly reportPath: string;
+  readonly logReportPath: string;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly skipped: number;
+}
+
 export interface ElectronApi {
   readonly system: {
     readonly ping: () => Promise<{ tableCount: number }>;
@@ -30,6 +50,16 @@ export interface ElectronApi {
     readonly search: (input: ItemSearchInput) => Promise<readonly ItemDto[]>;
     readonly lookups: () => Promise<ItemLookups>;
   };
+  readonly customer: {
+    readonly search: (input: CustomerSearchInput) => Promise<readonly CustomerDto[]>;
+  };
+  readonly sale: {
+    readonly create: (input: CreateSaleInput) => Promise<SaleResult>;
+    readonly cancel: (input: CancelSaleInput) => Promise<void>;
+  };
+  readonly payment: {
+    readonly receive: (input: CreatePaymentInput) => Promise<PaymentDto>;
+  };
   readonly importData: {
     readonly dryRun: () => Promise<ImportResult | null>;
     readonly commit: () => Promise<ImportResult | null>;
@@ -37,6 +67,10 @@ export interface ElectronApi {
   readonly importSupplierBalance: {
     readonly dryRun: () => Promise<SupplierBalanceImportResult | null>;
     readonly commit: () => Promise<SupplierBalanceImportResult | null>;
+  };
+  readonly importCustomerBalance: {
+    readonly dryRun: () => Promise<CustomerBalanceImportResult | null>;
+    readonly commit: () => Promise<CustomerBalanceImportResult | null>;
   };
 }
 

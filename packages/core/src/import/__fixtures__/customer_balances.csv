@@ -1,0 +1,4 @@
+Customer Name,Phone,Bill Reference,Bill Date,Original Amount (PKR),Amount Paid So Far (PKR),Notes
+Ali Traders,0300-1234567,BILL-001,2025-01-15,45000,15000,Opening balance from old register
+Unknown Shop,0301-0000000,BILL-002,2025-01-10,10000,0,
+Ali Traders,0300-1234567,BILL-003,2025-01-05,20000,20000,Fully paid already

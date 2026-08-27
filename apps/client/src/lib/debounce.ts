@@ -1,0 +1,13 @@
+/** Delays fn until delayMs has passed with no further calls. No dependency. */
+export function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  delayMs: number,
+): (...args: Args) => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Args) => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn(...args);
+    }, delayMs);
+  };
+}

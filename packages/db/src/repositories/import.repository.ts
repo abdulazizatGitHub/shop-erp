@@ -1,13 +1,16 @@
 import type { Kysely } from 'kysely';
 import { formatDocNumber, newId } from '@shop/shared';
 import type {
+  CustomerBalanceImportLookups,
   ItemImportLookups,
+  NewCustomerBalanceRecord,
   NewItemImportRecord,
   NewOpeningStockRecord,
   NewSupplierBalanceRecord,
   OpeningStockImportLookups,
   SupplierBalanceImportLookups,
 } from '@shop/core';
+import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
 
 const ITEM_CODE_DOC_TYPE = 'item';
@@ -301,5 +304,83 @@ export class KyselyImportRepository {
         })),
       )
       .execute();
+  }
+
+  async getCustomerBalanceLookups(): Promise<CustomerBalanceImportLookups> {
+    const [customers, existingBills] = await Promise.all([
+      this.db
+        .selectFrom('party')
+        .select(['id', 'name'])
+        .where('tenantId', '=', this.tenantId)
+        .where('partyType', '=', 'customer')
+        .where('deletedAt', 'is', null)
+        .execute(),
+      this.db
+        .selectFrom('partyLedger')
+        .select(['partyId', 'billReference'])
+        .where('tenantId', '=', this.tenantId)
+        .where('entryType', '=', 'opening_balance')
+        .where('billReference', 'is not', null)
+        .execute(),
+    ]);
+
+    return {
+      customerIdByNormalizedName: new Map(customers.map((c) => [normalize(c.name), c.id])),
+      existingBillKeys: new Set(
+        existingBills
+          .filter((b): b is { partyId: string; billReference: string } => b.billReference !== null)
+          .map((b) => `${b.partyId}|${b.billReference}`),
+      ),
+    };
+  }
+
+  /**
+   * Unlike insertSupplierOpeningBalances, this re-checks each record
+   * against the DB before inserting (SELECT before INSERT) rather than
+   * trusting the caller's pre-fetched lookups alone — the idempotency
+   * guarantee must hold at the DB layer, not just in the pure validation
+   * pass, per P3-4's explicit requirement. Wrapped in withRetry per
+   * PROJECT.md BUG-15; one transaction for the whole commit call.
+   */
+  async insertCustomerOpeningBalances(records: readonly NewCustomerBalanceRecord[]): Promise<void> {
+    if (records.length === 0) return;
+
+    await withRetry(() =>
+      this.db.transaction().execute(async (trx) => {
+        for (const record of records) {
+          const existing = await trx
+            .selectFrom('partyLedger')
+            .select('id')
+            .where('tenantId', '=', this.tenantId)
+            .where('partyId', '=', record.partyId)
+            .where('entryType', '=', 'opening_balance')
+            .where('billReference', '=', record.billReference)
+            .executeTakeFirst();
+          if (existing) continue;
+
+          const now = new Date().toISOString();
+          await trx
+            .insertInto('partyLedger')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              partyId: record.partyId,
+              entryDate: record.entryDate,
+              entryType: 'opening_balance',
+              amount: record.amountPaisa,
+              runningNote: null,
+              sourceType: 'import',
+              sourceId: record.billReference,
+              reversedById: null,
+              createdAt: now,
+              createdBy: null,
+              billReference: record.billReference,
+              dueDate: null,
+              billNotes: record.billNotes,
+            })
+            .execute();
+        }
+      }),
+    );
   }
 }

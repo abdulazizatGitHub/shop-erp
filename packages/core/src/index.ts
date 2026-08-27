@@ -34,10 +34,18 @@ export type {
   NewSupplierBalanceRecord,
   SupplierBalanceRowResult,
 } from './import/supplier-balance-import.js';
+export { CUSTOMER_BALANCE_COLUMNS } from './import/customer-columns.js';
+export { validateCustomerBalanceRows } from './import/customer-balance-import.js';
+export type {
+  CustomerBalanceImportLookups,
+  NewCustomerBalanceRecord,
+  CustomerBalanceRowResult,
+} from './import/customer-balance-import.js';
 export {
   formatItemImportReport,
   formatOpeningStockImportReport,
   formatSupplierBalanceImportReport,
+  formatCustomerBalanceImportReport,
 } from './import/report.js';
 
 export type {
@@ -46,6 +54,12 @@ export type {
   NewSupplierResult,
   SupplierRecord,
   SupplierSearchQuery,
+  CustomerType,
+  NewCustomerInput,
+  NewCustomerResult,
+  CustomerRecord,
+  CustomerSearchQuery,
+  CustomerBalance,
 } from './party/party.repository.port.js';
 
 export type {
@@ -57,3 +71,31 @@ export type {
   PurchaseLineRecord,
   PurchaseRecord,
 } from './purchase/purchase.repository.port.js';
+
+export {
+  resolvePricePaisa,
+  computeLineTotalPaisa,
+  isCreditLimitExceeded,
+  isStockBelowZero,
+} from './sale/sale.js';
+export type { PriceLevelInfo, ItemPriceInfo } from './sale/sale.js';
+export type {
+  SalePaymentMode,
+  SaleRepositoryPort,
+  NewSaleLineInput,
+  NewSaleInput,
+  SaleWarnings,
+  NewSaleResult,
+  SaleLineRecord,
+  SaleRecord,
+  SaleSearchQuery,
+  SaleSummaryRecord,
+} from './sale/sale.repository.port.js';
+
+export type {
+  PaymentMethod,
+  PaymentDirection,
+  NewPaymentInput,
+  PaymentRecord,
+  PaymentRepositoryPort,
+} from './payment/payment.repository.port.js';
