@@ -4,7 +4,7 @@
 **Started:** 2026-08-26
 **Completed:** — (blocked on real-hardware timing, see §4)
 **Branch:** main
-**Last commit:** f15b32d (pre-Phase-3; this phase's work is uncommitted)
+**Last commit:** 09896a7
 
 ---
 
@@ -58,15 +58,15 @@ system, not memory and a notebook.
 
 ## 3. Tasks
 
-| ID    | Task                                             | Status                                                                              | Commit      |
-| ----- | ------------------------------------------------ | ----------------------------------------------------------------------------------- | ----------- |
-| P3-0  | Shared retry helper + IPC error normalizer       | DONE — verified 2026-08-26                                                          | uncommitted |
-| P3-1  | Customer CRUD (core+db+IPC)                      | DONE — verified 2026-08-26                                                          | uncommitted |
-| P3-2a | Counter sale — core + repository                 | DONE — verified 2026-08-26 (10 tests)                                               | uncommitted |
-| P3-2b | Counter sale — IPC handlers                      | DONE — verified 2026-08-26 (code review)                                            | uncommitted |
-| P3-2c | Counter sale — keyboard-driven UI                | DONE — build/verify green 2026-08-26. **Real-hardware timing still owed — see §4.** | uncommitted |
-| P3-3  | Payment received (core+db+IPC)                   | DONE — verified 2026-08-26 (3 tests)                                                | uncommitted |
-| P3-4  | Customer opening balance import (core+db+IPC+UI) | DONE — verified 2026-08-27 (13 tests)                                               | uncommitted |
+| ID    | Task                                             | Status                                                                              | Commit  |
+| ----- | ------------------------------------------------ | ----------------------------------------------------------------------------------- | ------- |
+| P3-0  | Shared retry helper + IPC error normalizer       | DONE — verified 2026-08-26                                                          | 09896a7 |
+| P3-1  | Customer CRUD (core+db+IPC)                      | DONE — verified 2026-08-26                                                          | 09896a7 |
+| P3-2a | Counter sale — core + repository                 | DONE — verified 2026-08-26 (10 tests)                                               | 09896a7 |
+| P3-2b | Counter sale — IPC handlers                      | DONE — verified 2026-08-26 (code review)                                            | 09896a7 |
+| P3-2c | Counter sale — keyboard-driven UI                | DONE — build/verify green 2026-08-26. **Real-hardware timing still owed — see §4.** | 09896a7 |
+| P3-3  | Payment received (core+db+IPC)                   | DONE — verified 2026-08-26 (3 tests)                                                | 09896a7 |
+| P3-4  | Customer opening balance import (core+db+IPC+UI) | DONE — verified 2026-08-27 (13 tests)                                               | 09896a7 |
 
 ---
 
