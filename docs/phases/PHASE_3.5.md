@@ -1,10 +1,10 @@
 # Phase 3.5 — Document numbering + multi-unit selling
 
-**Status:** ALL SUB-PHASES BUILT AND VERIFIED — pending final commit hash
+**Status:** ALL SUB-PHASES BUILT AND VERIFIED
 **Started:** 2026-08-28
 **Completed:** 2026-08-28
 **Branch:** main
-**Last commit:** — (fill in after commit; see PROGRESS.md)
+**Last commit:** 1cb97de
 
 ---
 
@@ -67,21 +67,21 @@ decided here.
 
 ## 3. Tasks
 
-| ID       | Task                                                                                 | Status                                   | Commit |
-| -------- | ------------------------------------------------------------------------------------ | ---------------------------------------- | ------ |
-| P3.5A    | formatDisplayDocNumber (packages/shared)                                             | DONE — verified 2026-08-28               | —      |
-| P3.5B    | Migration 0006 (document numbering reformat)                                         | DONE — verified 2026-08-28               | —      |
-| P3.5C    | Repositories switch to new doc-number format; payment renamed to payment_in/RCP      | DONE — verified 2026-08-28               | —      |
-| P3.5D    | Migration 0007 (uom_conversion table)                                                | DONE — verified 2026-08-28               | —      |
-| P3.5E    | bootstrap.ts seeds 4 fixed uom_conversion rows                                       | DONE — verified 2026-08-28               | —      |
-| P3.5F    | uom:listConversions IPC channel (read-only)                                          | DONE — verified 2026-08-28 (code review) | —      |
-| P3.5G    | Migration 0008 (item alt uom) + createItem + import CSV alt columns                  | DONE — verified 2026-08-28               | —      |
-| P3.5G-UI | Item form alt-unit fields (ItemsPage.tsx)                                            | DONE — verified 2026-08-28 (build only)  | —      |
-| P3.5H    | Migration 0009 (sale_line alt uom) + createSale conversion + sale screen unit toggle | DONE — verified 2026-08-28               | —      |
-| P3.5-1   | Document numbering migration + display format (= A+B+C)                              | DONE                                     | —      |
-| P3.5-2   | UoM conversion table + seed + read-only IPC (= D+E+F)                                | DONE                                     | —      |
-| P3.5-3   | Item alt unit (schema + contracts + repo + UI + import) (= G+G-UI)                   | DONE                                     | —      |
-| P3.5-4   | Sale line alt unit + createSale conversion + sale UI (= H)                           | DONE                                     | —      |
+| ID       | Task                                                                                 | Status                                   | Commit  |
+| -------- | ------------------------------------------------------------------------------------ | ---------------------------------------- | ------- |
+| P3.5A    | formatDisplayDocNumber (packages/shared)                                             | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5B    | Migration 0006 (document numbering reformat)                                         | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5C    | Repositories switch to new doc-number format; payment renamed to payment_in/RCP      | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5D    | Migration 0007 (uom_conversion table)                                                | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5E    | bootstrap.ts seeds 4 fixed uom_conversion rows                                       | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5F    | uom:listConversions IPC channel (read-only)                                          | DONE — verified 2026-08-28 (code review) | 1cb97de |
+| P3.5G    | Migration 0008 (item alt uom) + createItem + import CSV alt columns                  | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5G-UI | Item form alt-unit fields (ItemsPage.tsx)                                            | DONE — verified 2026-08-28 (build only)  | 1cb97de |
+| P3.5H    | Migration 0009 (sale_line alt uom) + createSale conversion + sale screen unit toggle | DONE — verified 2026-08-28               | 1cb97de |
+| P3.5-1   | Document numbering migration + display format (= A+B+C)                              | DONE                                     | 1cb97de |
+| P3.5-2   | UoM conversion table + seed + read-only IPC (= D+E+F)                                | DONE                                     | 1cb97de |
+| P3.5-3   | Item alt unit (schema + contracts + repo + UI + import) (= G+G-UI)                   | DONE                                     | 1cb97de |
+| P3.5-4   | Sale line alt unit + createSale conversion + sale UI (= H)                           | DONE                                     | 1cb97de |
 
 ---
 
