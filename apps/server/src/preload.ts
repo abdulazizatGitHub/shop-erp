@@ -17,6 +17,7 @@ import type {
   SaleSummaryDto,
 } from '@shop/contracts';
 import type { SaleRecord } from '@shop/core';
+import type { UomConversionOption } from '@shop/db';
 import { channels } from './ipc/channels.js';
 import type { CreateCustomerResult } from './ipc/handlers/customer.handler.js';
 import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balance-import.handler.js';
@@ -68,6 +69,10 @@ contextBridge.exposeInMainWorld('api', {
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>
       ipcRenderer.invoke(channels.payment.receive, input) as Promise<PaymentDto>,
+  },
+  uom: {
+    listConversions: (): Promise<readonly UomConversionOption[]> =>
+      ipcRenderer.invoke(channels.uom.listConversions) as Promise<readonly UomConversionOption[]>,
   },
   importData: {
     dryRun: (): Promise<ImportResult | null> =>

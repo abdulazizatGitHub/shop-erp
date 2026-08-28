@@ -5,7 +5,7 @@ import { z } from 'zod';
  * set. Import rows (P1-2) accept a larger, mostly-optional field set and
  * have their own schema; this one is deliberately narrow.
  */
-export const CreateItemInput = z.object({
+const createItemShape = z.object({
   itemCode: z.string().trim().min(1).nullable(),
   nameEn: z.string().trim().min(1),
   nameUr: z.string().trim().min(1).nullable(),
@@ -13,10 +13,27 @@ export const CreateItemInput = z.object({
   stockUomId: z.string().uuid(),
   retailPricePaisa: z.number().int().nonnegative(),
   trackStock: z.boolean().default(true),
+  // ADR-0013 Type 2 (item-specific alt-unit selling) — both optional,
+  // both absent means the item sells in stock_uom only.
+  altUomId: z.string().uuid().optional(),
+  altUomFactorMilli: z.number().int().positive().optional(),
 });
+
+export const CreateItemInput = createItemShape.refine(
+  (data) => (data.altUomId === undefined) === (data.altUomFactorMilli === undefined),
+  {
+    message: 'altUomId and altUomFactorMilli must both be given, or both left absent',
+    path: ['altUomFactorMilli'],
+  },
+);
 export type CreateItemInput = z.infer<typeof CreateItemInput>;
 
-export const UpdateItemInput = CreateItemInput.partial().extend({
+// Built from createItemShape (the plain object), not CreateItemInput
+// (a ZodEffects after .refine() — .partial() isn't available on it).
+// updateItem is not implemented anywhere in this codebase (P3.5G/H2 —
+// createItem only); this type predates that decision and stays unused
+// but compiling, not built out further.
+export const UpdateItemInput = createItemShape.partial().extend({
   id: z.string().uuid(),
 });
 export type UpdateItemInput = z.infer<typeof UpdateItemInput>;
@@ -40,6 +57,11 @@ export const ItemDto = z.object({
   stockUomId: z.string().uuid(),
   retailPricePaisa: z.number().int().nullable(),
   trackStock: z.boolean(),
+  // ADR-0013 Type 2 — null means the item sells in stock_uom only. Name
+  // resolution is client-side (via item:lookups' uoms list), not
+  // denormalized here.
+  altUomId: z.string().uuid().nullable(),
+  altUomFactorMilli: z.number().int().nullable(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
 

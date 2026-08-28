@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newId, isId, formatDocNumber } from './id.js';
+import { newId, isId, formatDocNumber, formatDisplayDocNumber } from './id.js';
 
 describe('newId / isId', () => {
   it('generates a value that isId accepts', () => {
@@ -40,5 +40,19 @@ describe('formatDocNumber', () => {
 
   it('pads a small sequence to full width', () => {
     expect(formatDocNumber('INV', 'A', 1)).toBe('INV-A-000001');
+  });
+});
+
+describe('formatDisplayDocNumber', () => {
+  it('pads a small sequence to 4 digits, no device code', () => {
+    expect(formatDisplayDocNumber('INV', 1)).toBe('INV-0001');
+  });
+
+  it('does not pad a sequence of 5 or more digits — displays as-is', () => {
+    expect(formatDisplayDocNumber('INV', 12345)).toBe('INV-12345');
+  });
+
+  it('pads a two-digit sequence to 4 digits', () => {
+    expect(formatDisplayDocNumber('RCP', 42)).toBe('RCP-0042');
   });
 });

@@ -89,6 +89,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
           createdAt: now,
           updatedAt: now,
           deletedAt: null,
+          altUomId: input.altUomId ?? null,
+          altUomFactorMilli: input.altUomFactorMilli ?? null,
         })
         .execute();
 
@@ -144,6 +146,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         'item.stockUomId',
         'item.trackStock',
         'itemPrice.price as retailPricePaisa',
+        'item.altUomId',
+        'item.altUomFactorMilli',
       ])
       .where('item.id', '=', id)
       .where('item.tenantId', '=', this.tenantId)
@@ -159,6 +163,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       stockUomId: row.stockUomId,
       retailPricePaisa: row.retailPricePaisa,
       trackStock: row.trackStock === 1,
+      altUomId: row.altUomId,
+      altUomFactorMilli: row.altUomFactorMilli,
     };
   }
 
@@ -187,6 +193,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         'item.stockUomId',
         'item.trackStock',
         'itemPrice.price as retailPricePaisa',
+        'item.altUomId',
+        'item.altUomFactorMilli',
       ])
       .where('item.tenantId', '=', this.tenantId)
       .where('item.deletedAt', 'is', null);
@@ -208,6 +216,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       stockUomId: row.stockUomId,
       retailPricePaisa: row.retailPricePaisa,
       trackStock: row.trackStock === 1,
+      altUomId: row.altUomId,
+      altUomFactorMilli: row.altUomFactorMilli,
     }));
   }
 }

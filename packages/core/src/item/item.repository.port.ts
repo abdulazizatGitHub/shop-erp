@@ -11,6 +11,13 @@ export interface NewItemInput {
   readonly stockUomId: string;
   readonly trackStock: boolean;
   readonly retailPricePaisa: number;
+  // ADR-0013 Type 2 (item-specific alt-unit selling). Absent/undefined
+  // means the item sells in stock_uom only — matches CreateItemInput's
+  // Zod .optional() fields, not null (null vs. undefined is a needless
+  // extra state here since the repository treats "not supplied" the
+  // same way regardless).
+  readonly altUomId?: string | undefined;
+  readonly altUomFactorMilli?: number | undefined;
 }
 
 export interface NewItemResult {
@@ -27,6 +34,8 @@ export interface ItemRecord {
   readonly stockUomId: string;
   readonly retailPricePaisa: number | null;
   readonly trackStock: boolean;
+  readonly altUomId: string | null;
+  readonly altUomFactorMilli: number | null;
 }
 
 export interface ItemSearchQuery {

@@ -1,5 +1,5 @@
 import type { Kysely } from 'kysely';
-import { Money, Qty, formatDocNumber, newId } from '@shop/shared';
+import { Money, Qty, formatDisplayDocNumber, newId } from '@shop/shared';
 import type { Paisa } from '@shop/shared';
 import {
   computeCostPerStockUnitPaisa,
@@ -54,7 +54,7 @@ export class KyselyPurchaseRepository implements PurchaseRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(PURCHASE_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(PURCHASE_CODE_PREFIX, nextNumber);
   }
 
   private async resolvePartsBusinessUnitId(trx: Kysely<Database>): Promise<string> {

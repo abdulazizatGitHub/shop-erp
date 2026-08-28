@@ -17,6 +17,15 @@ export interface CategoryOption {
   readonly name: string;
 }
 
+export interface UomConversionOption {
+  readonly id: string;
+  readonly fromUomId: string;
+  readonly fromUomName: string;
+  readonly toUomId: string;
+  readonly toUomName: string;
+  readonly factorMilli: number;
+}
+
 /**
  * Plain reference-data reads — no business logic, so these skip the
  * core port/service pattern used for item writes. Not a precedent for
@@ -60,6 +69,30 @@ export async function listCategories(
     .where('tenantId', '=', tenantId)
     .where('deletedAt', 'is', null)
     .orderBy('name')
+    .execute();
+  return rows;
+}
+
+/** ADR-0013 Type 1 fixed conversions, seeded in bootstrap.ts (P3.5E) — read-only, no UI to manage them yet (Phase 4+). */
+export async function listUomConversions(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<readonly UomConversionOption[]> {
+  const rows = await db
+    .selectFrom('uomConversion')
+    .innerJoin('uom as fromUom', 'fromUom.id', 'uomConversion.fromUomId')
+    .innerJoin('uom as toUom', 'toUom.id', 'uomConversion.toUomId')
+    .select([
+      'uomConversion.id',
+      'uomConversion.fromUomId',
+      'fromUom.name as fromUomName',
+      'uomConversion.toUomId',
+      'toUom.name as toUomName',
+      'uomConversion.factorMilli',
+    ])
+    .where('uomConversion.tenantId', '=', tenantId)
+    .orderBy('fromUom.name')
+    .orderBy('toUom.name')
     .execute();
   return rows;
 }

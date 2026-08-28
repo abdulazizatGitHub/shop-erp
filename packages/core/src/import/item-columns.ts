@@ -20,6 +20,8 @@ export const ITEM_COLUMNS = [
   'Low Stock Alert Qty',
   'Shelf / Location',
   'Notes',
+  'Alt Unit',
+  'Alt Factor',
 ] as const;
 
 export const OPENING_STOCK_COLUMNS = [

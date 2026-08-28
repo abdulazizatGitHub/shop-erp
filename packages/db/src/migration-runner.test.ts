@@ -33,12 +33,16 @@ describe('migrate', () => {
       '0003_shared_overhead.sql',
       '0004_party_ledger_bill_metadata.sql',
       '0005_party_payment_terms.sql',
+      '0006_document_numbering_reformat.sql',
+      '0007_uom_conversion.sql',
+      '0008_item_alt_uom.sql',
+      '0009_sale_line_alt_uom.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 42 tables and 11 views — the P0-8 baseline', () => {
+  it('applies exactly 43 tables and 11 views — the P0-8 baseline, +1 for uom_conversion (0007)', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -47,7 +51,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(42);
+    expect(tables).toHaveLength(43);
     expect(views).toHaveLength(11);
   });
 
@@ -75,6 +79,10 @@ describe('migrate', () => {
       '0003_shared_overhead.sql',
       '0004_party_ledger_bill_metadata.sql',
       '0005_party_payment_terms.sql',
+      '0006_document_numbering_reformat.sql',
+      '0007_uom_conversion.sql',
+      '0008_item_alt_uom.sql',
+      '0009_sale_line_alt_uom.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -93,6 +101,10 @@ describe('migrate', () => {
       { version: 3, name: '0003_shared_overhead.sql' },
       { version: 4, name: '0004_party_ledger_bill_metadata.sql' },
       { version: 5, name: '0005_party_payment_terms.sql' },
+      { version: 6, name: '0006_document_numbering_reformat.sql' },
+      { version: 7, name: '0007_uom_conversion.sql' },
+      { version: 8, name: '0008_item_alt_uom.sql' },
+      { version: 9, name: '0009_sale_line_alt_uom.sql' },
     ]);
   });
 
@@ -151,11 +163,15 @@ describe('migrate', () => {
     ).run(ledgerId, tenantId, partyId, new Date().toISOString());
     db.close();
 
-    // Now migrate onward with the full directory — applies 0004 and 0005.
+    // Now migrate onward with the full directory — applies 0004-0009.
     const result = migrate(dbPath, migrationsDir, backupDir);
     expect(result.applied).toEqual([
       '0004_party_ledger_bill_metadata.sql',
       '0005_party_payment_terms.sql',
+      '0006_document_numbering_reformat.sql',
+      '0007_uom_conversion.sql',
+      '0008_item_alt_uom.sql',
+      '0009_sale_line_alt_uom.sql',
     ]);
 
     db = new Database(dbPath);
@@ -190,5 +206,186 @@ describe('migrate', () => {
     expect(db.pragma('synchronous', { simple: true })).toBe(2); // FULL
     expect(db.pragma('busy_timeout', { simple: true })).toBe(5000);
     db.close();
+  });
+});
+
+describe('migration 0006 — document numbering reformat', () => {
+  // All three tests migrate only through 0005 first (mirroring the
+  // "applies 0004 to a database already at 0003" pattern above), seed a
+  // row shaped like the pre-0006 format, then run migrate() again with
+  // the full directory so only 0006 applies — proving the reformat runs
+  // against real pre-existing data, not just a fresh empty schema.
+  function migrateThrough0005(): void {
+    const partialMigrationsDir = path.join(workDir, 'migrations-through-0005');
+    mkdirSync(partialMigrationsDir, { recursive: true });
+    for (const file of [
+      '0001_init.sql',
+      '0002_business_units.sql',
+      '0003_shared_overhead.sql',
+      '0004_party_ledger_bill_metadata.sql',
+      '0005_party_payment_terms.sql',
+    ]) {
+      copyFileSync(path.join(migrationsDir, file), path.join(partialMigrationsDir, file));
+    }
+    migrate(dbPath, partialMigrationsDir, backupDir);
+  }
+
+  const tenantId = '00000000-0000-0000-0000-000000000001';
+
+  it('reformats an existing sale.doc_no from PREFIX-DEVICE-NNNNNN to PREFIX-NNNN', () => {
+    migrateThrough0005();
+
+    const warehouseId = '00000000-0000-0000-0000-000000000010';
+    const priceLevelId = '00000000-0000-0000-0000-000000000011';
+    const saleId = '00000000-0000-0000-0000-000000000012';
+    const now = new Date().toISOString();
+
+    let db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, 'Test Tenant', ?, ?)`,
+    ).run(tenantId, now, now);
+    db.prepare(
+      `INSERT INTO warehouse (id, tenant_id, name, is_default) VALUES (?, ?, 'Shop', 1)`,
+    ).run(warehouseId, tenantId);
+    db.prepare(
+      `INSERT INTO price_level (id, tenant_id, name, is_default, sort_order) VALUES (?, ?, 'Retail', 1, 0)`,
+    ).run(priceLevelId, tenantId);
+    db.prepare(
+      `INSERT INTO sale (id, tenant_id, doc_no, warehouse_id, price_level_id, sale_date, created_at, updated_at)
+       VALUES (?, ?, 'INV-A-000042', ?, ?, '2026-08-28', ?, ?)`,
+    ).run(saleId, tenantId, warehouseId, priceLevelId, now, now);
+    db.close();
+
+    // Arithmetic: sequence = 42, 42 < 10000 -> pad to 4 digits -> '0042'
+    // -> 'INV-0042'.
+    migrate(dbPath, migrationsDir, backupDir);
+
+    db = new Database(dbPath);
+    const row = db.prepare(`SELECT doc_no FROM sale WHERE id = ?`).get(saleId) as {
+      doc_no: string;
+    };
+    db.close();
+
+    expect(row.doc_no).toBe('INV-0042');
+  });
+
+  it('reformats an existing party.party_code (customer) from PREFIX-DEVICE-NNNNNN to PREFIX-NNNN', () => {
+    migrateThrough0005();
+
+    const partyId = '00000000-0000-0000-0000-000000000020';
+    const now = new Date().toISOString();
+
+    let db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, 'Test Tenant', ?, ?)`,
+    ).run(tenantId, now, now);
+    db.prepare(
+      `INSERT INTO party (id, tenant_id, party_code, party_type, name, is_active, created_at, updated_at)
+       VALUES (?, ?, 'CUS-A-000007', 'customer', 'Test Customer', 1, ?, ?)`,
+    ).run(partyId, tenantId, now, now);
+    db.close();
+
+    // Arithmetic: sequence = 7, 7 < 10000 -> pad to 4 digits -> '0007'
+    // -> 'CUS-0007'.
+    migrate(dbPath, migrationsDir, backupDir);
+
+    db = new Database(dbPath);
+    const row = db.prepare(`SELECT party_code FROM party WHERE id = ?`).get(partyId) as {
+      party_code: string;
+    };
+    db.close();
+
+    expect(row.party_code).toBe('CUS-0007');
+  });
+
+  it('renames the payment document_sequence row to payment_in/RCP and seeds an unused payment_out/PMT row', () => {
+    migrateThrough0005();
+
+    const now = new Date().toISOString();
+
+    let db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, 'Test Tenant', ?, ?)`,
+    ).run(tenantId, now, now);
+    db.prepare(
+      `INSERT INTO document_sequence (tenant_id, doc_type, prefix, device_code, next_number)
+       VALUES (?, 'payment', 'PAY', 'A', 5)`,
+    ).run(tenantId);
+    db.close();
+
+    migrate(dbPath, migrationsDir, backupDir);
+
+    db = new Database(dbPath);
+    const paymentRows = db
+      .prepare(`SELECT * FROM document_sequence WHERE doc_type = 'payment'`)
+      .all();
+    const paymentIn = db
+      .prepare(
+        `SELECT prefix, next_number, device_code FROM document_sequence WHERE doc_type = 'payment_in'`,
+      )
+      .get() as { prefix: string; next_number: number; device_code: string };
+    const paymentOut = db
+      .prepare(
+        `SELECT prefix, next_number, device_code FROM document_sequence WHERE doc_type = 'payment_out'`,
+      )
+      .get() as { prefix: string; next_number: number; device_code: string };
+    db.close();
+
+    expect(paymentRows).toHaveLength(0);
+    expect(paymentIn).toEqual({ prefix: 'RCP', next_number: 5, device_code: 'A' });
+    expect(paymentOut).toEqual({ prefix: 'PMT', next_number: 1, device_code: 'A' });
+  });
+});
+
+describe('migration 0007 — uom_conversion table', () => {
+  it('creates uom_conversion, empty — seeding is bootstrap.ts, not the migration', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'uom_conversion'`)
+      .all();
+    const rows = db.prepare(`SELECT * FROM uom_conversion`).all();
+    db.close();
+
+    expect(tableExists).toHaveLength(1);
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe('migration 0008 — item alt uom columns', () => {
+  it('adds alt_uom_id and alt_uom_factor_milli to item, both nullable', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const columns = db.prepare(`PRAGMA table_info(item)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    db.close();
+
+    const altUomId = columns.find((c) => c.name === 'alt_uom_id');
+    const altUomFactorMilli = columns.find((c) => c.name === 'alt_uom_factor_milli');
+    expect(altUomId).toBeDefined();
+    expect(altUomId?.notnull).toBe(0);
+    expect(altUomFactorMilli).toBeDefined();
+    expect(altUomFactorMilli?.notnull).toBe(0);
+  });
+});
+
+describe('migration 0009 — sale_line alt uom columns', () => {
+  it('adds sale_uom_id and sale_to_stock_factor to sale_line, both nullable', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const columns = db.prepare(`PRAGMA table_info(sale_line)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    db.close();
+
+    const saleUomId = columns.find((c) => c.name === 'sale_uom_id');
+    const saleToStockFactor = columns.find((c) => c.name === 'sale_to_stock_factor');
+    expect(saleUomId).toBeDefined();
+    expect(saleUomId?.notnull).toBe(0);
+    expect(saleToStockFactor).toBeDefined();
+    expect(saleToStockFactor?.notnull).toBe(0);
   });
 });

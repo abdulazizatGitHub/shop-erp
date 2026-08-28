@@ -151,3 +151,50 @@ describe('re-running the same import does not duplicate blank-code items by name
     expect(results[1]?.status).toBe('skipped');
   });
 });
+
+describe('item import — alt unit columns', () => {
+  const HEADER =
+    'Item Code,Item Name (English),Item Name (Urdu),Owning Business Unit,Category,' +
+    'Brand / Company,Variant / Spec,Selling Unit,Purchase Unit,Units per Purchase Unit,' +
+    'Track Stock? (Y/N),Has Serial No? (Y/N),Purchase Price (PKR),Retail Price (PKR),' +
+    'Wholesale Price (PKR),Low Stock Alert Qty,Shelf / Location,Notes,Alt Unit,Alt Factor';
+
+  function parseOneRow(dataLine: string) {
+    const csvText = `${HEADER}\n${dataLine}\n`;
+    const { rows } = parseCsv(csvText, ITEM_COLUMNS);
+    return validateItemRows(rows, baseLookups())[0];
+  }
+
+  it('row with Alt Unit and Alt Factor accepted — resolves to Foot, factorMilli=305', () => {
+    // Math.round(0.305 x 1000) = 305
+    const result = parseOneRow(',Alt Unit Item,,Spare Parts,,,,Piece,,,Y,N,,100,,,,,Foot,0.305');
+    if (result?.status !== 'accepted') throw new Error('expected row to be accepted');
+    expect(result.record.altUomId).toBe('uom-foot-id');
+    expect(result.record.altUomFactorMilli).toBe(305);
+  });
+
+  it('row with Alt Unit but no Alt Factor rejected, naming both columns', () => {
+    const result = parseOneRow(
+      ',Alt Unit Missing Factor,,Spare Parts,,,,Piece,,,Y,N,,100,,,,,Foot,',
+    );
+    if (result?.status !== 'rejected') throw new Error('expected row to be rejected');
+    expect(result.reason).toContain('Alt Unit');
+    expect(result.reason).toContain('Alt Factor');
+  });
+
+  it('row with Alt Factor but no Alt Unit rejected, naming both columns', () => {
+    const result = parseOneRow(
+      ',Alt Factor Missing Unit,,Spare Parts,,,,Piece,,,Y,N,,100,,,,,,0.305',
+    );
+    if (result?.status !== 'rejected') throw new Error('expected row to be rejected');
+    expect(result.reason).toContain('Alt Unit');
+    expect(result.reason).toContain('Alt Factor');
+  });
+
+  it('row with both Alt Unit and Alt Factor blank accepted, both null', () => {
+    const result = parseOneRow(',No Alt Unit At All,,Spare Parts,,,,Piece,,,Y,N,,100,,,,,,');
+    if (result?.status !== 'accepted') throw new Error('expected row to be accepted');
+    expect(result.record.altUomId).toBeNull();
+    expect(result.record.altUomFactorMilli).toBeNull();
+  });
+});

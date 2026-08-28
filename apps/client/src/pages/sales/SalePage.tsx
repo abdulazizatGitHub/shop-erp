@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CreateSaleInput, CustomerDto, ItemDto, SaleResult } from '@shop/contracts';
+import type {
+  CreateSaleInput,
+  CustomerDto,
+  ItemDto,
+  ItemLookups,
+  SaleResult,
+} from '@shop/contracts';
 import { Money, Qty } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
 import { CartTable, lineTotalPaisa, type CartLine } from './CartTable.js';
@@ -7,12 +13,16 @@ import { SearchSelect } from './SearchSelect.js';
 
 type Step = 'search-item' | 'quantity' | 'checkout' | 'warning-gate';
 type PaymentMode = 'cash' | 'credit';
+/** Which unit the quantity field is being entered in, for the current pendingItem. */
+type SaleUnit = 'stock' | 'alt';
 
 export function SalePage(): React.JSX.Element {
   const [step, setStep] = useState<Step>('search-item');
   const [cart, setCart] = useState<readonly CartLine[]>([]);
   const [pendingItem, setPendingItem] = useState<ItemDto | null>(null);
   const [qtyInput, setQtyInput] = useState('1');
+  const [saleUnit, setSaleUnit] = useState<SaleUnit>('stock');
+  const [lookups, setLookups] = useState<ItemLookups | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(null);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [amountPaidRupees, setAmountPaidRupees] = useState('');
@@ -22,6 +32,17 @@ export function SalePage(): React.JSX.Element {
 
   const paymentModeRef = useRef<HTMLDivElement>(null);
   const amountPaidRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    ipc.item
+      .lookups()
+      .then(setLookups)
+      .catch(() => {
+        // Alt-unit name display degrades to raw uom ids; not fatal to selling.
+      });
+  }, []);
+
+  const uomName = (id: string): string => lookups?.uoms.find((u) => u.id === id)?.name ?? id;
 
   const cartSubtotalPaisa = useMemo(
     () => Money.sum(cart.map((line) => Money.of(lineTotalPaisa(line) ?? 0))),
@@ -64,6 +85,10 @@ export function SalePage(): React.JSX.Element {
       return;
     }
     setError(null);
+    // ADR-0013 Type 2: 'alt' only reachable when pendingItem.altUomId is
+    // set (the toggle isn't rendered otherwise) — altUomId/altUomFactorMilli
+    // are guaranteed non-null in that case.
+    const useAltUnit = saleUnit === 'alt' && pendingItem.altUomId !== null;
     setCart((prev) => [
       ...prev,
       {
@@ -71,10 +96,16 @@ export function SalePage(): React.JSX.Element {
         itemLabel: pendingItem.nameEn,
         quantityMilli,
         unitPricePaisa: pendingItem.retailPricePaisa,
+        unitLabel: useAltUnit
+          ? uomName(pendingItem.altUomId as string)
+          : uomName(pendingItem.stockUomId),
+        saleUomId: useAltUnit ? (pendingItem.altUomId as string) : undefined,
+        saleToStockFactor: useAltUnit ? (pendingItem.altUomFactorMilli as number) : undefined,
       },
     ]);
     setPendingItem(null);
     setQtyInput('1');
+    setSaleUnit('stock');
     setStep('search-item');
   }
 
@@ -119,6 +150,8 @@ export function SalePage(): React.JSX.Element {
         // its own authoritative price resolution, respecting whichever
         // customer/price level was actually chosen at checkout.
         unitPricePaisa: null,
+        saleUomId: line.saleUomId,
+        saleToStockFactor: line.saleToStockFactor,
       })),
     };
     try {
@@ -163,6 +196,7 @@ export function SalePage(): React.JSX.Element {
           onSelect={(item) => {
             setPendingItem(item);
             setQtyInput('1');
+            setSaleUnit('stock');
             setStep('quantity');
           }}
           onEmptyEnter={() => {
@@ -173,7 +207,13 @@ export function SalePage(): React.JSX.Element {
 
       {step === 'quantity' && pendingItem && (
         <div>
-          <p>{pendingItem.nameEn} — quantity?</p>
+          <p>
+            {pendingItem.nameEn} — quantity in{' '}
+            {saleUnit === 'alt' && pendingItem.altUomId !== null
+              ? uomName(pendingItem.altUomId)
+              : uomName(pendingItem.stockUomId)}
+            ?
+          </p>
           <input
             autoFocus
             inputMode="decimal"
@@ -192,6 +232,33 @@ export function SalePage(): React.JSX.Element {
               }
             }}
           />
+          {pendingItem.altUomId !== null && (
+            <div
+              tabIndex={0}
+              role="radiogroup"
+              aria-label="Selling unit"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                  setSaleUnit((u) => (u === 'stock' ? 'alt' : 'stock'));
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  confirmLine();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setPendingItem(null);
+                  setStep('search-item');
+                }
+              }}
+            >
+              <span role="radio" aria-checked={saleUnit === 'stock'}>
+                {saleUnit === 'stock' ? '[x]' : '[ ]'} {uomName(pendingItem.stockUomId)} (Stock
+                Unit)
+              </span>{' '}
+              <span role="radio" aria-checked={saleUnit === 'alt'}>
+                {saleUnit === 'alt' ? '[x]' : '[ ]'} {uomName(pendingItem.altUomId)} (Alt Unit)
+              </span>
+            </div>
+          )}
         </div>
       )}
 

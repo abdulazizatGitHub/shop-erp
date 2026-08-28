@@ -6,6 +6,13 @@ export interface CartLine {
   readonly quantityMilli: number;
   /** Retail-price preview only — never sent to sale:create. */
   readonly unitPricePaisa: number | null;
+  /** Name of the unit quantityMilli was entered in — e.g. "Foot" or "Kg". */
+  readonly unitLabel: string;
+  // ADR-0013 Type 2 — both present only when the salesman entered the
+  // quantity in the item's alt unit; passed through unchanged to
+  // sale:create.
+  readonly saleUomId?: string | undefined;
+  readonly saleToStockFactor?: number | undefined;
 }
 
 export function lineTotalPaisa(line: CartLine): number | null {
@@ -38,7 +45,9 @@ export function CartTable({ cart, subtotalPaisa, onRemove }: CartTableProps): Re
           {cart.map((line, index) => (
             <tr key={`${line.itemId}-${String(index)}`}>
               <td>{line.itemLabel}</td>
-              <td>{Qty.format(Qty.of(line.quantityMilli))}</td>
+              <td>
+                {Qty.format(Qty.of(line.quantityMilli))} {line.unitLabel}
+              </td>
               <td>
                 {line.unitPricePaisa !== null ? Money.format(Money.of(line.unitPricePaisa)) : '—'}
               </td>

@@ -30,11 +30,43 @@ const DEFAULT_WAREHOUSE_NAME = 'Shop';
 
 // P1-0's minimum set, per the owner's explicit instruction. More can be
 // added later through normal CRUD — this is only the bootstrap floor.
+// The 6 entries below Foot were added in P3.5E (ADR-0013) so the fixed
+// uom_conversion seed below has both sides of each conversion to
+// reference. allowFraction: physically-fractional measurements in this
+// shop's context (Liter, Meter, Centimeter) get true; measurements that
+// are always whole here (Gram, Milliliter, Inch) get false — same
+// reasoning as Piece/Cylinder above.
 const BASE_UOMS: readonly { name: string; allowFraction: boolean }[] = [
   { name: 'Piece', allowFraction: false },
   { name: 'Kg', allowFraction: true },
   { name: 'Cylinder', allowFraction: false },
   { name: 'Foot', allowFraction: true },
+  { name: 'Gram', allowFraction: false },
+  { name: 'Liter', allowFraction: true },
+  { name: 'Milliliter', allowFraction: false },
+  { name: 'Inch', allowFraction: false },
+  { name: 'Meter', allowFraction: true },
+  { name: 'Centimeter', allowFraction: true },
+];
+
+interface UomConversionSeed {
+  readonly fromName: string;
+  readonly toName: string;
+  readonly factorMilli: number;
+}
+
+// ADR-0013 Type 1 — fixed system conversions, seeded at bootstrap
+// (never in a migration — see 0007_uom_conversion.sql). Reuses the
+// existing Kg/Foot rows as-is (H1 decision — Kg is not renamed).
+//   Kg -> Gram:        1 Kg = 1000 Gram        -> factor_milli = 1000 * 1000 = 1,000,000
+//   Liter -> Milliliter: 1 Liter = 1000 Milliliter -> factor_milli = 1000 * 1000 = 1,000,000
+//   Foot -> Inch:      1 Foot = 12 Inch        -> factor_milli = 12 * 1000 = 12,000
+//   Meter -> Centimeter: 1 Meter = 100 Centimeter -> factor_milli = 100 * 1000 = 100,000
+const BASE_UOM_CONVERSIONS: readonly UomConversionSeed[] = [
+  { fromName: 'Kg', toName: 'Gram', factorMilli: 1_000_000 },
+  { fromName: 'Liter', toName: 'Milliliter', factorMilli: 1_000_000 },
+  { fromName: 'Foot', toName: 'Inch', factorMilli: 12_000 },
+  { fromName: 'Meter', toName: 'Centimeter', factorMilli: 100_000 },
 ];
 
 function seedTenant(db: Database.Database, tenantId: string, now: string): boolean {
@@ -102,6 +134,38 @@ function seedUoms(db: Database.Database, tenantId: string): number {
   return inserted;
 }
 
+// Idempotent on (tenant_id, from_uom_id, to_uom_id) — the same
+// SELECT-before-INSERT pattern as seedUoms/seedBusinessUnits above, just
+// keyed by the resolved uom ids instead of a name.
+function seedUomConversions(db: Database.Database, tenantId: string): number {
+  let inserted = 0;
+  for (const conv of BASE_UOM_CONVERSIONS) {
+    const fromUom = db
+      .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = ?`)
+      .get(tenantId, conv.fromName) as { id: string } | undefined;
+    const toUom = db
+      .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = ?`)
+      .get(tenantId, conv.toName) as { id: string } | undefined;
+    if (!fromUom || !toUom) {
+      throw new Error(
+        `uom_conversion seed: '${conv.fromName}' or '${conv.toName}' UoM not found for ` +
+          `tenant ${tenantId} — has seedUoms run first?`,
+      );
+    }
+    const existing = db
+      .prepare(
+        `SELECT id FROM uom_conversion WHERE tenant_id = ? AND from_uom_id = ? AND to_uom_id = ?`,
+      )
+      .get(tenantId, fromUom.id, toUom.id);
+    if (existing) continue;
+    db.prepare(
+      `INSERT INTO uom_conversion (id, tenant_id, from_uom_id, to_uom_id, factor_milli) VALUES (?, ?, ?, ?, ?)`,
+    ).run(newId(), tenantId, fromUom.id, toUom.id, conv.factorMilli);
+    inserted += 1;
+  }
+  return inserted;
+}
+
 function seedWarehouse(db: Database.Database, tenantId: string): number {
   const existing = db
     .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND name = ?`)
@@ -137,6 +201,11 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     const businessUnitsInserted = seedBusinessUnits(db, tenantId, now);
     const priceLevelsInserted = seedPriceLevel(db, tenantId);
     const uomsInserted = seedUoms(db, tenantId);
+    // Must run after seedUoms — looks up from_uom_id/to_uom_id by name
+    // against the rows seedUoms just inserted. Not tracked in
+    // SeedResult (no test/caller needs the count; keeps the returned
+    // shape unchanged from before P3.5E).
+    seedUomConversions(db, tenantId);
     const warehousesInserted = seedWarehouse(db, tenantId);
     result = {
       tenantInserted,

@@ -134,4 +134,19 @@ describe('KyselyPaymentRepository.createPayment', () => {
     expect(paymentRow.amount).toBe(500000);
     expect(paymentRow.direction).toBe('in');
   });
+
+  it('createPayment generates RCP-NNNN doc_no', async () => {
+    // doc_type='payment_in' after migration 0006, prefix='RCP'.
+    // First payment on a fresh DB: nextNumber=1, formatDisplayDocNumber('RCP', 1) = 'RCP-0001'
+    const result = await paymentRepo.createPayment({
+      partyId: customerId,
+      amountPaisa: 500000,
+      method: 'cash',
+      paymentDate: '2026-08-26',
+      referenceNo: null,
+      notes: null,
+    });
+
+    expect(result.docNo).toBe('RCP-0001');
+  });
 });

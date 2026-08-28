@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 describe('KyselyPartyRepository.createSupplier', () => {
-  it('auto-generates a supplier code when none is given, format SUP-A-000001', async () => {
+  it('auto-generates a supplier code when none is given, format SUP-0001', async () => {
     const result = await repo.createSupplier({
       partyCode: null,
       name: 'Metro Refrigeration Traders',
@@ -46,7 +46,7 @@ describe('KyselyPartyRepository.createSupplier', () => {
       notes: 'Main compressor supplier',
     });
 
-    expect(result.partyCode).toBe('SUP-A-000001');
+    expect(result.partyCode).toBe('SUP-0001');
 
     const row = rawDb.prepare(`SELECT * FROM party WHERE id = ?`).get(result.id) as Record<
       string,
@@ -59,7 +59,7 @@ describe('KyselyPartyRepository.createSupplier', () => {
     expect(row['city_area']).toBe('Malakand Bazaar');
     expect(row['payment_terms']).toBe('Net 15');
     expect(row['notes']).toBe('Main compressor supplier');
-    expect(row['party_code']).toBe('SUP-A-000001');
+    expect(row['party_code']).toBe('SUP-0001');
     expect(row['is_active']).toBe(1);
   });
 
@@ -83,8 +83,8 @@ describe('KyselyPartyRepository.createSupplier', () => {
       notes: null,
     });
 
-    expect(first.partyCode).toBe('SUP-A-000001');
-    expect(second.partyCode).toBe('SUP-A-000002');
+    expect(first.partyCode).toBe('SUP-0001');
+    expect(second.partyCode).toBe('SUP-0002');
   });
 
   it('respects an explicit party code and does not touch the sequence', async () => {
@@ -110,7 +110,22 @@ describe('KyselyPartyRepository.createSupplier', () => {
       notes: null,
     });
     // sequence must still start at 1 — explicit codes don't consume it
-    expect(next.partyCode).toBe('SUP-A-000001');
+    expect(next.partyCode).toBe('SUP-0001');
+  });
+
+  it('createSupplier generates SUP-NNNN party_code', async () => {
+    // First supplier on a fresh DB: nextNumber=1, formatDisplayDocNumber('SUP', 1) = 'SUP-0001'
+    const result = await repo.createSupplier({
+      partyCode: null,
+      name: 'Format Check Supplier',
+      shopName: null,
+      phone: '0300',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    expect(result.partyCode).toBe('SUP-0001');
   });
 
   it('rejects a duplicate party code via the UNIQUE constraint', async () => {
@@ -155,7 +170,7 @@ describe('KyselyPartyRepository.createSupplier', () => {
       notes: null,
     });
 
-    expect(result.partyCode).toBe('SUP-A-000001');
+    expect(result.partyCode).toBe('SUP-0001');
   });
 });
 
@@ -341,7 +356,7 @@ describe('KyselyPartyRepository — customer', () => {
     return row.id;
   }
 
-  it('creates a customer, CUS-A-000001, every field matches input — queried from the party table directly', async () => {
+  it('creates a customer, CUS-0001, every field matches input — queried from the party table directly', async () => {
     const priceLevelId = retailPriceLevelId();
 
     const result = await repo.createCustomer({
@@ -355,14 +370,14 @@ describe('KyselyPartyRepository — customer', () => {
       notes: 'Pays on the 1st of every month',
     });
 
-    expect(result.partyCode).toBe('CUS-A-000001');
+    expect(result.partyCode).toBe('CUS-0001');
 
     const row = rawDb.prepare(`SELECT * FROM party WHERE id = ?`).get(result.id) as Record<
       string,
       unknown
     >;
     expect(row['party_type']).toBe('customer');
-    expect(row['party_code']).toBe('CUS-A-000001');
+    expect(row['party_code']).toBe('CUS-0001');
     expect(row['name']).toBe('Naeem Fridge Repairs');
     expect(row['shop_name']).toBe('Naeem Electronics');
     expect(row['phone']).toBe('03007654321');
@@ -373,7 +388,7 @@ describe('KyselyPartyRepository — customer', () => {
     expect(row['is_active']).toBe(1);
   });
 
-  it('second customer gets CUS-A-000002 — sequence increments', async () => {
+  it('second customer gets CUS-0002 — sequence increments', async () => {
     const first = await repo.createCustomer({
       partyCode: null,
       name: 'Customer One',
@@ -395,8 +410,24 @@ describe('KyselyPartyRepository — customer', () => {
       notes: null,
     });
 
-    expect(first.partyCode).toBe('CUS-A-000001');
-    expect(second.partyCode).toBe('CUS-A-000002');
+    expect(first.partyCode).toBe('CUS-0001');
+    expect(second.partyCode).toBe('CUS-0002');
+  });
+
+  it('createCustomer generates CUS-NNNN party_code', async () => {
+    // First customer on a fresh DB: nextNumber=1, formatDisplayDocNumber('CUS', 1) = 'CUS-0001'
+    const result = await repo.createCustomer({
+      partyCode: null,
+      name: 'Format Check Customer',
+      shopName: null,
+      phone: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    expect(result.partyCode).toBe('CUS-0001');
   });
 
   it('respects an explicit party code and does not consume the sequence', async () => {
@@ -432,7 +463,7 @@ describe('KyselyPartyRepository — customer', () => {
       creditLimitPaisa: null,
       notes: null,
     });
-    expect(auto.partyCode).toBe('CUS-A-000001');
+    expect(auto.partyCode).toBe('CUS-0001');
   });
 
   it('rejects a duplicate party code via the UNIQUE constraint', async () => {

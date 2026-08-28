@@ -422,6 +422,21 @@ describe('KyselySaleRepository.createSale', () => {
       .get(result.id) as { unit_price: number };
     expect(line.unit_price).toBe(1500000);
   });
+
+  it('createSale generates INV-NNNN doc_no', async () => {
+    // First sale on a fresh DB: nextNumber=1, formatDisplayDocNumber('INV', 1) = 'INV-0001'
+    const result = await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-26',
+      paymentMode: 'cash',
+      paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA,
+      notes: null,
+      lines: [{ itemId: compressorItemId, quantityMilli: 1000, unitPricePaisa: null }],
+    });
+
+    expect(result.docNo).toBe('INV-0001');
+  });
 });
 
 describe('KyselySaleRepository.cancelSale', () => {
@@ -466,5 +481,99 @@ describe('KyselySaleRepository.cancelSale', () => {
     expect(originalLedger?.['reversed_by_id']).toBeNull();
     expect(reversalLedger?.['reversed_by_id']).toBeNull();
     expect(partyBalance(retailCustomerId)).toBe(0);
+  });
+});
+
+describe('KyselySaleRepository — alt unit conversion', () => {
+  it('test 7 — sale with alt unit converts stock quantity', async () => {
+    const kgUomId = (
+      rawDb.prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Kg'`).get(TENANT_ID) as {
+        id: string;
+      }
+    ).id;
+    const footUomId = (
+      rawDb.prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Foot'`).get(TENANT_ID) as {
+        id: string;
+      }
+    ).id;
+    const businessUnit = rawDb
+      .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
+      .get(TENANT_ID) as { id: string };
+
+    // 1 foot of this pipe = 0.305 kg -> altUomFactorMilli = 305
+    const pipe = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Copper Pipe (alt unit)',
+      nameUr: null,
+      businessUnitId: businessUnit.id,
+      stockUomId: kgUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+      altUomId: footUomId,
+      altUomFactorMilli: 305,
+    });
+    insertOpeningStock(pipe.id, 100000); // 100 kg
+
+    // Sale line: 10000 milli-feet (10 feet), saleUomId=Foot, saleToStockFactor=305.
+    // stock_qty_milli = Math.round((10000 x 305) / 1000)
+    //                 = Math.round(3050000 / 1000)
+    //                 = Math.round(3050) = 3050 milli-kg (3.05 kg)
+    const result = await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-26',
+      paymentMode: 'cash',
+      paidAmountPaisa: 1000,
+      notes: null,
+      lines: [
+        {
+          itemId: pipe.id,
+          quantityMilli: 10000,
+          unitPricePaisa: null,
+          saleUomId: footUomId,
+          saleToStockFactor: 305,
+        },
+      ],
+    });
+
+    const movements = stockMovementsFor(result.id);
+    expect(movements).toHaveLength(1);
+    expect(movements[0]?.['quantity']).toBe(-3050);
+
+    // 100000 - 3050 = 96950 milli-kg
+    expect(stockOnHand(pipe.id)).toBe(96950);
+
+    const line = rawDb
+      .prepare(
+        `SELECT quantity, sale_uom_id, sale_to_stock_factor FROM sale_line WHERE sale_id = ?`,
+      )
+      .get(result.id) as { quantity: number; sale_uom_id: string; sale_to_stock_factor: number };
+    // sale_line.quantity stores the foot qty the customer bought, unchanged.
+    expect(line.quantity).toBe(10000);
+    expect(line.sale_uom_id).toBe(footUomId);
+    expect(line.sale_to_stock_factor).toBe(305);
+  });
+
+  it('test 8 — sale without alt unit is unchanged (no regression)', async () => {
+    const result = await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-26',
+      paymentMode: 'cash',
+      paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 2,
+      notes: null,
+      lines: [{ itemId: compressorItemId, quantityMilli: 2000, unitPricePaisa: null }],
+    });
+
+    const movements = stockMovementsFor(result.id);
+    expect(movements).toHaveLength(1);
+    // No conversion applied: stock_movement.quantity equals the input
+    // quantityMilli directly.
+    expect(movements[0]?.['quantity']).toBe(-2000);
+
+    const line = rawDb
+      .prepare(`SELECT sale_uom_id FROM sale_line WHERE sale_id = ?`)
+      .get(result.id) as { sale_uom_id: string | null };
+    expect(line.sale_uom_id).toBeNull();
   });
 });

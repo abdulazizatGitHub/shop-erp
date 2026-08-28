@@ -14,6 +14,12 @@ export interface NewSaleLineInput {
   readonly quantityMilli: number;
   /** Explicit override; null runs the standard price resolution order. */
   readonly unitPricePaisa: number | null;
+  // ADR-0013 Type 2 (item-specific alt-unit selling). Absent/undefined
+  // means the line was entered in stock_uom — matches SaleLineInput's
+  // Zod .optional() fields (mirrors NewItemInput's altUomId/
+  // altUomFactorMilli pattern from P3.5G).
+  readonly saleUomId?: string | undefined;
+  readonly saleToStockFactor?: number | undefined;
 }
 
 export interface NewSaleInput {

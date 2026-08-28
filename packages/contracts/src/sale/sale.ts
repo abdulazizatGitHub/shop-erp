@@ -5,11 +5,20 @@ import { z } from 'zod';
  * resolution runs (customer price level -> default Retail -> fallback
  * Retail — see packages/core/src/sale/sale.ts resolvePricePaisa).
  */
-export const SaleLineInput = z.object({
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int().positive(),
-  unitPricePaisa: z.number().int().nonnegative().nullable(),
-});
+export const SaleLineInput = z
+  .object({
+    itemId: z.string().uuid(),
+    quantityMilli: z.number().int().positive(),
+    unitPricePaisa: z.number().int().nonnegative().nullable(),
+    // ADR-0013 Type 2 (item-specific alt-unit selling) — both optional,
+    // both absent means the line was entered in stock_uom.
+    saleUomId: z.string().uuid().optional(),
+    saleToStockFactor: z.number().int().positive().optional(),
+  })
+  .refine((data) => (data.saleUomId === undefined) === (data.saleToStockFactor === undefined), {
+    message: 'saleUomId and saleToStockFactor must both be given, or both left absent',
+    path: ['saleToStockFactor'],
+  });
 export type SaleLineInput = z.infer<typeof SaleLineInput>;
 
 export const CreateSaleInput = z.object({

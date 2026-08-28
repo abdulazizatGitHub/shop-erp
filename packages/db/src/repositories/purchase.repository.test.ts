@@ -139,7 +139,7 @@ describe('KyselyPurchaseRepository.createPurchase', () => {
       ],
     });
 
-    expect(result.docNo).toBe('PUR-A-000001');
+    expect(result.docNo).toBe('PUR-0001');
     expect(result.totalAmountPaisa).toBe(4_500_000);
 
     const purchaseRow = rawDb
@@ -190,6 +190,26 @@ describe('KyselyPurchaseRepository.createPurchase', () => {
       .get(gasItemId) as { last_purchase_cost: number; avg_cost: number };
     expect(gasItem.last_purchase_cost).toBe(257_353);
     expect(gasItem.avg_cost).toBe(257_353);
+  });
+
+  it('createPurchase generates PUR-NNNN doc_no', async () => {
+    // First purchase on a fresh DB: nextNumber=1, formatDisplayDocNumber('PUR', 1) = 'PUR-0001'
+    const result = await repo.createPurchase({
+      supplierId,
+      warehouseId: null,
+      purchaseDate: '2026-08-24',
+      supplierInvoiceNo: null,
+      paymentMode: 'cash',
+      billReference: null,
+      dueDate: null,
+      billNotes: null,
+      notes: null,
+      lines: [
+        { itemId: compressorItemId, quantityMilli: 1000, unitCostPaisa: 500_000, notes: null },
+      ],
+    });
+
+    expect(result.docNo).toBe('PUR-0001');
   });
 
   it('credit purchase: exactly one negative party_ledger row, bill metadata written', async () => {

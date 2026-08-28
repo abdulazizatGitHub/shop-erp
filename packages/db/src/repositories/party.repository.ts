@@ -1,5 +1,5 @@
 import { sql, type Kysely } from 'kysely';
-import { formatDocNumber, newId } from '@shop/shared';
+import { formatDisplayDocNumber, newId } from '@shop/shared';
 import type {
   CustomerBalance,
   CustomerRecord,
@@ -85,7 +85,7 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(SUPPLIER_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(SUPPLIER_CODE_PREFIX, nextNumber);
   }
 
   async createSupplier(input: NewSupplierInput): Promise<NewSupplierResult> {
@@ -183,7 +183,7 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(CUSTOMER_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(CUSTOMER_CODE_PREFIX, nextNumber);
   }
 
   /** Write path — wrapped in withRetry per PROJECT.md BUG-15. */

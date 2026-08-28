@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('seed', () => {
-  it('inserts the tenant, three business units, one price level, four uoms, one warehouse', () => {
+  it('inserts the tenant, three business units, one price level, ten uoms, one warehouse', () => {
     const db = new Database(dbPath);
     const result = seed(db, TENANT_ID);
     db.close();
@@ -32,7 +32,7 @@ describe('seed', () => {
       tenantInserted: true,
       businessUnitsInserted: 3,
       priceLevelsInserted: 1,
-      uomsInserted: 4,
+      uomsInserted: 10,
       warehousesInserted: 1,
     });
   });
@@ -92,7 +92,7 @@ describe('seed', () => {
     expect(rows).toEqual([{ name: 'Retail', is_default: 1 }]);
   });
 
-  it('seeds Piece, Kg, Cylinder, Foot uoms', () => {
+  it('seeds all 10 base uoms — the original 4 plus the 6 ADR-0013 uom_conversion units', () => {
     const db = new Database(dbPath);
     seed(db, TENANT_ID);
     const rows = db
@@ -100,6 +100,83 @@ describe('seed', () => {
       .all(TENANT_ID) as Array<{ name: string }>;
     db.close();
 
-    expect(rows.map((r) => r.name)).toEqual(['Cylinder', 'Foot', 'Kg', 'Piece']);
+    expect(rows.map((r) => r.name)).toEqual([
+      'Centimeter',
+      'Cylinder',
+      'Foot',
+      'Gram',
+      'Inch',
+      'Kg',
+      'Liter',
+      'Meter',
+      'Milliliter',
+      'Piece',
+    ]);
+  });
+});
+
+describe('seed — uom_conversion (ADR-0013, P3.5E)', () => {
+  it('Kg -> Gram: factor_milli = 1000000 (1 Kg = 1000 Gram, 1000 x 1000)', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const row = db
+      .prepare(
+        `SELECT uc.factor_milli FROM uom_conversion uc
+         JOIN uom f ON f.id = uc.from_uom_id
+         JOIN uom t ON t.id = uc.to_uom_id
+         WHERE f.name = 'Kg' AND t.name = 'Gram' AND uc.tenant_id = ?`,
+      )
+      .get(TENANT_ID) as { factor_milli: number } | undefined;
+    db.close();
+
+    expect(row?.factor_milli).toBe(1000000);
+  });
+
+  it('Liter -> Milliliter: factor_milli = 1000000 (1 Liter = 1000 Milliliter, 1000 x 1000)', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const row = db
+      .prepare(
+        `SELECT uc.factor_milli FROM uom_conversion uc
+         JOIN uom f ON f.id = uc.from_uom_id
+         JOIN uom t ON t.id = uc.to_uom_id
+         WHERE f.name = 'Liter' AND t.name = 'Milliliter' AND uc.tenant_id = ?`,
+      )
+      .get(TENANT_ID) as { factor_milli: number } | undefined;
+    db.close();
+
+    expect(row?.factor_milli).toBe(1000000);
+  });
+
+  it('Foot -> Inch: factor_milli = 12000 (1 Foot = 12 Inch, 12 x 1000)', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const row = db
+      .prepare(
+        `SELECT uc.factor_milli FROM uom_conversion uc
+         JOIN uom f ON f.id = uc.from_uom_id
+         JOIN uom t ON t.id = uc.to_uom_id
+         WHERE f.name = 'Foot' AND t.name = 'Inch' AND uc.tenant_id = ?`,
+      )
+      .get(TENANT_ID) as { factor_milli: number } | undefined;
+    db.close();
+
+    expect(row?.factor_milli).toBe(12000);
+  });
+
+  it('Meter -> Centimeter: factor_milli = 100000 (1 Meter = 100 Centimeter, 100 x 1000)', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const row = db
+      .prepare(
+        `SELECT uc.factor_milli FROM uom_conversion uc
+         JOIN uom f ON f.id = uc.from_uom_id
+         JOIN uom t ON t.id = uc.to_uom_id
+         WHERE f.name = 'Meter' AND t.name = 'Centimeter' AND uc.tenant_id = ?`,
+      )
+      .get(TENANT_ID) as { factor_milli: number } | undefined;
+    db.close();
+
+    expect(row?.factor_milli).toBe(100000);
   });
 });

@@ -18,6 +18,8 @@ export async function createItem(
     stockUomId: input.stockUomId,
     trackStock: input.trackStock,
     retailPricePaisa: input.retailPricePaisa,
+    altUomId: input.altUomId,
+    altUomFactorMilli: input.altUomFactorMilli,
   });
 }
 

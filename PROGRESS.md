@@ -41,6 +41,187 @@
 
 ---
 
+## [2026-08-28] Session 10 — Phase 3.5: document numbering + multi-unit selling, all sub-phases (P3.5A–P3.5H incl. P3.5G-UI) built
+
+**Goal:** Build the owner-approved Phase 3.5 plan (ADR-0012 document
+numbering, ADR-0013 multi-unit selling) across nine sub-phases, each
+gated on its own tests-first checkpoint, then the item-form UI and the
+sale-screen UI pieces — before any item import or Phase 4 work begins,
+per CLAUDE.md's phase-kickoff instructions for this session.
+
+**Done:**
+
+- `packages/shared/src/id.ts` — P3.5A. `formatDisplayDocNumber(prefix,
+sequence)`: `PREFIX-NNNN`, 4-digit minimum pad, no device code,
+  displays as-is at ≥10000. Existing `formatDocNumber` untouched.
+- `packages/db/src/migrations/0006_document_numbering_reformat.sql` —
+  P3.5B. Reformats existing `sale`/`purchase`/`payment.doc_no` and
+  `party.party_code` (customer/supplier) from `PREFIX-DEVICE-NNNNNN` to
+  `PREFIX-NNNN` via a GLOB-guarded, idempotent-by-construction UPDATE
+  pair per column; renames `document_sequence`'s `payment`/`PAY` row to
+  `payment_in`/`RCP`; seeds an unused `payment_out`/`PMT` row per
+  existing `(tenant_id, device_code)`.
+- `sale.repository.ts`, `party.repository.ts`, `purchase.repository.ts`,
+  `payment.repository.ts` — P3.5C. All switched to
+  `formatDisplayDocNumber`; `payment.repository.ts`'s constants renamed
+  to match 0006 (`'payment'`→`'payment_in'`, `'PAY'`→`'RCP'`). 8
+  pre-existing tests across `party.repository.test.ts`/
+  `purchase.repository.test.ts` had their hardcoded old-format
+  assertions updated (owner-approved before touching them).
+- `packages/db/src/migrations/0007_uom_conversion.sql`,
+  `bootstrap.ts` — P3.5D/E. `uom_conversion` table (empty — no seed data
+  in the migration itself); `bootstrap.ts`'s `BASE_UOMS` gained 6 new
+  units (`Gram`, `Liter`, `Milliliter`, `Inch`, `Meter`, `Centimeter`,
+  per the owner's H1 decision — `Kg`/`Foot` reused as-is, not renamed);
+  `seedUomConversions()` seeds the 4 ADR-0013 fixed conversions,
+  idempotent via the same SELECT-before-INSERT pattern as `seedUoms`.
+- `packages/db/src/repositories/lookup.repository.ts`, `channels.ts`,
+  `item.handler.ts`, `preload.ts`, `electron-api.d.ts` — P3.5F.
+  `listUomConversions` added as a plain function in `lookup.repository.ts`
+  (not `item.repository.ts`/`ItemRepositoryPort` as the kickoff draft
+  specified — that file's own doc comment says exactly this class of
+  read "skips the core port/service pattern," owner-approved deviation).
+  New `uom:listConversions` read-only IPC channel, wrapped in
+  `withError` (unlike `item.handler.ts`'s three pre-existing handlers,
+  which predate `withError` and were not retrofitted — out of scope,
+  logged for later).
+- `packages/db/src/migrations/0008_item_alt_uom.sql`,
+  `item.repository.ts`, `item.repository.port.ts`,
+  `packages/contracts/src/item/item.ts`, `item-columns.ts`,
+  `item-import.ts` — P3.5G. `item.alt_uom_id`/`alt_uom_factor_milli`
+  (nullable); `createItem` persists both (createItem-only, per the
+  owner's H2 decision — `updateItem` does not exist anywhere in this
+  codebase, before or after this phase); `CreateItemInput` gained a
+  both-or-neither Zod refinement; item import CSV gained optional
+  `Alt Unit`/`Alt Factor` columns mirroring the existing Purchase-Unit
+  pair's validation shape exactly.
+- `apps/client/src/pages/items/ItemsPage.tsx` — P3.5G-UI. Optional Alt
+  Selling Unit dropdown + Alt Factor input on the item create form,
+  client-side both-or-neither validation mirroring the Zod refinement.
+- `packages/db/src/migrations/0009_sale_line_alt_uom.sql`,
+  `sale.repository.ts`, `sale.repository.port.ts`,
+  `packages/contracts/src/sale/sale.ts` — P3.5H.
+  `sale_line.sale_uom_id`/`sale_to_stock_factor` (nullable);
+  `createSale` computes `stockQuantityMilli` conditionally
+  (`Math.round((quantityMilli × saleToStockFactor) / 1000)` when a sale
+  UoM is given, unchanged otherwise) and uses it for
+  `stock_movement.quantity`, while `sale_line.quantity` keeps storing
+  the customer-facing quantity in whichever unit they bought it in;
+  `SaleLineInput` gained the matching both-or-neither refinement.
+- `apps/client/src/pages/sales/SalePage.tsx`, `CartTable.tsx` — P3.5H
+  UI. A unit toggle (Stock Unit / Alt Unit) shown only when the
+  selected item has an alt unit, defaulting to Stock Unit; the cart
+  shows the unit actually entered (`"10 Foot"`, not the converted
+  `"3.05 Kg"`). Required extending `ItemDto`/`ItemRecord` with
+  `altUomId`/`altUomFactorMilli` (previously absent from `item:search`
+  entirely — flagged as a deviation, owner chose client-side name
+  resolution via `ipc.item.lookups()` over a server-side JOIN, mirroring
+  `ItemsPage.tsx`'s own existing `uomName()` pattern).
+- `docs/decisions/ADR-0012-document-numbering.md`,
+  `ADR-0013-multi-unit-selling.md`, `docs/decisions/README.md` — written
+  at plan-approval time, before any code. Both required a correction
+  against their own kickoff-draft text, recorded inline in each file
+  (Golden Rule 6) — see Bugs/decisions below.
+
+**Verified:**
+
+- `npm run verify` — 160 (Phase 3 baseline) → 163 (A) → 166 (B) → 171
+  (C) → 176 (D+E, combined) → unchanged at 176 (F, code-review
+  checkpoint) → 183 (G) → unchanged at 183 (G-UI, build-only
+  checkpoint) → 186 (H). Every step exit 0, real output pasted at each
+  checkpoint.
+- Every sub-phase with new logic had its tests written first and
+  confirmed failing for the right reason (missing table/column/function,
+  never a wrong-reason failure) before implementation, per Golden Rule 1.
+- Hand calculations verified against real SQLite queries at P3.5B
+  (`INV-A-000042`→`INV-0042`), P3.5C (first sale/customer/supplier/
+  purchase/payment on a fresh DB → `INV-0001`/`CUS-0001`/`SUP-0001`/
+  `PUR-0001`/`RCP-0001`), P3.5D/E (all 4 fixed conversions: Kg→Gram
+  1,000,000; Liter→Milliliter 1,000,000; Foot→Inch 12,000; Meter→
+  Centimeter 100,000), P3.5G (`alt_uom_factor_milli = Math.round(0.305 ×
+
+1000. = 305`), and P3.5H (10 feet × 305 / 1000 = 3050 milli-kg
+  deducted — `stock_movement.quantity = -3050`, `sale_line.quantity =
+      10000`unchanged,`sale_to_stock_factor = 305`, all queried directly
+      and matching the hand calculation exactly).
+
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0 at P3.5G-UI and again at P3.5H.
+- Every temporary in-repo verification script (one per sub-phase
+  checkpoint needing raw multi-table output) was deleted immediately
+  after capturing its output, confirmed via a clean final `npm run
+verify` re-run.
+
+**Not done / deferred:**
+
+- `updateItem` — does not exist. Alt unit (and every other item field)
+  can only be set at creation or via CSV re-import. Build in Phase 8,
+  per the owner's H2 decision.
+- UoM conversion management UI (add/edit/delete) — Phase 4, per this
+  phase's stated scope.
+- `payment_out` business logic — seam only (H3), Phase 4/8.
+- `item.handler.ts`'s three pre-existing handlers still don't use
+  `withError` — pre-existing gap, noted at the P3.5F checkpoint, not
+  fixed (out of scope).
+- Phase 3's real-hardware timing number — still outstanding, unrelated
+  to this phase, still the one thing blocking Phase 3 COMPLETE.
+- P2-1/P2-2 IPC+UI (supplier CRUD, purchase entry) — still not
+  reachable from the running app, flagged again this session.
+
+**Bugs found:**
+
+- **`item.service.ts`'s `createItem()` silently dropped
+  `altUomId`/`altUomFactorMilli`** on the real IPC path — found while
+  fixing an `exactOptionalPropertyTypes` typecheck error during P3.5H,
+  not by a dedicated test (the P3.5G repository tests call
+  `KyselyItemRepository.createItem()` directly, bypassing this service
+  wrapper entirely, so they never exercised the bug). Fixed same
+  session, before any commit shipped it — not logged as a numbered
+  `PROJECT.md` bug, same precedent as Phase 3's `electron-api.d.ts`
+  drift.
+- ADR-0012's kickoff draft claimed `sale` used prefix `SAL` historically
+  — false, `sale` has used `INV` since Phase 3. Corrected in the ADR
+  file itself before any migration was written, not silently fixed.
+- ADR-0013's kickoff draft's worked examples contradicted their own
+  field definition (inverted conversion direction) — corrected in the
+  ADR file itself before any migration was written.
+
+**Decisions taken:** ADR-0012, ADR-0013 (both written this session, both
+with an inline correction against their own kickoff-draft text — see
+Bugs above). Seven further design decisions recorded in
+`docs/phases/PHASE_3.5.md` §5, none promoted to a full ADR (repository
+file placement, port-type widening for `exactOptionalPropertyTypes`,
+client-side vs. server-side alt-unit name resolution, etc.).
+
+**Blocked on:** nothing for Phase 3.5 itself — all exit criteria met.
+Phase 3's real-hardware timing number remains the one item blocking
+Phase 3 COMPLETE, unrelated to this phase's work.
+
+**Next session should:** get Phase 3's real-hardware timing number and
+close Phase 3, then take on the P2-1/P2-2 IPC+UI gap (now four phases
+overdue) before any Phase 4 feature work — Phase 4 needs supplier
+purchases reachable from the running app for its reports to have real
+data to show.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted throughout,
+      not "looks correct"
+- [x] No unresolved bugs introduced by this phase — one found and fixed
+      same session (see Bugs found)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — Phase 3.5 fully done; the
+      P2-1/P2-2 gap and Phase 3's timing number are the two items to
+      clear before Phase 4 feature work
+- [x] Any new bugs documented in PROJECT.md — the one bug found was
+      fixed same-session before any commit, per the established
+      not-a-numbered-bug precedent (documented here and in
+      `docs/phases/PHASE_3.5.md` §6 instead)
+- [x] Test suite passing — 186/186 in this sandbox
+
+---
+
 ## [2026-08-27] Session 9 — Phase 3: counter sale + udhaar, all sub-phases (P3-0–P3-4) built
 
 **Goal:** Build the full owner-approved Phase 3 plan across seven sub-phases

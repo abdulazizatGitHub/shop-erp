@@ -176,6 +176,8 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
       stockUomId,
       retailPricePaisa: 12345,
       trackStock: false,
+      altUomId: null,
+      altUomFactorMilli: null,
     });
   });
 
@@ -246,3 +248,55 @@ function rawDbInsertCategory(id: string, name: string): void {
     .prepare(`INSERT INTO category (id, tenant_id, name, sort_order) VALUES (?, ?, ?, 0)`)
     .run(id, TENANT_ID, name);
 }
+
+describe('KyselyItemRepository — alt unit', () => {
+  it('item created with alt unit persists both columns', async () => {
+    const footUomId = (
+      rawDb.prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Foot'`).get(TENANT_ID) as {
+        id: string;
+      }
+    ).id;
+
+    // altUomFactor input = 0.305 (kg per foot, ADR-0013's stored direction).
+    // factorMilli = Math.round(0.305 x 1000) = 305. That conversion happens
+    // at the contract/IPC layer, not here — the repository receives 305
+    // directly. This test passes 305 to confirm round-trip storage only.
+    const result = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Copper Pipe (alt unit)',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+      altUomId: footUomId,
+      altUomFactorMilli: 305,
+    });
+
+    const row = rawDb.prepare(`SELECT * FROM item WHERE id = ?`).get(result.id) as Record<
+      string,
+      unknown
+    >;
+    expect(row['alt_uom_id']).toBe(footUomId);
+    expect(row['alt_uom_factor_milli']).toBe(305);
+  });
+
+  it('item created without alt unit has NULL columns', async () => {
+    const result = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Item Without Alt Unit',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+
+    const row = rawDb.prepare(`SELECT * FROM item WHERE id = ?`).get(result.id) as Record<
+      string,
+      unknown
+    >;
+    expect(row['alt_uom_id']).toBeNull();
+    expect(row['alt_uom_factor_milli']).toBeNull();
+  });
+});

@@ -41,6 +41,11 @@ export interface NewItemImportRecord {
   readonly lowStockAlertQtyMilli: number | null;
   readonly shelfLocation: string | null;
   readonly notes: string | null;
+  // ADR-0013 Type 2 (item-specific alt-unit selling). Both null means
+  // the item sells in stock_uom only — see the Alt Unit/Alt Factor
+  // validation block in validateRow below.
+  readonly altUomId: string | null;
+  readonly altUomFactorMilli: number | null;
 }
 
 export interface ItemImportAccepted {
@@ -194,6 +199,41 @@ function validateRow(row: ParsedCsvRow, lookups: ItemImportLookups): ItemImportR
     purchaseToStockFactorMilli = Qty.fromUnits(factorUnits);
   }
 
+  // ADR-0013 Type 2 (item-specific alt-unit selling) — same both-or-neither
+  // shape as Purchase Unit/Units per Purchase Unit above. Math.round(x *
+  // 1000) is the only float operation permitted (CLAUDE.md).
+  const altUnitRaw = (c['Alt Unit'] ?? '').trim();
+  const altFactorRaw = (c['Alt Factor'] ?? '').trim();
+  let altUomId: string | null = null;
+  let altUomFactorMilli: number | null = null;
+  if (altUnitRaw.length > 0 || altFactorRaw.length > 0) {
+    if (altUnitRaw.length === 0 || altFactorRaw.length === 0) {
+      return {
+        rowNumber: row.rowNumber,
+        status: 'rejected',
+        reason: 'Alt Unit and Alt Factor must both be given, or both left blank',
+      };
+    }
+    const found = lookups.uomIdByName.get(normalize(altUnitRaw));
+    if (!found) {
+      return {
+        rowNumber: row.rowNumber,
+        status: 'rejected',
+        reason: `Alt Unit "${altUnitRaw}" not found`,
+      };
+    }
+    altUomId = found;
+    const altFactor = Number.parseFloat(altFactorRaw);
+    if (!Number.isFinite(altFactor) || altFactor <= 0) {
+      return {
+        rowNumber: row.rowNumber,
+        status: 'rejected',
+        reason: `Alt Factor is not a positive number: "${altFactorRaw}"`,
+      };
+    }
+    altUomFactorMilli = Math.round(altFactor * 1000);
+  }
+
   const trackStock = parseYesNo(c['Track Stock? (Y/N)'] ?? '', 'Track Stock? (Y/N)', true);
   if (typeof trackStock === 'string') {
     return { rowNumber: row.rowNumber, status: 'rejected', reason: trackStock };
@@ -285,6 +325,8 @@ function validateRow(row: ParsedCsvRow, lookups: ItemImportLookups): ItemImportR
       lowStockAlertQtyMilli,
       shelfLocation: (c['Shelf / Location'] ?? '').trim() || null,
       notes: (c['Notes'] ?? '').trim() || null,
+      altUomId,
+      altUomFactorMilli,
     },
   };
 }

@@ -1,11 +1,15 @@
 import type { Kysely } from 'kysely';
-import { formatDocNumber, Money, newId } from '@shop/shared';
+import { formatDisplayDocNumber, Money, newId } from '@shop/shared';
 import { type NewPaymentInput, type PaymentRecord, type PaymentRepositoryPort } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
 
-const PAYMENT_CODE_DOC_TYPE = 'payment';
-const PAYMENT_CODE_PREFIX = 'PAY';
+// Renamed by migration 0006 (ADR-0012): every payment row created before
+// or after this rename has direction='in' — no payment-out code path
+// exists yet (PROJECT.md, Phase 4/8). doc_type in document_sequence must
+// match what 0006 actually wrote: 'payment' -> 'payment_in'.
+const PAYMENT_CODE_DOC_TYPE = 'payment_in';
+const PAYMENT_CODE_PREFIX = 'RCP';
 const PAYMENT_DIRECTION_IN = 'in';
 const LEDGER_ENTRY_TYPE = 'payment_received';
 
@@ -48,7 +52,7 @@ export class KyselyPaymentRepository implements PaymentRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(PAYMENT_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(PAYMENT_CODE_PREFIX, nextNumber);
   }
 
   /**

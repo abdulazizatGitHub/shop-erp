@@ -12,6 +12,10 @@ interface FormState {
   stockUomId: string;
   retailPriceRupees: string;
   trackStock: boolean;
+  // ADR-0013 Type 2 (item-specific alt-unit selling) — both blank means
+  // the item sells in stock_uom only. altUomId '' = no alt unit chosen.
+  altUomId: string;
+  altUomFactor: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -22,6 +26,8 @@ const EMPTY_FORM: FormState = {
   stockUomId: '',
   retailPriceRupees: '',
   trackStock: true,
+  altUomId: '',
+  altUomFactor: '',
 };
 
 export function ItemsPage(): React.JSX.Element {
@@ -74,6 +80,25 @@ export function ItemsPage(): React.JSX.Element {
       return;
     }
 
+    // Mirrors CreateItemInput's Zod refinement (packages/contracts/src/item/item.ts):
+    // altUomId and altUomFactor must both be given, or both left blank.
+    const altUomId = form.altUomId.trim();
+    const altUomFactorRaw = form.altUomFactor.trim();
+    if (altUomId.length > 0 !== altUomFactorRaw.length > 0) {
+      setError('Alt Selling Unit and Alt Factor must both be given, or both left blank');
+      return;
+    }
+    let altUomFactorMilli: number | undefined;
+    if (altUomId.length > 0) {
+      const altUomFactorUnits = Number(altUomFactorRaw);
+      if (!Number.isFinite(altUomFactorUnits) || altUomFactorUnits <= 0) {
+        setError('Alt Factor is not a valid positive amount');
+        return;
+      }
+      // The only float operation permitted (CLAUDE.md): Math.round(x * 1000).
+      altUomFactorMilli = Math.round(altUomFactorUnits * 1000);
+    }
+
     ipc.item
       .create({
         itemCode: form.itemCode.trim().length > 0 ? form.itemCode.trim() : null,
@@ -83,6 +108,8 @@ export function ItemsPage(): React.JSX.Element {
         stockUomId: form.stockUomId,
         retailPricePaisa,
         trackStock: form.trackStock,
+        altUomId: altUomId.length > 0 ? altUomId : undefined,
+        altUomFactorMilli,
       })
       .then((result) => {
         setMessage(`Created ${result.itemCode}`);
@@ -197,6 +224,39 @@ export function ItemsPage(): React.JSX.Element {
             </select>
           </label>
         </div>
+        <div>
+          <label>
+            Alt selling unit (optional)
+            <select
+              value={form.altUomId}
+              onChange={(e) => {
+                setForm({ ...form, altUomId: e.target.value, altUomFactor: '' });
+              }}
+            >
+              <option value="">None — sells in stock unit only</option>
+              {lookups?.uoms.map((uom) => (
+                <option key={uom.id} value={uom.id}>
+                  {uom.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {form.altUomId.length > 0 && (
+          <div>
+            <label>
+              Alt Factor (units per 1 alt unit)
+              <input
+                required
+                inputMode="decimal"
+                value={form.altUomFactor}
+                onChange={(e) => {
+                  setForm({ ...form, altUomFactor: e.target.value });
+                }}
+              />
+            </label>
+          </div>
+        )}
         <div>
           <label>
             Retail price (Rs)

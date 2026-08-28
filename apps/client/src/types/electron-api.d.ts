@@ -41,6 +41,15 @@ export interface CustomerBalanceImportResult {
   readonly skipped: number;
 }
 
+export interface UomConversionOption {
+  readonly id: string;
+  readonly fromUomId: string;
+  readonly fromUomName: string;
+  readonly toUomId: string;
+  readonly toUomName: string;
+  readonly factorMilli: number;
+}
+
 export interface ElectronApi {
   readonly system: {
     readonly ping: () => Promise<{ tableCount: number }>;
@@ -59,6 +68,9 @@ export interface ElectronApi {
   };
   readonly payment: {
     readonly receive: (input: CreatePaymentInput) => Promise<PaymentDto>;
+  };
+  readonly uom: {
+    readonly listConversions: () => Promise<readonly UomConversionOption[]>;
   };
   readonly importData: {
     readonly dryRun: () => Promise<ImportResult | null>;

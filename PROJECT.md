@@ -3,31 +3,32 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-27
-**Current phase:** Phase 3 — Counter sale + udhaar
+**Last updated:** 2026-08-28
+**Current phase:** Phase 3.5 — Document numbering + multi-unit selling
 **Phase status:** ⏳ ALL SUB-PHASES BUILT AND VERIFIED IN SANDBOX
-(P3-0–P3-4) — 2026-08-27. **Not marked COMPLETE**: the one remaining exit
-criterion (a full sale timed ≤30 seconds keyboard-only) requires real
-hardware and cannot be verified in this sandbox — see
-`docs/phases/PHASE_3.md` §4. Built this phase: shared `withRetry`/
-`withError` helper (BUG-15's fix — restarts the entire transaction on
-`SQLITE_BUSY`, never a raw SqliteError to the renderer), customer CRUD
-(`CUS-A-000001` codes), counter sale (price resolution with a 4-case
-fallback order, credit-limit/negative-stock/unit-cost-missing warnings
-that never block a commit, cancellation via reversing rows only), a
-keyboard-driven sale screen (item search → qty → cart → checkout →
-warning gate → success, F10/Enter/Escape/C/U shortcuts, mouse optional
-everywhere), payment received (customer payments, `payment.amount`
-unsigned + `direction` vs `party_ledger.amount` signed — two different,
-intentionally incompatible conventions), and customer opening-balance
-import (dry-run/commit, idempotent on customer + bill reference,
-DB-layer SELECT-before-INSERT idempotency check, already-settled bills
-skipped silently). 160 tests passing, all real-DB, in this sandbox.
-**Next milestone:** get the real-hardware timing number from the owner
-and close Phase 3, then Phase 4 (printing + reports) — but first budget
-time for the P2-1/P2-2 IPC+UI gap (supplier CRUD, purchase entry
-reachability), deferred out of Phase 3 by an explicit scope decision and
-still not reachable from the running app three phases later.
+(P3.5A–P3.5H, including P3.5G-UI) — 2026-08-28. All stated exit criteria
+met — see `docs/phases/PHASE_3.5.md` §4. Built this phase: document
+numbers reformatted from `PREFIX-DEVICE-NNNNNN` to `PREFIX-NNNN`
+(migration 0006), `payment` renamed to `payment_in`/`RCP` with an unused
+`payment_out`/`PMT` seam seeded; a fixed `uom_conversion` table (migration 0007) seeded with 4 conversions at bootstrap plus a read-only
+`uom:listConversions` channel; item-level alt-unit selling (migration
+0008, `item.alt_uom_id`/`alt_uom_factor_milli`, `createItem` + CSV import
+
+- item-form UI, createItem-only per the H2 scope decision — no
+  `updateItem` anywhere in this codebase); sale-line alt-unit selling
+  (migration 0009, `sale_line.sale_uom_id`/`sale_to_stock_factor`,
+  `createSale`'s stock-quantity conversion, a sale-screen unit toggle).
+  186 tests passing, all real-DB, in this sandbox; both apps build clean.
+  One real bug found and fixed same-session (not a numbered bug — closed
+  before any commit shipped it): `item.service.ts`'s `createItem()` was
+  silently dropping `altUomId`/`altUomFactorMilli` on the real IPC path,
+  never caught by the repository-level tests since those call
+  `KyselyItemRepository.createItem()` directly.
+  **Next milestone:** Phase 3's still-outstanding real-hardware timing
+  number (unrelated to 3.5, still blocking Phase 3 COMPLETE — see
+  `docs/phases/PHASE_3.md` §4), then the P2-1/P2-2 IPC+UI gap (supplier
+  CRUD, purchase entry reachability, still not reachable from the running
+  app three phases after Phase 2 closed), then Phase 4 (printing + reports).
 
 ---
 
@@ -45,17 +46,18 @@ still not reachable from the running app three phases later.
 
 ## 2. Phase status
 
-| Phase | Name                         | Status                                               | Completed                                                                      |
-| ----- | ---------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 0     | Foundation & Environment     | COMPLETE                                             | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both |
-| 1     | Item master + import         | COMPLETE                                             | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified  |
-| 2     | Purchases + suppliers        | COMPLETE                                             | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                     |
-| 3     | Counter sale + udhaar        | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4     |
-| 4     | Printing + reports           | NOT STARTED                                          | —                                                                              |
-| 5     | Deploy + parallel run        | NOT STARTED                                          | —                                                                              |
-| 6     | Repair jobs (two-unit split) | NOT STARTED                                          | —                                                                              |
-| 7     | Staff, wages, expenses       | NOT STARTED                                          | —                                                                              |
-| 8     | Bug-fix & hardening          | NOT STARTED                                          | —                                                                              |
+| Phase | Name                                    | Status                                               | Completed                                                                                     |
+| ----- | --------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment                | COMPLETE                                             | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                |
+| 1     | Item master + import                    | COMPLETE                                             | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                 |
+| 2     | Purchases + suppliers                   | COMPLETE                                             | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                    |
+| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
+| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met        | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
+| 4     | Printing + reports                      | NOT STARTED                                          | —                                                                                             |
+| 5     | Deploy + parallel run                   | NOT STARTED                                          | —                                                                                             |
+| 6     | Repair jobs (two-unit split)            | NOT STARTED                                          | —                                                                                             |
+| 7     | Staff, wages, expenses                  | NOT STARTED                                          | —                                                                                             |
+| 8     | Bug-fix & hardening                     | NOT STARTED                                          | —                                                                                             |
 
 ---
 
@@ -865,19 +867,21 @@ regression test, not just a one-time manual check — see
 
 ## 5. Decisions taken (full ADRs in `docs/decisions/`, indexed in [`docs/decisions/README.md`](docs/decisions/README.md))
 
-| ADR  | Decision                                                                         | Date       |
-| ---- | -------------------------------------------------------------------------------- | ---------- |
-| 0001 | TypeScript everywhere; no Python                                                 | 2026-08-08 |
-| 0002 | SQLite locally; Postgres reserved for future cloud                               | 2026-08-08 |
-| 0003 | Money as INTEGER paisa; quantity as INTEGER milli-units                          | 2026-08-08 |
-| 0004 | Stock and ledger are append-only event tables                                    | 2026-08-08 |
-| 0005 | Two business units separated by line-level tagging, not internal sales           | 2026-08-08 |
-| 0006 | Technician custody modelled as a warehouse; shortages noted, never auto-deducted | 2026-08-08 |
-| 0007 | Payer is per line, not per job (Dawlance pays labour, customer pays extra pipe)  | 2026-08-08 |
-| 0008 | Flat item list; no product/variant matrix                                        | 2026-08-08 |
-| 0009 | Permissions are code, not a metadata engine                                      | 2026-08-08 |
-| 0010 | Peer business units + SHARED overhead pool, allocated at report time             | 2026-08-09 |
-| 0011 | `client`/`server`/`contracts` naming supersedes `desktop`/`renderer` in docs     | 2026-08-10 |
+| ADR  | Decision                                                                                                                                                           | Date       |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 0001 | TypeScript everywhere; no Python                                                                                                                                   | 2026-08-08 |
+| 0002 | SQLite locally; Postgres reserved for future cloud                                                                                                                 | 2026-08-08 |
+| 0003 | Money as INTEGER paisa; quantity as INTEGER milli-units                                                                                                            | 2026-08-08 |
+| 0004 | Stock and ledger are append-only event tables                                                                                                                      | 2026-08-08 |
+| 0005 | Two business units separated by line-level tagging, not internal sales                                                                                             | 2026-08-08 |
+| 0006 | Technician custody modelled as a warehouse; shortages noted, never auto-deducted                                                                                   | 2026-08-08 |
+| 0007 | Payer is per line, not per job (Dawlance pays labour, customer pays extra pipe)                                                                                    | 2026-08-08 |
+| 0008 | Flat item list; no product/variant matrix                                                                                                                          | 2026-08-08 |
+| 0009 | Permissions are code, not a metadata engine                                                                                                                        | 2026-08-08 |
+| 0010 | Peer business units + SHARED overhead pool, allocated at report time                                                                                               | 2026-08-09 |
+| 0011 | `client`/`server`/`contracts` naming supersedes `desktop`/`renderer` in docs                                                                                       | 2026-08-10 |
+| 0012 | Document numbers are `PREFIX-NNNN` (4-digit min, no device code); `payment` splits into `payment_in`/RCP and `payment_out`/PMT                                     | 2026-08-28 |
+| 0013 | Items may sell in a unit different from stock unit — fixed conversions (`uom_conversion`) and item-specific conversions (`item.alt_uom_id`/`alt_uom_factor_milli`) | 2026-08-28 |
 
 ---
 

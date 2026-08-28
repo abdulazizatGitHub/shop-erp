@@ -30,6 +30,7 @@ export const channels = {
   },
   purchase: { create: 'purchase:create', cancel: 'purchase:cancel' },
   payment: { receive: 'payment:receive', pay: 'payment:pay' },
+  uom: { listConversions: 'uom:listConversions' },
   report: {
     dailySales: 'report:dailySales',
     receivables: 'report:receivables',

@@ -25,3 +25,13 @@ export function isId(value: unknown): value is Id {
 export function formatDocNumber(prefix: string, deviceCode: string, sequence: number): string {
   return `${prefix}-${deviceCode}-${String(sequence).padStart(6, '0')}`;
 }
+
+/**
+ * Display document number: INV-0001 (ADR-0012). No device code — the
+ * device_code column still exists on document_sequence for future
+ * multi-device collision prevention, it just isn't shown. Pads to 4
+ * digits minimum; a sequence of 10000 or more displays as-is.
+ */
+export function formatDisplayDocNumber(prefix: string, sequence: number): string {
+  return `${prefix}-${String(sequence).padStart(4, '0')}`;
+}

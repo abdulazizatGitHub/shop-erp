@@ -35,6 +35,8 @@ export interface ItemTable {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  altUomId: string | null;
+  altUomFactorMilli: number | null;
 }
 
 export interface ItemPriceTable {
@@ -224,6 +226,8 @@ export interface SaleLineTable {
   taxAmount: number;
   lineTotal: number;
   businessUnitId: string | null;
+  saleUomId: string | null;
+  saleToStockFactor: number | null;
 }
 
 export interface PartyLedgerTable {
@@ -285,6 +289,14 @@ export interface SyncOutboxTable {
   lastError: string | null;
 }
 
+export interface UomConversionTable {
+  id: string;
+  tenantId: string;
+  fromUomId: string;
+  toUomId: string;
+  factorMilli: number;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -293,6 +305,7 @@ export interface Database {
   businessUnit: BusinessUnitTable;
   priceLevel: PriceLevelTable;
   uom: UomTable;
+  uomConversion: UomConversionTable;
   category: CategoryTable;
   brand: BrandTable;
   warehouse: WarehouseTable;

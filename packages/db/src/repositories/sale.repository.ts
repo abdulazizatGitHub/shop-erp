@@ -1,5 +1,5 @@
 import { sql, type Kysely } from 'kysely';
-import { formatDocNumber, Money, newId } from '@shop/shared';
+import { formatDisplayDocNumber, Money, newId } from '@shop/shared';
 import {
   computeLineTotalPaisa,
   isCreditLimitExceeded,
@@ -58,7 +58,7 @@ export class KyselySaleRepository implements SaleRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(SALE_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(SALE_CODE_PREFIX, nextNumber);
   }
 
   private async resolveDefaultWarehouseId(trx: Kysely<Database>): Promise<string> {
@@ -156,6 +156,16 @@ export class KyselySaleRepository implements SaleRepositoryPort {
           readonly unitCostPaisa: number | null;
           readonly lineTotalPaisa: number;
           readonly businessUnitId: string;
+          /**
+           * ADR-0013 Type 2 — the amount actually deducted from stock, in
+           * stock_uom milli-units. Equal to quantityMilli when the line
+           * was entered in stock_uom (saleUomId absent). When entered in
+           * an alt unit: Math.round((quantityMilli * saleToStockFactor) /
+           * 1000) — the only permitted float-adjacent operation.
+           */
+          readonly stockQuantityMilli: number;
+          readonly saleUomId: string | null;
+          readonly saleToStockFactor: number | null;
         }
         const computedLines: ComputedLine[] = [];
         let unitCostMissing = false;
@@ -194,8 +204,19 @@ export class KyselySaleRepository implements SaleRepositoryPort {
 
           if (item.avgCost === null) unitCostMissing = true;
 
+          // ADR-0013 Type 2: when saleUomId is absent, stock deduction
+          // equals the input quantity unchanged (existing behavior). When
+          // present, convert to stock_uom milli-units — never re-derive
+          // the factor from the item's current alt_uom_factor_milli, use
+          // exactly what the caller supplied (the snapshot sale_line
+          // will store).
+          const stockQuantityMilli =
+            line.saleUomId !== undefined && line.saleToStockFactor !== undefined
+              ? Math.round((line.quantityMilli * line.saleToStockFactor) / 1000)
+              : line.quantityMilli;
+
           const currentQtyMilli = await this.readStockOnHandMilli(trx, line.itemId, warehouseId);
-          if (isStockBelowZero(currentQtyMilli, line.quantityMilli)) stockBelowZero = true;
+          if (isStockBelowZero(currentQtyMilli, stockQuantityMilli)) stockBelowZero = true;
 
           computedLines.push({
             lineNo: index + 1,
@@ -206,6 +227,9 @@ export class KyselySaleRepository implements SaleRepositoryPort {
             unitCostPaisa: item.avgCost,
             lineTotalPaisa,
             businessUnitId: item.businessUnitId,
+            stockQuantityMilli,
+            saleUomId: line.saleUomId ?? null,
+            saleToStockFactor: line.saleToStockFactor ?? null,
           });
         }
 
@@ -269,6 +293,9 @@ export class KyselySaleRepository implements SaleRepositoryPort {
               itemId: line.itemId,
               // Snapshot of the item name at sale time — docs/DATABASE_RULES.md §3.
               description: line.nameEn,
+              // The qty the customer bought, in whichever unit they bought
+              // it in (sale_uom, or stock_uom when saleUomId is absent) —
+              // never the stock-converted amount.
               quantity: line.quantityMilli,
               unitPrice: line.unitPricePaisa,
               unitCost: line.unitCostPaisa,
@@ -277,6 +304,8 @@ export class KyselySaleRepository implements SaleRepositoryPort {
               taxAmount: 0,
               lineTotal: line.lineTotalPaisa,
               businessUnitId: line.businessUnitId,
+              saleUomId: line.saleUomId,
+              saleToStockFactor: line.saleToStockFactor,
             })
             .execute();
 
@@ -289,7 +318,9 @@ export class KyselySaleRepository implements SaleRepositoryPort {
               warehouseId,
               movementDate: input.saleDate,
               movementType: 'sale',
-              quantity: -line.quantityMilli,
+              // Always in stock_uom milli-units — line.stockQuantityMilli
+              // already applied the conversion, if any (ADR-0013).
+              quantity: -line.stockQuantityMilli,
               unitCost: line.unitCostPaisa,
               serialId: null,
               sourceType: 'sale',

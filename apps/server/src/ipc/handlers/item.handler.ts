@@ -7,9 +7,12 @@ import {
   listBusinessUnits,
   listCategories,
   listUoms,
+  listUomConversions,
   openDatabase,
+  type UomConversionOption,
 } from '@shop/db';
 import { channels } from '../channels.js';
+import { withError } from '../middleware/with-error.js';
 
 export interface ItemHandlerDeps {
   readonly dbPath: string;
@@ -54,4 +57,16 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
       db.close();
     }
   });
+
+  ipcMain.handle(
+    channels.uom.listConversions,
+    withError(async (): Promise<readonly UomConversionOption[]> => {
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await listUomConversions(createKyselyDb(db), deps.tenantId);
+      } finally {
+        db.close();
+      }
+    }),
+  );
 }
