@@ -4,31 +4,29 @@
 > Updated at the end of every session. Read at the start of every session.
 
 **Last updated:** 2026-08-28
-**Current phase:** Phase 3.5 — Document numbering + multi-unit selling
-**Phase status:** ⏳ ALL SUB-PHASES BUILT AND VERIFIED IN SANDBOX
-(P3.5A–P3.5H, including P3.5G-UI) — 2026-08-28. All stated exit criteria
-met — see `docs/phases/PHASE_3.5.md` §4. Built this phase: document
-numbers reformatted from `PREFIX-DEVICE-NNNNNN` to `PREFIX-NNNN`
-(migration 0006), `payment` renamed to `payment_in`/`RCP` with an unused
-`payment_out`/`PMT` seam seeded; a fixed `uom_conversion` table (migration 0007) seeded with 4 conversions at bootstrap plus a read-only
-`uom:listConversions` channel; item-level alt-unit selling (migration
-0008, `item.alt_uom_id`/`alt_uom_factor_milli`, `createItem` + CSV import
-
-- item-form UI, createItem-only per the H2 scope decision — no
-  `updateItem` anywhere in this codebase); sale-line alt-unit selling
-  (migration 0009, `sale_line.sale_uom_id`/`sale_to_stock_factor`,
-  `createSale`'s stock-quantity conversion, a sale-screen unit toggle).
-  186 tests passing, all real-DB, in this sandbox; both apps build clean.
-  One real bug found and fixed same-session (not a numbered bug — closed
-  before any commit shipped it): `item.service.ts`'s `createItem()` was
-  silently dropping `altUomId`/`altUomFactorMilli` on the real IPC path,
-  never caught by the repository-level tests since those call
-  `KyselyItemRepository.createItem()` directly.
-  **Next milestone:** Phase 3's still-outstanding real-hardware timing
-  number (unrelated to 3.5, still blocking Phase 3 COMPLETE — see
-  `docs/phases/PHASE_3.md` §4), then the P2-1/P2-2 IPC+UI gap (supplier
-  CRUD, purchase entry reachability, still not reachable from the running
-  app three phases after Phase 2 closed), then Phase 4 (printing + reports).
+**Current phase:** Phase 2G — P2-1/P2-2 IPC+UI gap closure
+**Phase status:** ✅ COMPLETE — 2026-08-28 (PG-A–PG-D). Supplier CRUD
+and purchase entry, built at the core+repository layer since Phase 2
+(2026-08-24) but never reachable from the running app, are now wired
+end to end: `getSupplierBalance` added to `PartyRepositoryPort`
+(mirrors `getCustomerBalance`); supplier and purchase Zod contracts,
+`withError`-wrapped IPC handlers, and `SuppliersPage`/`PurchasePage`
+screens (new "Suppliers" list/add/import toggle and a new "Purchases"
+tab in `App.tsx`); `createPurchase`/`cancelPurchase` wrapped in
+`withRetry`, extending BUG-15's fix to purchase's first real IPC-reachable
+write path. 187 tests passing (186 + 1 new: `getSupplierBalance`), both
+apps build clean — see `docs/phases/PHASE_2G.md` §4. Three pre-existing
+compile-correctness gaps fixed inline, not new scope: `KyselyPurchaseRepository`
+and `SupplierBalance` were never exported from their package indexes;
+`electron-api.d.ts`'s `customer` block was missing `create`/`get`/`balance`.
+**Not verified this session:** the Electron window itself — this sandbox
+still cannot launch it (BUG-7: no Visual Studio Build Tools, confirmed
+again this session via a real `npm run dev` attempt that failed at the
+`electron-rebuild` step before reaching a window). Owner must click
+through both new tabs on real hardware.
+**Next milestone:** Phase 3's still-outstanding real-hardware timing
+number (unrelated to this phase, still blocking Phase 3 COMPLETE — see
+`docs/phases/PHASE_3.md` §4), then Phase 4 (printing + reports).
 
 ---
 
@@ -51,6 +49,7 @@ numbers reformatted from `PREFIX-DEVICE-NNNNNN` to `PREFIX-NNNN`
 | 0     | Foundation & Environment                | COMPLETE                                             | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                |
 | 1     | Item master + import                    | COMPLETE                                             | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                 |
 | 2     | Purchases + suppliers                   | COMPLETE                                             | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                    |
+| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                             | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                   |
 | 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
 | 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met        | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
 | 4     | Printing + reports                      | NOT STARTED                                          | —                                                                                             |
@@ -804,6 +803,26 @@ duplicate document numbers, by the same underlying mechanism this bug
 describes (see `docs/phases/PHASE_2.md` §5d). Do not treat that as
 evidence this bug is safe to ignore elsewhere — §5d's finding is
 specific to that code's statement ordering, not a general exemption.
+
+### BUG-16: Purchase entry UI omits bill reference/due date/bill notes — credit purchases post party_ledger rows with no bill metadata — LOW
+
+Found in: Phase 2G, 2026-08-28
+Description: `CreatePurchaseInput` (`packages/contracts/src/purchase/purchase.ts`)
+requires `supplierInvoiceNo`/`billReference`/`dueDate`/`billNotes` (all
+nullable). `PurchasePage.tsx`'s form does not collect any of these
+fields — it always sends `null`. On a credit purchase, `createPurchase`
+writes these nulls onto the `party_ledger` row's migration-0004 columns,
+unlike the supplier opening-balance importer, which populates them from
+its own input.
+Impact: A credit purchase entered through the new Purchases screen gets
+a ledger entry with no bill/invoice reference to reconcile against
+later. Money and stock are still correct — this is a usability gap, not
+a correctness bug.
+Fix: Add Bill Reference / Due Date / Bill Notes / Supplier Invoice No.
+fields to `PurchasePage.tsx`'s form, at minimum for the credit path.
+Status: UNFIXED — not in PG-D's stated field list; a deliberate
+scope-narrowing this session, not an oversight discovered afterward. See
+`docs/phases/PHASE_2G.md` §5/§8.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 

@@ -41,6 +41,203 @@
 
 ---
 
+## [2026-08-28] Session 11 — Phase 2G: P2-1/P2-2 IPC+UI gap closure, all sub-phases (PG-A–PG-D) built
+
+**Goal:** Close the P2-1/P2-2 IPC+UI gap — supplier CRUD and purchase
+entry, built at the core+repository layer in Phase 2 (2026-08-24) but
+never reachable from the running app, four phases and four sessions
+overdue per every prior session's "next session should" note. Plan-lock
+turn established four owner decisions up front (F1–F4) before any code:
+build `getSupplierBalance` (F1), in-session-only purchase list, no new
+repository method (F2), leave `party.ledger` unregistered (F3), wrap
+`createPurchase`/`cancelPurchase` in `withRetry` before their handlers
+existed (F4).
+
+**Done:**
+
+- `packages/core/src/party/party.repository.port.ts`,
+  `packages/db/src/repositories/party.repository.ts` — PG-A.
+  `getSupplierBalance` added, mirroring `getCustomerBalance` exactly
+  against the same `v_party_balance` view (confirmed party-type-agnostic
+  by reading it — no `party_type` filter). Returns `{supplierId, name,
+balancePaisa}` — `name` comes free from the view; `partyCode` was
+  deliberately omitted since the view doesn't carry it and adding a join
+  would have grown past the "~10 lines, same pattern" instruction.
+- `packages/contracts/src/party/supplier.ts` (new),
+  `packages/contracts/src/index.ts` — PG-A. `CreateSupplierInput`,
+  `SupplierSearchInput`, `SupplierIdInput`, `SupplierDto`,
+  `SupplierBalanceDto`.
+- `apps/server/src/ipc/handlers/supplier.handler.ts` (new),
+  `apps/server/src/ipc/channels.ts` (`party.get` added — didn't exist),
+  `main.ts`, `preload.ts`, `electron-api.d.ts` — PG-A. Registers
+  `party.create`/`party.search`/`party.get`/`party.balance`, mirroring
+  `customer.handler.ts` exactly: `withError`-wrapped, Zod-validated,
+  no business logic.
+- `packages/db/src/repositories/purchase.repository.ts` — PG-B.
+  `createPurchase`/`cancelPurchase` wrapped in `withRetry`, matching
+  `sale.repository.ts`'s exact pattern (`return withRetry(() =>
+this.db.transaction().execute(...))`, whole closure re-run on
+  `SQLITE_BUSY`). Read `BUG-15`'s design constraint and
+  `sale.repository.ts` before applying it, per instruction.
+- `packages/db/src/repositories/purchase.repository.test.ts` —
+  unplanned but required correction, done with explicit approval before
+  touching it. Wrapping `cancelPurchase` in `withRetry` broke one
+  pre-existing test ("two concurrent cancel calls from SEPARATE
+  connections") whose entire purpose was documenting BUG-15's original
+  symptom: it asserted the loser got a raw `SQLITE_BUSY` `.code`. With
+  `withRetry` in place, the loser now retries, observes the winner's
+  already-committed status, and throws the same clean
+  `Purchase <id> is already cancelled` domain error a sequential
+  double-cancel produces — proof the fix worked, not a regression.
+  Updated the assertions (four checks: instance of `Error`, no `.code`,
+  message contains "already cancelled", message contains the purchase
+  id) and the header comment to describe the new behavior.
+- `packages/contracts/src/purchase/purchase.ts` (new),
+  `packages/contracts/src/index.ts` — PG-B. `PurchaseLineInput`,
+  `CreatePurchaseInput`, `PurchaseIdInput`, `PurchaseLineDto`,
+  `PurchaseDto`. Diverges from the original kickoff-draft field list in
+  three ways, all flagged before writing: no `purchaseUomId` (doesn't
+  exist on `NewPurchaseLineInput` — per-line conversion already comes
+  from `item.purchaseToStockFactor`, read inside `createPurchase`;
+  including it would validate but silently do nothing, the same class of
+  bug Session 10 hit with `altUomId`); `paymentMode` restricted to
+  `'cash' | 'credit'` (the only values `PurchasePaymentMode` accepts —
+  a wider enum would not compile); `supplierInvoiceNo`/`billReference`/
+  `dueDate`/`billNotes` added (required by `NewPurchaseInput`, not in
+  the original field list).
+- `apps/server/src/ipc/handlers/purchase.handler.ts` (new),
+  `packages/db/src/index.ts` (`KyselyPurchaseRepository` export — never
+  existed), `packages/core/src/index.ts` (`SupplierBalance` export —
+  caught by `tsc`, not anticipated), `main.ts`, `preload.ts`,
+  `electron-api.d.ts` — PG-B. Registers `purchase.create`/
+  `purchase.cancel`.
+- `apps/client/src/pages/parties/SuppliersPage.tsx` (new) — PG-C. Three
+  toggled views: List/Search (plain debounced search feeding a
+  persistent table with lazily-loaded per-row balance — `SearchSelect`'s
+  dropdown-highlight-select pattern doesn't fit a browsable multi-column
+  table, so this reuses its underlying `debounce` helper instead, not
+  the component itself), Add New (create form matching
+  `CreateSupplierInput`), Import Balances (renders the pre-existing
+  `SuppliersImportPage` unchanged, not duplicated). Replaces the
+  Suppliers tab's content in `App.tsx`.
+- `apps/client/src/types/electron-api.d.ts` — PG-C, explicit bug fix not
+  new scope. `customer` block only declared `search`; added
+  `create`/`get`/`balance`, which `preload.ts` had already exposed since
+  Phase 3 — the same class of drift this file has needed fixing twice
+  before.
+- `apps/client/src/pages/purchases/PurchasePage.tsx` (new) — PG-D.
+  Supplier search (`SearchSelect` reused directly here — a genuine
+  pick-one scenario, unlike `SuppliersPage`'s browsable table), purchase
+  date, payment mode (cash/credit only — see contracts note above), item
+  search + qty + unit-cost line entry, lines table reusing `CartTable`/
+  `lineTotalPaisa`/`CartLine` directly (a purchase line is structurally
+  identical to a sale line — reusing rather than forking avoids exactly
+  the "three near-duplicates" CLAUDE.md §9 warns about). Unit cost
+  PKR→paisa uses `Money.fromRupees` (already does the requested
+  round-half-up-then-×100 conversion and is already used identically in
+  `SalePage.tsx`) rather than a hand-written `Math.round`. In-session
+  (client-memory-only) list of purchases created this run, per F2 — no
+  new repository method. New "Purchases" tab in `App.tsx`.
+- `docs/phases/PHASE_2G.md` (new) — full phase doc, all four sub-phases,
+  exit criteria, design decisions, bugs found.
+
+**Verified:**
+
+- `npm run verify` — 186 (session start) → 187 (PG-A, one new test:
+  `getSupplierBalance returns correct balance`) → unchanged at 187
+  through PG-B/PG-C/PG-D (wiring/UI only, no new tests, per the
+  established P3D/P3.5F code-review-checkpoint precedent). Every
+  checkpoint's real output pasted, not summarized.
+- `getSupplierBalance`'s test written first and confirmed failing for
+  the right reason (`repo.getSupplierBalance is not a function`) before
+  implementation.
+- Hand calculation: seeded a supplier with one `party_ledger` row
+  `amount = -500000`; `SUM(party_ledger.amount) = -500000` →
+  `v_party_balance.balance_paisa = -500000` → asserted exactly that.
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0 at every one of PG-A/B/C/D's checkpoints.
+- **Attempted a real Electron launch this session** (`npm run dev
+--workspace=@shop/server`), not just a build — failed at the
+  pre-existing `electron-rebuild` step ("Could not find any Visual
+  Studio installation to use"), the same sandbox limitation `PROJECT.md`
+  BUG-7 has documented since Phase 0. Never reached `electron-vite dev`
+  or a window. The attempt left `better-sqlite3` Electron-targeted;
+  restored via `npm install better-sqlite3 --no-save` and re-ran
+  `npm run verify` — 187/187 green again, confirming no lasting damage.
+  **Neither `SuppliersPage` nor `PurchasePage` has been clicked through
+  in a real window** — verified only by typecheck/build/lint in this
+  sandbox, consistent with every previous UI phase in this project.
+
+**Not done / deferred:**
+
+- Real-hardware click-through of both new tabs — owner must do this; see
+  BUG-7's precedent for why this sandbox cannot.
+- A real, DB-backed purchase list/search — `PurchasePage`'s list is
+  in-session only, per F2. Natural Phase 4 work.
+- Bill reference / due date / bill notes / supplier invoice number
+  fields on the purchase entry form — not in PG-D's field list; logged
+  as BUG-16.
+- Phase 3's still-outstanding real-hardware timing number — unrelated to
+  this phase, still the one thing blocking Phase 3 COMPLETE.
+
+**Bugs found:**
+
+- **BUG-16** (LOW) — purchase entry UI omits bill metadata fields on
+  credit purchases. Logged, not fixed — deliberate scope-narrowing.
+- Three pre-existing compile-correctness gaps found and fixed same
+  session, not logged as numbered bugs (same precedent as Session 10's
+  `item.service.ts` fix): `KyselyPurchaseRepository` and
+  `SupplierBalance` were never exported from their package indexes;
+  `electron-api.d.ts`'s `customer` block was missing `create`/`get`/
+  `balance`.
+- One test correction, not a bug: `purchase.repository.test.ts`'s
+  double-cancel test rewritten to assert the `withRetry`-fixed behavior
+  instead of the pre-fix `SQLITE_BUSY` behavior it originally documented
+  (owner-approved before touching it).
+
+**Decisions taken:** F1–F4 (session-local, locked by the owner before
+PG-A began — see above). None promoted to a full ADR; seven further
+design decisions recorded in `docs/phases/PHASE_2G.md` §5 (the
+`SupplierBalance`-not-`PartyBalance` shape, the `withRetry` wrap, the
+test-correction reasoning, the omitted purchase-form fields, the
+in-session-list choice, the `SearchSelect`-vs-plain-table split between
+the two new pages, the `CartTable` reuse, the `Money.fromRupees` reuse,
+and the cash/credit-only payment mode).
+
+**Blocked on:** nothing for Phase 2G itself — all stated exit criteria
+met except real-hardware UI verification, which this sandbox cannot
+perform (BUG-7). Phase 3's real-hardware timing number remains the one
+item blocking Phase 3 COMPLETE, unrelated to this phase's work.
+
+**Next session should:** get the owner to click through both new tabs
+(Suppliers list/add/import toggle, Purchases entry form) on real
+hardware and confirm the UI actually works, not just compiles. Then
+either close Phase 3 (get its outstanding timing number) or start Phase
+4 (printing + reports) — Phase 4 now has real supplier/purchase data to
+report against for the first time.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted throughout,
+      including the real (failed) Electron launch attempt, not silently
+      skipped
+- [x] No unresolved bugs introduced by this phase — BUG-16 is a
+      deliberate scope-narrowing, not a defect in this session's own
+      code; the double-cancel test change is a correction proving a fix
+      worked, not a regression
+- [x] PROJECT.md updated with new status — Phase 2G marked COMPLETE,
+      added to the phase status table, BUG-16 logged
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — Phase 4 now has real
+      supplier/purchase IPC+UI to report against; Phase 3's timing
+      number is the only unrelated item still open
+- [x] Any new bugs documented in PROJECT.md — BUG-16
+- [x] Test suite passing — 187/187 in this sandbox; real-hardware
+      confirmation (including the UI itself, not just `npm test`) still
+      owed by the owner
+
+---
+
 ## [2026-08-28] Session 10 — Phase 3.5: document numbering + multi-unit selling, all sub-phases (P3.5A–P3.5H incl. P3.5G-UI) built
 
 **Goal:** Build the owner-approved Phase 3.5 plan (ADR-0012 document
