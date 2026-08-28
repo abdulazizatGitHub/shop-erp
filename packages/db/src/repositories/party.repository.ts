@@ -9,6 +9,7 @@ import type {
   NewSupplierInput,
   NewSupplierResult,
   PartyRepositoryPort,
+  SupplierBalance,
   SupplierRecord,
   SupplierSearchQuery,
 } from '@shop/core';
@@ -149,6 +150,26 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
 
     const rows = await q.execute();
     return rows.map(toSupplierRecord);
+  }
+
+  /**
+   * Reads v_party_balance directly (docs/SYSTEM_DESIGN.md §7 — reports
+   * read from views, never re-implement the aggregation), same pattern
+   * as getCustomerBalance. The view carries `name` for free; it does not
+   * carry `party_code`, so this type omits it rather than adding a join.
+   */
+  async getSupplierBalance(supplierId: string): Promise<SupplierBalance> {
+    const result = await sql<{ name: string; balancePaisa: number }>`
+      SELECT name, balance_paisa AS balancePaisa
+      FROM v_party_balance
+      WHERE party_id = ${supplierId} AND tenant_id = ${this.tenantId}
+    `.execute(this.db);
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error(`Supplier ${supplierId} not found`);
+    }
+    return { supplierId, name: row.name, balancePaisa: row.balancePaisa };
   }
 
   private async nextCustomerCode(trx: Kysely<Database>): Promise<string> {

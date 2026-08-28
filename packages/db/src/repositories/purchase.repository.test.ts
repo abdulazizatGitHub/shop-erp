@@ -558,28 +558,33 @@ describe('KyselyPurchaseRepository.cancelPurchase', () => {
     // openDatabase(dbPath) and closes it when done — a future
     // purchase:cancel handler would do the same. Two such connections do
     // NOT share Kysely's per-connection mutex (see the test above), so
-    // the guard here is a genuinely different mechanism: SQLite's own
-    // write lock. The losing call fails with a raw SQLITE_BUSY "database
-    // is locked" error, not our own "already cancelled" message.
+    // the underlying conflict is a genuinely different mechanism:
+    // SQLite's own write lock. At the native level, the losing
+    // connection's write attempt still fails fast with SQLITE_BUSY
+    // "database is locked" — this whole app is a single Node.js process
+    // on a single thread (true here and in the real Electron main
+    // process), better-sqlite3's calls are synchronous, and the losing
+    // connection's blocking retry loop never yields the event loop the
+    // winning connection needs to reach COMMIT and release the lock. So
+    // the native busy-handler can never observe the lock clearing and
+    // gives up in ~2ms despite busy_timeout=5000, rather than waiting out
+    // the full timeout — a real property of this app's single-threaded
+    // architecture, not a test artifact.
     //
-    // busy_timeout=5000 (packages/db/src/connection.ts) IS set on both
-    // connections — confirmed below by reading the pragma back, not
-    // assumed. Despite that, measured wall-clock timing during
-    // development showed the losing call fails in ~2ms, not after
-    // waiting anywhere near 5000ms. Reason, verified by elimination: this
-    // whole app is a single Node.js process on a single thread (true in
-    // this test AND true in the real Electron main process, which is
-    // also single-threaded Node). better-sqlite3's calls are synchronous
-    // — while the losing connection's write is blocked retrying inside
-    // its native busy-timeout loop, the winning connection's own paused
-    // async continuation (needed to reach COMMIT and release the lock)
-    // cannot run, because reaching it requires the event loop, which the
-    // losing connection's still-blocking call is not yielding. So the
-    // retry can never observe the lock becoming free and gives up
-    // quickly rather than waiting out the full timeout. This is a real
-    // property of this app's architecture, not a test artifact — two
-    // near-simultaneous purchase:cancel IPC calls in production would
-    // fail fast the same way, not hang for up to 5 seconds.
+    // What changed (PG-B, PROJECT.md BUG-15, decision F4): cancelPurchase
+    // now wraps its whole transaction in withRetry
+    // (packages/db/src/retry.ts), so that raw SQLITE_BUSY is no longer
+    // what a caller of cancelPurchase ever observes. withRetry catches it
+    // and re-runs the ENTIRE closure from scratch (exponential backoff,
+    // up to 5 attempts) — by the time the loser's retry attempt executes,
+    // the winner has already committed, so the loser's own status check
+    // now correctly reads 'cancelled' and throws the same clean domain
+    // error a sequential double-cancel produces, never a raw SQLite
+    // error. This is the fix BUG-15 called for.
+    //
+    // busy_timeout=5000 (packages/db/src/connection.ts) is still set on
+    // both connections — confirmed below by reading the pragma back, not
+    // assumed.
     const created = await repo.createPurchase({
       supplierId,
       warehouseId: null,
@@ -626,13 +631,17 @@ describe('KyselyPurchaseRepository.cancelPurchase', () => {
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
 
-      // The loser's error .code — checked directly, not the message text.
-      // Confirmed SQLITE_BUSY (ordinary lock contention), never
-      // SQLITE_BUSY_SNAPSHOT (a stale WAL read-view, which would mean
-      // this needs a different fix: restart-with-fresh-snapshot, not just
-      // "someone else holds the lock, wait or give up").
+      // withRetry (PG-B, F4) means the loser no longer surfaces the raw
+      // SQLITE_BUSY it used to — it retries, observes the winner's
+      // already-committed 'cancelled' status, and throws the same clean
+      // domain error a sequential double-cancel would produce. Checked
+      // four ways: a real Error, no raw SQLite .code leaking through, and
+      // the message identifying both the failure and which purchase.
       const loser = rejected[0] as PromiseRejectedResult;
-      expect((loser.reason as { code?: string }).code).toBe('SQLITE_BUSY');
+      expect(loser.reason).toBeInstanceOf(Error);
+      expect((loser.reason as { code?: string }).code).toBeUndefined();
+      expect((loser.reason as Error).message).toContain('already cancelled');
+      expect((loser.reason as Error).message).toContain(created.id);
 
       const reversalMovements = rawDb
         .prepare(

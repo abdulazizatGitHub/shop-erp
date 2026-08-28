@@ -270,6 +270,43 @@ describe('KyselyPartyRepository.getSupplierById / searchSuppliers', () => {
   });
 });
 
+describe('KyselyPartyRepository.getSupplierBalance', () => {
+  it('getSupplierBalance returns correct balance', async () => {
+    const supplier = await repo.createSupplier({
+      partyCode: null,
+      name: 'Balance Test Supplier',
+      shopName: null,
+      phone: '0300',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    // -500000 paisa = Rs 5,000.00 — the shop owes this supplier, per the
+    // schema's sign convention (-ve = party owes US less / WE owe them —
+    // see purchase.repository.ts's credit-purchase posting).
+    rawDb
+      .prepare(
+        `INSERT INTO party_ledger (id, tenant_id, party_id, entry_date, entry_type, amount, source_type, source_id, created_at)
+         VALUES (?, ?, ?, ?, 'purchase', -500000, 'purchase', 'scratch-purchase-id', ?)`,
+      )
+      .run(
+        '55555555-0000-1000-8000-000000000001',
+        TENANT_ID,
+        supplier.id,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+    // SUM(party_ledger.amount) = -500000
+    // v_party_balance.balance_paisa = -500000
+    const supplierBalance = await repo.getSupplierBalance(supplier.id);
+    expect(supplierBalance.supplierId).toBe(supplier.id);
+    expect(supplierBalance.name).toBe('Balance Test Supplier');
+    expect(supplierBalance.balancePaisa).toBe(-500000);
+  });
+});
+
 describe('document_sequence concurrency — does racing createSupplier ever produce a duplicate party_code?', () => {
   // createSupplier's nextSupplierCode has the same read-then-write shape
   // (SELECT nextNumber, then UPDATE/INSERT) as cancelPurchase's status

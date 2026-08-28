@@ -1,15 +1,23 @@
 import type {
   CancelSaleInput,
+  CreateCustomerInput,
   CreateItemInput,
   CreatePaymentInput,
+  CreatePurchaseInput,
   CreateSaleInput,
+  CreateSupplierInput,
+  CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
   PaymentDto,
+  PurchaseIdInput,
   SaleResult,
+  SupplierBalanceDto,
+  SupplierDto,
+  SupplierSearchInput,
 } from '@shop/contracts';
 
 export interface ImportResult {
@@ -60,7 +68,24 @@ export interface ElectronApi {
     readonly lookups: () => Promise<ItemLookups>;
   };
   readonly customer: {
+    readonly create: (input: CreateCustomerInput) => Promise<{ id: string; partyCode: string }>;
     readonly search: (input: CustomerSearchInput) => Promise<readonly CustomerDto[]>;
+    readonly get: (id: string) => Promise<CustomerDto | null>;
+    readonly balance: (id: string) => Promise<CustomerBalanceDto>;
+  };
+  readonly party: {
+    readonly create: (input: CreateSupplierInput) => Promise<{ id: string; partyCode: string }>;
+    readonly search: (input: SupplierSearchInput) => Promise<readonly SupplierDto[]>;
+    readonly get: (id: string) => Promise<SupplierDto | null>;
+    readonly balance: (id: string) => Promise<SupplierBalanceDto>;
+  };
+  readonly purchase: {
+    readonly create: (input: CreatePurchaseInput) => Promise<{
+      id: string;
+      docNo: string;
+      totalAmountPaisa: number;
+    }>;
+    readonly cancel: (input: PurchaseIdInput) => Promise<void>;
   };
   readonly sale: {
     readonly create: (input: CreateSaleInput) => Promise<SaleResult>;

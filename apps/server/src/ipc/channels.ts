@@ -19,6 +19,7 @@ export const channels = {
   party: {
     create: 'party:create',
     search: 'party:search',
+    get: 'party:get',
     ledger: 'party:ledger',
     balance: 'party:balance',
   },

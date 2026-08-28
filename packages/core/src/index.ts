@@ -54,6 +54,7 @@ export type {
   NewSupplierResult,
   SupplierRecord,
   SupplierSearchQuery,
+  SupplierBalance,
   CustomerType,
   NewCustomerInput,
   NewCustomerResult,

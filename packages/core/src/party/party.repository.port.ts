@@ -37,6 +37,12 @@ export interface SupplierSearchQuery {
   readonly query: string;
 }
 
+export interface SupplierBalance {
+  readonly supplierId: string;
+  readonly name: string;
+  readonly balancePaisa: number;
+}
+
 /** 'retail' | 'wholesale' — lowercase, matching every other enum-like column in the schema. */
 export type CustomerType = 'retail' | 'wholesale';
 
@@ -86,6 +92,8 @@ export interface PartyRepositoryPort {
   createSupplier(input: NewSupplierInput): Promise<NewSupplierResult>;
   getSupplierById(id: string): Promise<SupplierRecord | null>;
   searchSuppliers(query: SupplierSearchQuery): Promise<readonly SupplierRecord[]>;
+  /** Reads v_party_balance — never re-implements the SUM in TypeScript. */
+  getSupplierBalance(supplierId: string): Promise<SupplierBalance>;
 
   /**
    * Inserts the party row with party_type = 'customer'. Generates

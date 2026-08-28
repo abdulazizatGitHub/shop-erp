@@ -5,6 +5,8 @@ import { migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
 import { registerItemHandlers } from './ipc/handlers/item.handler.js';
 import { registerCustomerHandlers } from './ipc/handlers/customer.handler.js';
+import { registerSupplierHandlers } from './ipc/handlers/supplier.handler.js';
+import { registerPurchaseHandlers } from './ipc/handlers/purchase.handler.js';
 import { registerSaleHandlers } from './ipc/handlers/sale.handler.js';
 import { registerPaymentHandlers } from './ipc/handlers/payment.handler.js';
 import { registerImportHandlers } from './ipc/handlers/import.handler.js';
@@ -67,6 +69,8 @@ function registerIpcHandlers(dbPath: string): void {
   const deviceCode = resolveDeviceCode();
   registerItemHandlers({ dbPath, tenantId, deviceCode });
   registerCustomerHandlers({ dbPath, tenantId, deviceCode });
+  registerSupplierHandlers({ dbPath, tenantId, deviceCode });
+  registerPurchaseHandlers({ dbPath, tenantId, deviceCode });
   registerSaleHandlers({ dbPath, tenantId, deviceCode });
   registerPaymentHandlers({ dbPath, tenantId, deviceCode });
   registerImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });

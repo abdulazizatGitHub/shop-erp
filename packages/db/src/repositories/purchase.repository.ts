@@ -9,6 +9,7 @@ import {
   type PurchaseRecord,
   type PurchaseRepositoryPort,
 } from '@shop/core';
+import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
 
 const PURCHASE_CODE_DOC_TYPE = 'purchase';
@@ -90,202 +91,204 @@ export class KyselyPurchaseRepository implements PurchaseRepositoryPort {
       throw new Error('A purchase must have at least one line');
     }
 
-    return this.db.transaction().execute(async (trx) => {
-      const businessUnitId = await this.resolvePartsBusinessUnitId(trx);
-      const warehouseId = input.warehouseId ?? (await this.resolveDefaultWarehouseId(trx));
-      const docNo = await this.nextPurchaseDocNo(trx);
-      const purchaseId = newId();
-      const now = new Date().toISOString();
+    return withRetry(() =>
+      this.db.transaction().execute(async (trx) => {
+        const businessUnitId = await this.resolvePartsBusinessUnitId(trx);
+        const warehouseId = input.warehouseId ?? (await this.resolveDefaultWarehouseId(trx));
+        const docNo = await this.nextPurchaseDocNo(trx);
+        const purchaseId = newId();
+        const now = new Date().toISOString();
 
-      const computedLines: Array<{
-        lineNo: number;
-        itemId: string;
-        quantityMilli: number;
-        stockQuantityMilli: number;
-        unitCostPaisa: Paisa;
-        costPerStockUnitPaisa: Paisa;
-        lineTotalPaisa: Paisa;
-        notes: string | null;
-      }> = [];
+        const computedLines: Array<{
+          lineNo: number;
+          itemId: string;
+          quantityMilli: number;
+          stockQuantityMilli: number;
+          unitCostPaisa: Paisa;
+          costPerStockUnitPaisa: Paisa;
+          lineTotalPaisa: Paisa;
+          notes: string | null;
+        }> = [];
 
-      for (const [index, line] of input.lines.entries()) {
-        const item = await trx
-          .selectFrom('item')
-          .select('purchaseToStockFactor')
-          .where('id', '=', line.itemId)
-          .where('tenantId', '=', this.tenantId)
-          .executeTakeFirst();
-        if (!item) {
-          throw new Error(`Item ${line.itemId} not found`);
+        for (const [index, line] of input.lines.entries()) {
+          const item = await trx
+            .selectFrom('item')
+            .select('purchaseToStockFactor')
+            .where('id', '=', line.itemId)
+            .where('tenantId', '=', this.tenantId)
+            .executeTakeFirst();
+          if (!item) {
+            throw new Error(`Item ${line.itemId} not found`);
+          }
+
+          const unitCostPaisa = Money.of(line.unitCostPaisa);
+          const stockQuantityMilli = Qty.convert(
+            Qty.of(line.quantityMilli),
+            item.purchaseToStockFactor,
+          );
+          const costPerStockUnitPaisa = Money.of(
+            computeCostPerStockUnitPaisa(unitCostPaisa, item.purchaseToStockFactor),
+          );
+          const lineTotalPaisa = Money.multiplyByQuantity(unitCostPaisa, line.quantityMilli);
+
+          computedLines.push({
+            lineNo: index + 1,
+            itemId: line.itemId,
+            quantityMilli: line.quantityMilli,
+            stockQuantityMilli,
+            unitCostPaisa,
+            costPerStockUnitPaisa,
+            lineTotalPaisa,
+            notes: line.notes,
+          });
         }
 
-        const unitCostPaisa = Money.of(line.unitCostPaisa);
-        const stockQuantityMilli = Qty.convert(
-          Qty.of(line.quantityMilli),
-          item.purchaseToStockFactor,
-        );
-        const costPerStockUnitPaisa = Money.of(
-          computeCostPerStockUnitPaisa(unitCostPaisa, item.purchaseToStockFactor),
-        );
-        const lineTotalPaisa = Money.multiplyByQuantity(unitCostPaisa, line.quantityMilli);
-
-        computedLines.push({
-          lineNo: index + 1,
-          itemId: line.itemId,
-          quantityMilli: line.quantityMilli,
-          stockQuantityMilli,
-          unitCostPaisa,
-          costPerStockUnitPaisa,
-          lineTotalPaisa,
-          notes: line.notes,
-        });
-      }
-
-      const subtotalPaisa = Money.sum(computedLines.map((l) => l.lineTotalPaisa));
-      const totalAmountPaisa = subtotalPaisa; // no discount/freight/tax this phase
-      const paidAmountPaisa = input.paymentMode === 'cash' ? totalAmountPaisa : Money.ZERO;
-
-      await trx
-        .insertInto('purchase')
-        .values({
-          id: purchaseId,
-          tenantId: this.tenantId,
-          docNo,
-          supplierId: input.supplierId,
-          warehouseId,
-          purchaseDate: input.purchaseDate,
-          supplierInvoiceNo: input.supplierInvoiceNo,
-          subtotal: subtotalPaisa,
-          discountAmount: 0,
-          freightAmount: 0,
-          taxAmount: 0,
-          totalAmount: totalAmountPaisa,
-          paidAmount: paidAmountPaisa,
-          paymentMode: input.paymentMode,
-          status: 'confirmed',
-          notes: input.notes,
-          createdAt: now,
-          updatedAt: now,
-          createdBy: null,
-          businessUnitId,
-        })
-        .execute();
-
-      for (const line of computedLines) {
-        await trx
-          .insertInto('purchaseLine')
-          .values({
-            id: newId(),
-            tenantId: this.tenantId,
-            purchaseId,
-            lineNo: line.lineNo,
-            itemId: line.itemId,
-            quantity: line.quantityMilli,
-            stockQuantity: line.stockQuantityMilli,
-            unitCost: line.unitCostPaisa,
-            discountAmount: 0,
-            taxRate: 0,
-            taxAmount: 0,
-            lineTotal: line.lineTotalPaisa,
-            notes: line.notes,
-          })
-          .execute();
+        const subtotalPaisa = Money.sum(computedLines.map((l) => l.lineTotalPaisa));
+        const totalAmountPaisa = subtotalPaisa; // no discount/freight/tax this phase
+        const paidAmountPaisa = input.paymentMode === 'cash' ? totalAmountPaisa : Money.ZERO;
 
         await trx
-          .insertInto('stockMovement')
+          .insertInto('purchase')
           .values({
-            id: newId(),
+            id: purchaseId,
             tenantId: this.tenantId,
-            itemId: line.itemId,
+            docNo,
+            supplierId: input.supplierId,
             warehouseId,
-            movementDate: input.purchaseDate,
-            movementType: 'purchase',
-            quantity: line.stockQuantityMilli,
-            unitCost: line.costPerStockUnitPaisa,
-            serialId: null,
-            sourceType: 'purchase',
-            sourceId: purchaseId,
-            reason: null,
-            reversedById: null,
+            purchaseDate: input.purchaseDate,
+            supplierInvoiceNo: input.supplierInvoiceNo,
+            subtotal: subtotalPaisa,
+            discountAmount: 0,
+            freightAmount: 0,
+            taxAmount: 0,
+            totalAmount: totalAmountPaisa,
+            paidAmount: paidAmountPaisa,
+            paymentMode: input.paymentMode,
+            status: 'confirmed',
+            notes: input.notes,
             createdAt: now,
+            updatedAt: now,
             createdBy: null,
             businessUnitId,
           })
           .execute();
 
-        // SIMPLIFIED, not a true weighted average — see docs/phases/PHASE_2.md.
-        await trx
-          .updateTable('item')
-          .set({
-            lastPurchaseCost: line.costPerStockUnitPaisa,
-            avgCost: line.costPerStockUnitPaisa,
-            updatedAt: now,
-          })
-          .where('id', '=', line.itemId)
-          .where('tenantId', '=', this.tenantId)
-          .execute();
-      }
+        for (const line of computedLines) {
+          await trx
+            .insertInto('purchaseLine')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              purchaseId,
+              lineNo: line.lineNo,
+              itemId: line.itemId,
+              quantity: line.quantityMilli,
+              stockQuantity: line.stockQuantityMilli,
+              unitCost: line.unitCostPaisa,
+              discountAmount: 0,
+              taxRate: 0,
+              taxAmount: 0,
+              lineTotal: line.lineTotalPaisa,
+              notes: line.notes,
+            })
+            .execute();
 
-      if (input.paymentMode === 'credit') {
-        // Negative: the shop's balance toward the supplier goes down
-        // (we now owe them more), per the schema's documented sign
-        // convention ("+ve = party owes US") that v_party_balance relies on.
+          await trx
+            .insertInto('stockMovement')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              itemId: line.itemId,
+              warehouseId,
+              movementDate: input.purchaseDate,
+              movementType: 'purchase',
+              quantity: line.stockQuantityMilli,
+              unitCost: line.costPerStockUnitPaisa,
+              serialId: null,
+              sourceType: 'purchase',
+              sourceId: purchaseId,
+              reason: null,
+              reversedById: null,
+              createdAt: now,
+              createdBy: null,
+              businessUnitId,
+            })
+            .execute();
+
+          // SIMPLIFIED, not a true weighted average — see docs/phases/PHASE_2.md.
+          await trx
+            .updateTable('item')
+            .set({
+              lastPurchaseCost: line.costPerStockUnitPaisa,
+              avgCost: line.costPerStockUnitPaisa,
+              updatedAt: now,
+            })
+            .where('id', '=', line.itemId)
+            .where('tenantId', '=', this.tenantId)
+            .execute();
+        }
+
+        if (input.paymentMode === 'credit') {
+          // Negative: the shop's balance toward the supplier goes down
+          // (we now owe them more), per the schema's documented sign
+          // convention ("+ve = party owes US") that v_party_balance relies on.
+          await trx
+            .insertInto('partyLedger')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              partyId: input.supplierId,
+              entryDate: input.purchaseDate,
+              entryType: 'purchase',
+              amount: Money.negate(totalAmountPaisa),
+              runningNote: null,
+              sourceType: 'purchase',
+              sourceId: purchaseId,
+              reversedById: null,
+              createdAt: now,
+              createdBy: null,
+              billReference: input.billReference,
+              dueDate: input.dueDate,
+              billNotes: input.billNotes,
+            })
+            .execute();
+        }
+
         await trx
-          .insertInto('partyLedger')
+          .insertInto('auditLog')
           .values({
             id: newId(),
             tenantId: this.tenantId,
-            partyId: input.supplierId,
-            entryDate: input.purchaseDate,
-            entryType: 'purchase',
-            amount: Money.negate(totalAmountPaisa),
-            runningNote: null,
-            sourceType: 'purchase',
-            sourceId: purchaseId,
-            reversedById: null,
+            tableName: 'purchase',
+            recordId: purchaseId,
+            action: 'insert',
+            changedFields: null,
+            oldValues: null,
+            userId: null,
+            deviceCode: this.deviceCode,
             createdAt: now,
-            createdBy: null,
-            billReference: input.billReference,
-            dueDate: input.dueDate,
-            billNotes: input.billNotes,
           })
           .execute();
-      }
 
-      await trx
-        .insertInto('auditLog')
-        .values({
-          id: newId(),
-          tenantId: this.tenantId,
-          tableName: 'purchase',
-          recordId: purchaseId,
-          action: 'insert',
-          changedFields: null,
-          oldValues: null,
-          userId: null,
-          deviceCode: this.deviceCode,
-          createdAt: now,
-        })
-        .execute();
+        await trx
+          .insertInto('syncOutbox')
+          .values({
+            id: newId(),
+            tenantId: this.tenantId,
+            tableName: 'purchase',
+            recordId: purchaseId,
+            operation: 'insert',
+            payload: null,
+            createdAt: now,
+            syncedAt: null,
+            syncAttempts: 0,
+            lastError: null,
+          })
+          .execute();
 
-      await trx
-        .insertInto('syncOutbox')
-        .values({
-          id: newId(),
-          tenantId: this.tenantId,
-          tableName: 'purchase',
-          recordId: purchaseId,
-          operation: 'insert',
-          payload: null,
-          createdAt: now,
-          syncedAt: null,
-          syncAttempts: 0,
-          lastError: null,
-        })
-        .execute();
-
-      return { id: purchaseId, docNo, totalAmountPaisa };
-    });
+        return { id: purchaseId, docNo, totalAmountPaisa };
+      }),
+    );
   }
 
   async getPurchaseById(id: string): Promise<PurchaseRecord | null> {
@@ -348,128 +351,130 @@ export class KyselyPurchaseRepository implements PurchaseRepositoryPort {
    * movement/entry type. See docs/phases/PHASE_2.md for the reasoning.
    */
   async cancelPurchase(id: string): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
-      const purchase = await trx
-        .selectFrom('purchase')
-        .select(['id', 'status', 'paymentMode', 'supplierId', 'purchaseDate'])
-        .where('id', '=', id)
-        .where('tenantId', '=', this.tenantId)
-        .executeTakeFirst();
-      if (!purchase) {
-        throw new Error(`Purchase ${id} not found`);
-      }
-      if (purchase.status === 'cancelled') {
-        throw new Error(`Purchase ${id} is already cancelled`);
-      }
+    await withRetry(() =>
+      this.db.transaction().execute(async (trx) => {
+        const purchase = await trx
+          .selectFrom('purchase')
+          .select(['id', 'status', 'paymentMode', 'supplierId', 'purchaseDate'])
+          .where('id', '=', id)
+          .where('tenantId', '=', this.tenantId)
+          .executeTakeFirst();
+        if (!purchase) {
+          throw new Error(`Purchase ${id} not found`);
+        }
+        if (purchase.status === 'cancelled') {
+          throw new Error(`Purchase ${id} is already cancelled`);
+        }
 
-      const now = new Date().toISOString();
+        const now = new Date().toISOString();
 
-      const movements = await trx
-        .selectFrom('stockMovement')
-        .select(['itemId', 'warehouseId', 'quantity', 'unitCost', 'businessUnitId'])
-        .where('tenantId', '=', this.tenantId)
-        .where('sourceType', '=', 'purchase')
-        .where('sourceId', '=', id)
-        .where('movementType', '=', 'purchase')
-        .execute();
-
-      for (const movement of movements) {
-        await trx
-          .insertInto('stockMovement')
-          .values({
-            id: newId(),
-            tenantId: this.tenantId,
-            itemId: movement.itemId,
-            warehouseId: movement.warehouseId,
-            movementDate: now,
-            movementType: 'purchase_return',
-            quantity: -movement.quantity,
-            unitCost: movement.unitCost,
-            serialId: null,
-            sourceType: 'purchase',
-            sourceId: id,
-            reason: 'Purchase cancelled',
-            reversedById: null,
-            createdAt: now,
-            createdBy: null,
-            businessUnitId: movement.businessUnitId,
-          })
-          .execute();
-      }
-
-      if (purchase.paymentMode === 'credit') {
-        const ledgerRow = await trx
-          .selectFrom('partyLedger')
-          .select(['amount'])
+        const movements = await trx
+          .selectFrom('stockMovement')
+          .select(['itemId', 'warehouseId', 'quantity', 'unitCost', 'businessUnitId'])
           .where('tenantId', '=', this.tenantId)
           .where('sourceType', '=', 'purchase')
           .where('sourceId', '=', id)
-          .where('entryType', '=', 'purchase')
-          .executeTakeFirst();
-        if (!ledgerRow) {
-          throw new Error(`Credit purchase ${id} has no party_ledger row to reverse`);
+          .where('movementType', '=', 'purchase')
+          .execute();
+
+        for (const movement of movements) {
+          await trx
+            .insertInto('stockMovement')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              itemId: movement.itemId,
+              warehouseId: movement.warehouseId,
+              movementDate: now,
+              movementType: 'purchase_return',
+              quantity: -movement.quantity,
+              unitCost: movement.unitCost,
+              serialId: null,
+              sourceType: 'purchase',
+              sourceId: id,
+              reason: 'Purchase cancelled',
+              reversedById: null,
+              createdAt: now,
+              createdBy: null,
+              businessUnitId: movement.businessUnitId,
+            })
+            .execute();
+        }
+
+        if (purchase.paymentMode === 'credit') {
+          const ledgerRow = await trx
+            .selectFrom('partyLedger')
+            .select(['amount'])
+            .where('tenantId', '=', this.tenantId)
+            .where('sourceType', '=', 'purchase')
+            .where('sourceId', '=', id)
+            .where('entryType', '=', 'purchase')
+            .executeTakeFirst();
+          if (!ledgerRow) {
+            throw new Error(`Credit purchase ${id} has no party_ledger row to reverse`);
+          }
+
+          await trx
+            .insertInto('partyLedger')
+            .values({
+              id: newId(),
+              tenantId: this.tenantId,
+              partyId: purchase.supplierId,
+              entryDate: now,
+              entryType: 'purchase_return',
+              amount: -ledgerRow.amount,
+              runningNote: null,
+              sourceType: 'purchase',
+              sourceId: id,
+              reversedById: null,
+              createdAt: now,
+              createdBy: null,
+              billReference: null,
+              dueDate: null,
+              billNotes: null,
+            })
+            .execute();
         }
 
         await trx
-          .insertInto('partyLedger')
+          .updateTable('purchase')
+          .set({ status: 'cancelled', updatedAt: now })
+          .where('id', '=', id)
+          .where('tenantId', '=', this.tenantId)
+          .execute();
+
+        await trx
+          .insertInto('auditLog')
           .values({
             id: newId(),
             tenantId: this.tenantId,
-            partyId: purchase.supplierId,
-            entryDate: now,
-            entryType: 'purchase_return',
-            amount: -ledgerRow.amount,
-            runningNote: null,
-            sourceType: 'purchase',
-            sourceId: id,
-            reversedById: null,
+            tableName: 'purchase',
+            recordId: id,
+            action: 'update',
+            changedFields: JSON.stringify({ status: 'cancelled' }),
+            oldValues: JSON.stringify({ status: purchase.status }),
+            userId: null,
+            deviceCode: this.deviceCode,
             createdAt: now,
-            createdBy: null,
-            billReference: null,
-            dueDate: null,
-            billNotes: null,
           })
           .execute();
-      }
 
-      await trx
-        .updateTable('purchase')
-        .set({ status: 'cancelled', updatedAt: now })
-        .where('id', '=', id)
-        .where('tenantId', '=', this.tenantId)
-        .execute();
-
-      await trx
-        .insertInto('auditLog')
-        .values({
-          id: newId(),
-          tenantId: this.tenantId,
-          tableName: 'purchase',
-          recordId: id,
-          action: 'update',
-          changedFields: JSON.stringify({ status: 'cancelled' }),
-          oldValues: JSON.stringify({ status: purchase.status }),
-          userId: null,
-          deviceCode: this.deviceCode,
-          createdAt: now,
-        })
-        .execute();
-
-      await trx
-        .insertInto('syncOutbox')
-        .values({
-          id: newId(),
-          tenantId: this.tenantId,
-          tableName: 'purchase',
-          recordId: id,
-          operation: 'update',
-          payload: null,
-          createdAt: now,
-          syncedAt: null,
-          syncAttempts: 0,
-          lastError: null,
-        })
-        .execute();
-    });
+        await trx
+          .insertInto('syncOutbox')
+          .values({
+            id: newId(),
+            tenantId: this.tenantId,
+            tableName: 'purchase',
+            recordId: id,
+            operation: 'update',
+            payload: null,
+            createdAt: now,
+            syncedAt: null,
+            syncAttempts: 0,
+            lastError: null,
+          })
+          .execute();
+      }),
+    );
   }
 }

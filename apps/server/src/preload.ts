@@ -4,7 +4,9 @@ import type {
   CreateCustomerInput,
   CreateItemInput,
   CreatePaymentInput,
+  CreatePurchaseInput,
   CreateSaleInput,
+  CreateSupplierInput,
   CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
@@ -12,9 +14,13 @@ import type {
   ItemLookups,
   ItemSearchInput,
   PaymentDto,
+  PurchaseIdInput,
   SaleResult,
   SaleSearchInput,
   SaleSummaryDto,
+  SupplierBalanceDto,
+  SupplierDto,
+  SupplierSearchInput,
 } from '@shop/contracts';
 import type { SaleRecord } from '@shop/core';
 import type { UomConversionOption } from '@shop/db';
@@ -22,6 +28,8 @@ import { channels } from './ipc/channels.js';
 import type { CreateCustomerResult } from './ipc/handlers/customer.handler.js';
 import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balance-import.handler.js';
 import type { ImportResult } from './ipc/handlers/import.handler.js';
+import type { CreatePurchaseResult } from './ipc/handlers/purchase.handler.js';
+import type { CreateSupplierResult } from './ipc/handlers/supplier.handler.js';
 import type { SupplierBalanceImportResult } from './ipc/handlers/supplier-balance-import.handler.js';
 
 interface CreateItemResult {
@@ -55,6 +63,22 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.customer.get, { id }) as Promise<CustomerDto | null>,
     balance: (id: string): Promise<CustomerBalanceDto> =>
       ipcRenderer.invoke(channels.customer.balance, { id }) as Promise<CustomerBalanceDto>,
+  },
+  party: {
+    create: (input: CreateSupplierInput): Promise<CreateSupplierResult> =>
+      ipcRenderer.invoke(channels.party.create, input) as Promise<CreateSupplierResult>,
+    search: (input: SupplierSearchInput): Promise<readonly SupplierDto[]> =>
+      ipcRenderer.invoke(channels.party.search, input) as Promise<readonly SupplierDto[]>,
+    get: (id: string): Promise<SupplierDto | null> =>
+      ipcRenderer.invoke(channels.party.get, { id }) as Promise<SupplierDto | null>,
+    balance: (id: string): Promise<SupplierBalanceDto> =>
+      ipcRenderer.invoke(channels.party.balance, { id }) as Promise<SupplierBalanceDto>,
+  },
+  purchase: {
+    create: (input: CreatePurchaseInput): Promise<CreatePurchaseResult> =>
+      ipcRenderer.invoke(channels.purchase.create, input) as Promise<CreatePurchaseResult>,
+    cancel: (input: PurchaseIdInput): Promise<void> =>
+      ipcRenderer.invoke(channels.purchase.cancel, input) as Promise<void>,
   },
   sale: {
     create: (input: CreateSaleInput): Promise<SaleResult> =>
