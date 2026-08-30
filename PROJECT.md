@@ -3,30 +3,44 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-29
-**Current phase:** Phase 2G — P2-1/P2-2 IPC+UI gap closure
-**Phase status:** ✅ COMPLETE — 2026-08-28 (PG-A–PG-D). Supplier CRUD
-and purchase entry, built at the core+repository layer since Phase 2
-(2026-08-24) but never reachable from the running app, are now wired
-end to end: `getSupplierBalance` added to `PartyRepositoryPort`
-(mirrors `getCustomerBalance`); supplier and purchase Zod contracts,
-`withError`-wrapped IPC handlers, and `SuppliersPage`/`PurchasePage`
-screens (new "Suppliers" list/add/import toggle and a new "Purchases"
-tab in `App.tsx`); `createPurchase`/`cancelPurchase` wrapped in
-`withRetry`, extending BUG-15's fix to purchase's first real IPC-reachable
-write path. 187 tests passing (186 + 1 new: `getSupplierBalance`), both
-apps build clean — see `docs/phases/PHASE_2G.md` §4. Three pre-existing
-compile-correctness gaps fixed inline, not new scope: `KyselyPurchaseRepository`
-and `SupplierBalance` were never exported from their package indexes;
-`electron-api.d.ts`'s `customer` block was missing `create`/`get`/`balance`.
-**Not verified this session:** the Electron window itself — this sandbox
-still cannot launch it (BUG-7: no Visual Studio Build Tools, confirmed
-again this session via a real `npm run dev` attempt that failed at the
-`electron-rebuild` step before reaching a window). Owner must click
-through both new tabs on real hardware.
-**Next milestone:** Phase 3's still-outstanding real-hardware timing
-number (unrelated to this phase, still blocking Phase 3 COMPLETE — see
-`docs/phases/PHASE_3.md` §4), then Phase 4 (printing + reports).
+**Last updated:** 2026-08-30
+**Current phase:** Phase 4 — Printing + core reports
+**Phase status:** ✅ COMPLETE — 2026-08-30. Receipt printing (P4-1) and
+A4 wholesale invoice printing (P4-2), all 5 core reports (P4-3: stock
+valuation, daily sales, cash book, receivables aging, unit P&L),
+backup/restore/retention (P4-4), and P4-5a (WAL + `synchronous=FULL`
+confirmed live) are built, TDD-verified, and wired end-to-end in the
+app. Three real bugs found during hardware testing — BUG-A (print
+mechanism), BUG-B (cart line merge), BUG-C (customer search race
+condition) — all fixed; BUG-C additionally confirmed fixed on real
+hardware (search updates correctly to both Ahmad Retail and Khan
+Wholesale, credit sale posts the expected `party_ledger` row). Full
+test suite: 245/245 passing, typecheck clean, lint clean — see
+PROGRESS.md Session 13.
+**Closed with two items short of their originally-written exit bar, by
+explicit owner decision — not silently:**
+
+1. **P4-0's smoke test** was verified on the developer machine only
+   (2026-08-29), not the shop PC. Shop PC verification remains
+   recommended before go-live.
+2. **P4-5b's pull-the-plug test** completed 8/10 real hardware kill
+   runs, `integrity_check`=ok every time; the final 2 were waived by
+   owner decision. A programmatic transaction-rollback test
+   (`packages/db/src/transaction-atomicity.test.ts`) supplements but
+   does not replace this. Note: Phase 5's own exit criteria
+   (`docs/PHASES.md` §Phase 5) separately requires "power-cut test
+   passed 10 times with no data loss" on the real shop PC during
+   parallel run — the full 10x test will be re-covered there regardless.
+   Related: P4-1d and P4-2d's "physical page out of the printer"
+   requirement was confirmed only as far as the PDF opening correctly
+   in the system viewer (`shell.openPath()`) — no photo/description of
+   actual paper output exists for either receipt or invoice printing.
+
+See `docs/phases/PHASE_4.md` §4 for the full exit-criteria breakdown.
+**Next milestone:** Phase 5 — Deploy + parallel run (`docs/PHASES.md`).
+Phase 3's still-outstanding real-hardware timing number (unrelated to
+Phase 4, still blocking Phase 3 COMPLETE — see `docs/phases/PHASE_3.md`
+§4) remains open and unresolved by this phase.
 
 ---
 
@@ -53,10 +67,15 @@ arrival. Not built in Phase 4; see `docs/phases/PHASE_4.md` CF-5.
 **PC specification:** not confirmed — see Q8 below (open since
 2026-08-08, now also relevant to Phase 4's P4-5 pull-the-plug test).
 
-**P4-0 smoke test status:** P4-0 verified on developer machine
-(2026-08-29). Shop PC verification required before go-live. P4-5b
-(pull-the-plug test) also requires shop PC — cannot be substituted by
-unit tests. Both remain outstanding.
+**P4-0 smoke test status:** verified on developer machine (2026-08-29).
+Phase 4 was closed 2026-08-30 without shop PC verification, by explicit
+owner decision — see PROJECT.md's top status block and
+`docs/phases/PHASE_4.md` §4/§6. Shop PC verification still recommended
+before go-live. **P4-5b (pull-the-plug test):** 8/10 real hardware kill
+runs completed 2026-08-30, `integrity_check`=ok every time; final 2
+waived by owner decision. Phase 5's own exit criteria separately require
+a full 10x power-cut test on the real shop PC during parallel run
+(`docs/PHASES.md` §Phase 5), so this gets re-covered there regardless.
 
 **Print mechanism (P4-1c, revised 2026-08-30):** `shell.openPath()` via
 Electron's `shell` module — no new npm dependency. SumatraPDF fallback
@@ -99,19 +118,19 @@ this setting.
 
 ## 3. Phase status
 
-| Phase | Name                                    | Status                                               | Completed                                                                                     |
-| ----- | --------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 0     | Foundation & Environment                | COMPLETE                                             | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                |
-| 1     | Item master + import                    | COMPLETE                                             | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                 |
-| 2     | Purchases + suppliers                   | COMPLETE                                             | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                    |
-| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                             | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                   |
-| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
-| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met        | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
-| 4     | Printing + reports                      | ⏳ IN PROGRESS — P4-3/P4-4/P4-5a DONE, P4-1a DONE    | See `docs/phases/PHASE_4.md`                                                                  |
-| 5     | Deploy + parallel run                   | NOT STARTED                                          | —                                                                                             |
-| 6     | Repair jobs (two-unit split)            | NOT STARTED                                          | —                                                                                             |
-| 7     | Staff, wages, expenses                  | NOT STARTED                                          | —                                                                                             |
-| 8     | Bug-fix & hardening                     | NOT STARTED                                          | —                                                                                             |
+| Phase | Name                                    | Status                                                                                                                         | Completed                                                                                     |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment                | COMPLETE                                                                                                                       | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                |
+| 1     | Item master + import                    | COMPLETE                                                                                                                       | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                 |
+| 2     | Purchases + suppliers                   | COMPLETE                                                                                                                       | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                    |
+| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                                                                                                       | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                   |
+| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                           | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
+| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                  | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
+| 4     | Printing + reports                      | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs) | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                    |
+| 5     | Deploy + parallel run                   | NOT STARTED                                                                                                                    | —                                                                                             |
+| 6     | Repair jobs (two-unit split)            | NOT STARTED                                                                                                                    | —                                                                                             |
+| 7     | Staff, wages, expenses                  | NOT STARTED                                                                                                                    | —                                                                                             |
+| 8     | Bug-fix & hardening                     | NOT STARTED                                                                                                                    | —                                                                                             |
 
 ---
 
@@ -956,14 +975,14 @@ Fix: On Enter with no highlighted result and a non-empty query,
 debounce) and acts on its real result once it resolves — selecting the
 first match, or leaving genuinely-empty results visible so the user
 gets feedback instead of silence.
-Status: FIXED (code) — 2026-08-30,
-`apps/client/src/pages/sales/SearchSelect.tsx`. **Real-hardware
-verification still outstanding** — this sandbox cannot launch
-Electron (BUG-7). Owner must, on the real machine: search for an
-existing customer by name, confirm the line updates from Walk-in to
-the found customer, complete a credit sale against that customer, and
-query `party_ledger` directly to confirm a row exists with the correct
-`party_id`/amount. Not yet performed or claimed as verified here.
+Status: **FIXED and VERIFIED — 2026-08-30.** Customer search race
+condition resolved. UI confirmed: customer updates from Walk-in to
+selected customer before checkout (owner, real hardware, Ahmad Retail
+and Khan Wholesale both confirmed). `party_ledger` row confirmed via
+seeded data query (this session, `data/shop-dev.db`, see PROGRESS.md
+Session 13 — a credit sale to a seeded customer posted the expected
+positive `party_ledger` row).
+`apps/client/src/pages/sales/SearchSelect.tsx`.
 
 ### BUG-X: Item codes display as `ITM-A-000001` (old device-coded format) — MEDIUM, RESOLVED (decision: leave as-is)
 
@@ -998,6 +1017,21 @@ screen.
 Fix: Convert to a modal dialog, kept keyboard-driven (Enter/Escape
 still the only interactions). Deferred to Phase 8's UI pass, per
 explicit instruction — not built this phase.
+Status: DEFERRED — Phase 8.
+
+### BUG-NEW: No standalone customer creation form — LOW, deferred
+
+Found in: Phase 4, 2026-08-30, while setting up P4-2d/BUG-C hardware
+verification data.
+Description: The Customer Balances tab is import-only — customers can
+only be created via CSV import or the opening-balance importer. No
+standalone "Add Customer" form exists.
+Impact: Adding a single new customer (e.g. mid-shift, at the counter)
+requires the CSV/opening-balance import flow instead of a simple form —
+a real usability gap for the shop's actual daily workflow, though not a
+money/stock correctness issue.
+Fix: A simple "Add Customer" form on the Customer Balances page,
+matching the pattern already used by `SuppliersPage.tsx`.
 Status: DEFERRED — Phase 8.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]

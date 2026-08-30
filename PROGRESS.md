@@ -318,6 +318,187 @@ own physical-printer confirmation separately. Then P4-5b.
       updated to reflect supersession, not a new bug number
 - [x] Test suite passing — **243/243** in this sandbox
 
+**Continued same day — Phase 4 work committed; hardware close-out queries run
+against the dev database:**
+
+- **Committed all Phase 4 work**: `git add -A` (verified nothing unexpected
+  staged — `.gitignore` already excludes `*.db`, `data/`, `backups/`, no
+  `.env` files present), then `git commit -m "feat: Phase 4 — reports,
+backup/restore, printing (P4-1 through P4-3, P4-4, P4-5a)"` →
+  commit `0688831`, 61 files changed, 5189 insertions(+), 64 deletions(-).
+  Pre-commit hook (`lint-staged`: eslint --fix, prettier --write) ran clean,
+  reformatted a few files (line-wraps only, no logic changes). Post-commit
+  `npm run verify`: **244/244** passing, typecheck clean, lint clean.
+- **Owner requested Phase 4 close-out** (status → COMPLETE, exit criteria
+  ticked, PROJECT.md/PROGRESS.md updated) based on three "hardware
+  verification" results. On inspection, none of the three contained actual
+  outcome data: the BUG-C item was the query text itself (not its output),
+  the P4-2d item was a setup `UPDATE` statement with an unfilled
+  `'your customer name'` placeholder (not a print confirmation), and the
+  P4-5b item was the literal unfilled template `Run N: ok/FAIL` repeated 10
+  times. Declined to write a COMPLETE close-out on this basis — flagged
+  each one specifically and asked for real output instead of proceeding on
+  "looks right."
+- **Owner then asked me to run the underlying queries directly** against
+  `data/shop-dev.db` (dev-mode default per `main.ts`'s `resolveDbPath()`),
+  via a temporary `better-sqlite3` script, not `npm run dev`. Ran:
+  - `SELECT party_id, amount, entry_date, entry_type, source_type, source_id
+FROM party_ledger ORDER BY created_at DESC LIMIT 10;` → **0 rows**.
+  - `PRAGMA integrity_check;` → **`ok`**.
+  - `SELECT id, name, customer_type FROM party WHERE party_type = 'customer'
+AND deleted_at IS NULL;` → **0 rows**. Checked this wasn't a filter
+    mismatch by re-running with no `WHERE` clause at all — the `party`
+    table in this file is completely empty (0 rows, any filter).
+- **Did not run the P4-2d `UPDATE`**: with 0 candidate customers the
+  subquery is `NULL`, so `WHERE id = (...)` would silently match nothing.
+  Running it and reporting "customer X updated" would have been fabricated.
+- **Flagged an inconsistency to the owner rather than guessing past it**:
+  this dev-mode DB file has no data at all, which doesn't match the BUG-B
+  hardware confirmation from earlier the same day (a completed sale,
+  screenshotted). Two explanations offered, unresolved as of this entry:
+  (1) the owner's hardware testing ran against the _packaged_ app, which
+  uses `%APPDATA%\ShopERP\shop.db` via `app.isPackaged`, not this dev file;
+  or (2) this dev DB was reset/reseeded since that test. Asked the owner to
+  confirm which, and for the correct path if (1).
+
+**Blocked on (updated):** the owner confirming which database file their
+hardware testing actually used, plus all three original outstanding items —
+BUG-C (needs real credit-sale data to exist somewhere first), P4-2d (needs a
+real customer + a completed sale + confirmed PDF open), and P4-5b (needs 10
+real kill-and-restart cycles with `PRAGMA integrity_check` after each,
+individually reported, not a template).
+
+**Phase 4 status: NOT closed.** Explicitly declined to mark it COMPLETE —
+per the owner's own instruction not to close it until real hardware results
+are in hand.
+
+**Continued same day — seed data, a programmatic atomicity test, real
+hardware confirmations arriving in rounds, and the Phase 4 close-out:**
+
+- **Logged BUG-NEW** (LOW, deferred to Phase 8): no standalone customer
+  creation form — Customer Balances is import-only. `PROJECT.md`.
+- **Wrote and ran a standalone seed script** (`seed-phase4-verify.ts`,
+  repo root, deleted immediately after running — never committed) to
+  unblock BUG-C/P4-2d verification, since `data/shop-dev.db` turned out
+  to be genuinely empty (0 parties, 0 party_ledger rows — confirmed by
+  querying with no `WHERE` clause at all, not just an unlucky filter).
+  Opened the DB via the real `openDatabase()` (correct WAL/
+  `synchronous=FULL`/`foreign_keys` pragmas) and called the actual
+  `KyselyPartyRepository`/`KyselyPurchaseRepository`/`KyselySaleRepository`
+  classes — not hand-rolled INSERTs — so avg_cost update, doc numbering,
+  and party_ledger posting were exercised through real business logic.
+  Created: supplier "Test Supplier" (`SUP-0001`), customers "Ahmad
+  Retail" (`CUS-0001`, retail) and "Khan Wholesale" (`CUS-0002`,
+  wholesale), a cash purchase (10x Compressor @ Rs 4,000), and a credit
+  sale (1x Compressor to Ahmad Retail, price auto-resolved to Rs 6,000
+  from the item's existing Retail `item_price` row — the same figure
+  from the earlier BUG-B screenshot). One deviation from the literal
+  instruction, flagged before running: each repository call keeps its
+  own transaction (already tested that way) rather than one transaction
+  wrapping all five inserts. Corrected one query in the request before
+  running it: `item.code` doesn't exist — the live column is
+  `item_code` (confirmed by reading the table's `CREATE TABLE`).
+  Verified after running: `item.avg_cost` went from `null` to `400000`
+  paisa (matches purchase unit cost, 1:1 factor); the credit sale
+  posted a `party_ledger` row, amount `600000` (positive, customer owes
+  more), `entry_type='sale'`, correctly linked via `source_id`.
+  `PRAGMA integrity_check` = `ok` throughout.
+- **Wrote `packages/db/src/transaction-atomicity.test.ts`** — P4-5b's
+  programmatic supplement, per explicit instruction that it does not
+  replace the real kill test. Uses better-sqlite3's `db.transaction()`
+  directly (not the Kysely layer): begins a transaction inserting a
+  `party_ledger` row, throws before it can commit, confirms the row does
+  not exist afterward. Carries the exact required labeling comment.
+  1 test, passing.
+- **Real hardware confirmations arrived in rounds through the rest of
+  the day**, each recorded in `docs/phases/PHASE_4.md` as it came in
+  rather than batched: BUG-C verified for Ahmad Retail, then separately
+  for Khan Wholesale; P4-2d's Print Invoice button confirmed appearing
+  before its content was confirmed; P4-5b's kill-run count reported as
+  1/10, then corrected by the owner to 8/10 (screenshots reviewed in
+  batch) — each correction applied as reported, not re-derived.
+- **Final round**: P4-2d CONFIRMED — invoice PDF content verified
+  (`INV-0010`, Khan Wholesale, `Compressor | 1 Piece | Rs 6,000 | Rs
+6,000`, Total/Paid/Balance Due all correct for a cash sale). P4-5b
+  ACCEPTED at 8/10 — final 2 runs explicitly waived by owner decision.
+- **Phase 4 close-out written**, per explicit instruction, in this
+  order: `docs/phases/PHASE_4.md` (status → COMPLETE — 2026-08-30; P4-0,
+  P4-1d, P4-2d, P4-5b rows updated; exit criteria in §4 — 5 of 8 ticked
+  exactly as written, 3 left unticked with a one-line reason each rather
+  than force-ticked; §6 updated to resolve its own prior "cannot be
+  marked COMPLETE without these" statement as a recorded owner decision,
+  not a silent contradiction); `PROJECT.md` (top status block rewritten
+  from the stale Phase 2G block it had carried all session, phase-status
+  table row, Known Hardware's P4-0/P4-5b note, BUG-C already updated to
+  FIXED/VERIFIED in the prior round). Two items are recorded as closed
+  short of their original written bar, by explicit owner decision, not
+  glossed over: (1) P4-0 never got shop-PC-specific verification, only
+  developer-machine; (2) P4-1d/P4-2d's "a physical page out of the
+  printer" requirement was confirmed only as PDF-opens-correctly in the
+  system viewer — no photo/description of actual paper output exists
+  for either, and P4-5b's final 2/10 runs were waived rather than run.
+  Noted that Phase 5's own exit criteria separately require a full 10x
+  power-cut test on the real shop PC (`docs/PHASES.md` §Phase 5), so
+  the waived P4-5b runs are re-covered there regardless.
+- **BUG-7 recurred twice more this continuation** (expected — the owner
+  was running the app in parallel for hardware testing both times);
+  recovered both times via the documented `npm install better-sqlite3
+--no-save` precedent.
+
+**Verified (continued):**
+
+- `transaction-atomicity.test.ts`: 1/1 passing in isolation, then as
+  part of the full suite.
+- Seed-script verification queries (`data/shop-dev.db`, this session's
+  seeded state): 3 party rows, 1 party_ledger row (amount 600000,
+  matching hand calc of Rs 6,000), `item.avg_cost` = 400000 (matching
+  hand calc of the Rs 4,000 purchase unit cost, 1:1 factor),
+  `integrity_check` = `ok`.
+- Final `npm run verify` for the close-out: exit code 0, **245/245**
+  tests passing, typecheck clean, lint clean.
+
+**Bugs found:** BUG-NEW (LOW, deferred to Phase 8) | BUG-A/B/C from the
+earlier continuation, BUG-C now confirmed FIXED and VERIFIED on real
+hardware (see PROJECT.md).
+
+**Decisions taken:** owner explicitly waived P4-5b's final 2/10 kill
+runs and closed Phase 4 without shop-PC-specific P4-0 verification —
+both recorded as deliberate decisions in PROJECT.md/PHASE_4.md, not
+silently absorbed into "COMPLETE."
+
+**Blocked on:** nothing for Phase 4 itself — closed. Shop PC
+verification (P4-0) and an actual physical-paper confirmation for
+receipt/invoice printing remain recommended before go-live but do not
+block Phase 4's status per the owner's decision. Phase 3's pre-existing
+real-hardware timing number (unrelated to Phase 4) remains open.
+
+**Next session should:** start Phase 5 (`docs/PHASES.md` §Phase 5 —
+deploy + parallel run: install on the shop's real machine, load real
+items/opening stock/opening balances, train staff, run in parallel with
+the paper register, full 10x power-cut test). No new features in
+Phase 5 per its own stated scope.
+
+**Phase 4 status: COMPLETE — 2026-08-30.** Closed by explicit owner
+decision, with the two exit-criteria gaps above recorded rather than
+hidden. Awaiting the owner's confirmation before any commit of this
+close-out.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted at every
+      checkpoint through this entire continuation, including the two
+      exit criteria left honestly unticked rather than forced
+- [x] No unresolved bugs introduced by this phase — BUG-NEW is a UI
+      gap (deferred, not a Phase 4 regression), not a defect this phase
+      created
+- [x] PROJECT.md updated with new status — top block, phase-status
+      table, Known Hardware, BUG-C entry all current
+- [x] PROGRESS.md updated with session entry (this entry)
+- [ ] Next phase prerequisites are met — Phase 5 needs the shop PC
+      install itself; nothing outstanding on Phase 4's side blocks it
+- [x] Any new bugs documented in PROJECT.md — BUG-NEW logged
+- [x] Test suite passing — **245/245**
+
 ---
 
 ## [2026-08-29] Session 12 — Phase 4: kickoff, P4-3/P4-4/P4-5a, and P4-1a/b/c (receipt printing) all built
