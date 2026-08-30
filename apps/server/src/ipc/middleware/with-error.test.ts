@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { DbBusyError } from '@shop/db';
-import { toIpcError } from './with-error.js';
+import { toIpcError, withError } from './with-error.js';
+import { setRestoreInProgress } from './restore-state.js';
 
 describe('toIpcError', () => {
   it('wraps a DbBusyError into { code: DB_BUSY, message, details }', () => {
@@ -37,5 +38,32 @@ describe('toIpcError', () => {
     expect(ipcError.code).toBe('INTERNAL_ERROR');
     expect(ipcError.message).toBe('Purchase 123 is already cancelled');
     expect('stack' in ipcError).toBe(false);
+  });
+});
+
+describe('withError — restore-in-progress guard (P4-4d)', () => {
+  afterEach(() => {
+    setRestoreInProgress(false); // never leak state across tests
+  });
+
+  it('blocks the wrapped handler and throws RESTORE_IN_PROGRESS while a restore is running', async () => {
+    let handlerWasCalled = false;
+    const handler = withError(() => {
+      handlerWasCalled = true;
+      return Promise.resolve('should not reach here');
+    });
+
+    setRestoreInProgress(true);
+
+    await expect(handler()).rejects.toMatchObject({ code: 'RESTORE_IN_PROGRESS' });
+    expect(handlerWasCalled).toBe(false);
+  });
+
+  it('runs the wrapped handler normally when no restore is in progress', async () => {
+    const handler = withError(() => Promise.resolve('normal result'));
+
+    setRestoreInProgress(false);
+
+    await expect(handler()).resolves.toBe('normal result');
   });
 });

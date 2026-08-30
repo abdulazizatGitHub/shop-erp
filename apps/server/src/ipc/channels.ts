@@ -47,6 +47,14 @@ export const channels = {
     customerBalanceCommit: 'import:customerBalance:commit',
   },
   backup: { now: 'backup:now', restore: 'backup:restore' },
+  setting: {
+    getReceiptPaperSize: 'setting:getReceiptPaperSize',
+    setReceiptPaperSize: 'setting:setReceiptPaperSize',
+    getShopName: 'setting:getShopName',
+    setShopName: 'setting:setShopName',
+  },
+  print: { reprintReceipt: 'print:reprintReceipt' },
+  invoice: { printSaleInvoice: 'invoice:printSaleInvoice' },
   system: { ping: 'system:ping' },
 } as const;
 

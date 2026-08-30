@@ -232,14 +232,14 @@ Reports read from **views**, not by re-implementing arithmetic in TypeScript.
 Two implementations of "what does this customer owe" will eventually disagree,
 and you will not know which is right.
 
-| View                   | Answers                                           |
-| ---------------------- | ------------------------------------------------- |
-| `v_stock_on_hand`      | Current stock per item per warehouse              |
-| `v_party_balance`      | Who owes what, in either direction                |
-| `v_daily_sales`        | Sales, cash collected, credit given per day       |
-| `v_unit_pl`            | Revenue, COGS, margin split by business unit      |
-| `v_job_split`          | Per job: parts charged, parts cost, labour, payer |
-| `v_technician_custody` | What each technician still physically holds       |
+| View                                                            | Answers                                           |
+| --------------------------------------------------------------- | ------------------------------------------------- |
+| `v_stock_on_hand`                                               | Current stock per item per warehouse              |
+| `v_party_balance`                                               | Who owes what, in either direction                |
+| `v_daily_sales`                                                 | Sales, cash collected, credit given per day       |
+| `v_unit_direct_margin` (name corrected — PHASE_4.md 2026-08-29) | Revenue, COGS, margin split by business unit      |
+| `v_job_split`                                                   | Per job: parts charged, parts cost, labour, payer |
+| `v_technician_custody`                                          | What each technician still physically holds       |
 
 Add a materialised cache only when a report is **measured** as slow, and always
 with a rebuild command.

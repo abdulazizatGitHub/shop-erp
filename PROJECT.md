@@ -3,7 +3,7 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-29
 **Current phase:** Phase 2G — P2-1/P2-2 IPC+UI gap closure
 **Phase status:** ✅ COMPLETE — 2026-08-28 (PG-A–PG-D). Supplier CRUD
 and purchase entry, built at the core+repository layer since Phase 2
@@ -42,7 +42,62 @@ number (unrelated to this phase, still blocking Phase 3 COMPLETE — see
 
 ---
 
-## 2. Phase status
+## 2. Known Hardware
+
+**Printer:** standard Windows printer, A4/A5 paper. Confirmed by owner
+2026-08-29, during Phase 4 planning. No thermal printer purchased.
+**Thermal printer:** not purchased yet. A settings toggle to enable
+thermal (ESC/POS) printing alongside the PDF/A4/A5 path is a planned
+future feature — deferred to Phase 5 or Phase 8, pending hardware
+arrival. Not built in Phase 4; see `docs/phases/PHASE_4.md` CF-5.
+**PC specification:** not confirmed — see Q8 below (open since
+2026-08-08, now also relevant to Phase 4's P4-5 pull-the-plug test).
+
+**P4-0 smoke test status:** P4-0 verified on developer machine
+(2026-08-29). Shop PC verification required before go-live. P4-5b
+(pull-the-plug test) also requires shop PC — cannot be substituted by
+unit tests. Both remain outstanding.
+
+**Print mechanism (P4-1c, revised 2026-08-30):** `shell.openPath()` via
+Electron's `shell` module — no new npm dependency. SumatraPDF fallback
+no longer needed. History: the original mechanism was PowerShell's
+`Start-Process -FilePath {pdfPath} -Verb Print -WindowStyle Hidden` via
+`child_process.spawn` (fixed once for BUG-A — a `$args[0]`
+path-passing bug — then hit the documented fallback scenario on real
+hardware anyway: the PDF generated correctly, but the shop PC's
+default PDF viewer, Edge, ignores the `Print` verb entirely, so nothing
+reached the printer). `shell.openPath()` opens the PDF in the system's
+default viewer instead; the owner prints from there — one click with a
+real printer connected, or Windows offers "Microsoft Print to PDF" as
+a fallback when none is.
+
+**Shop name printed on receipts:** defaults to the placeholder `"Shop
+ERP"` (`setting` table, key `shopName`, see
+`packages/db/src/repositories/setting.repository.ts`). **The owner
+must change this to the real business name via the Settings tab before
+go-live** — every receipt/invoice printed with the placeholder still in
+place is a real customer-facing mistake, not a cosmetic one. Nothing in
+the receipt template hardcodes a shop name; it always reads through
+this setting.
+
+### Future feature requests (not scheduled to any phase)
+
+- **2-up printing** — printing two A5 receipts on one A4 sheet.
+  Requested 2026-08-29 during Phase 4 planning; explicitly out of scope
+  for Phase 4 (`docs/phases/PHASE_4.md` §2). No phase assigned.
+- **Thermal printing toggle** — see Known Hardware above.
+- **Receipt temp file cleanup** — `saveReceiptToTempFile()`
+  (`apps/server/src/printing/receipt-file.ts`, P4-1c) writes
+  `receipt-{saleId}-{timestamp}.pdf` into `os.tmpdir()` on every print
+  and reprint, and never deletes them (the Reprint path needs the
+  generation scheme to stay available). A startup task deleting files
+  matching this pattern older than 7 days is acceptable but was not
+  built this phase — logged here per explicit instruction rather than
+  silently skipped. No phase assigned.
+
+---
+
+## 3. Phase status
 
 | Phase | Name                                    | Status                                               | Completed                                                                                     |
 | ----- | --------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -52,7 +107,7 @@ number (unrelated to this phase, still blocking Phase 3 COMPLETE — see
 | 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                             | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                   |
 | 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
 | 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met        | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
-| 4     | Printing + reports                      | NOT STARTED                                          | —                                                                                             |
+| 4     | Printing + reports                      | ⏳ IN PROGRESS — P4-3/P4-4/P4-5a DONE, P4-1a DONE    | See `docs/phases/PHASE_4.md`                                                                  |
 | 5     | Deploy + parallel run                   | NOT STARTED                                          | —                                                                                             |
 | 6     | Repair jobs (two-unit split)            | NOT STARTED                                          | —                                                                                             |
 | 7     | Staff, wages, expenses                  | NOT STARTED                                          | —                                                                                             |
@@ -60,7 +115,7 @@ number (unrelated to this phase, still blocking Phase 3 COMPLETE — see
 
 ---
 
-## 3. Known bugs
+## 4. Known bugs
 
 ### BUG-1: `db:migrate` / `db:reset` scripts reference files that don't exist yet — LOW
 
@@ -824,6 +879,127 @@ Status: UNFIXED — not in PG-D's stated field list; a deliberate
 scope-narrowing this session, not an oversight discovered afterward. See
 `docs/phases/PHASE_2G.md` §5/§8.
 
+### BUG-A: PowerShell print command never received the PDF path — CRITICAL, FIXED
+
+Found in: Phase 4, P4-1d real-hardware printer testing, 2026-08-30.
+Description: `printFile()` (`apps/server/src/printing/print-file.ts`)
+spawned `powershell.exe -Command 'Start-Process -FilePath $args[0] ...'`
+with the PDF path passed as a trailing array element after `-Command`,
+expecting PowerShell to bind it to `$args[0]` inside the script text.
+`$args` is only populated that way under `-File`; in a `-Command`
+invocation it is never populated, so `Start-Process` ran against the
+literal string `"$args[0]"` — the real path never reached PowerShell.
+Impact: No receipt or invoice could ever print — the PDF was generated
+correctly but the print command itself always targeted a nonexistent
+file.
+Fix: Interpolate the path directly into the command string,
+single-quote-escaped (`'` → `''`, PowerShell's own escaping rule for
+single-quoted strings) so a path containing a quote can't break out of
+it. TDD: wrote a test asserting the real path appears inside the
+command text (and that the old `$args[0]`/trailing-argument pattern
+does not), confirmed it failed against the pre-fix code, then fixed.
+Status: FIXED (path-passing bug itself), then SUPERSEDED same day —
+real-hardware re-testing after this fix hit the documented fallback
+scenario anyway: the PDF now generated and the PowerShell command ran
+correctly, but the shop PC's default PDF viewer (Edge) ignores the
+`Print` verb entirely, so nothing reached the printer regardless. The
+whole PowerShell/`Start-Process` mechanism was replaced with
+`shell.openPath()` (Electron built-in) — see "Print mechanism" under
+Known Hardware above. The `$args[0]` fix described here is retained in
+history for context; it is no longer the live code path.
+
+### BUG-B: Adding the same item twice created duplicate cart lines instead of merging quantity — MEDIUM, FIXED
+
+Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
+Description: `SalePage.tsx`'s `confirmLine()` always appended a new
+`CartLine` via `setCart((prev) => [...prev, newLine])`, with no check
+for an existing line for the same item already in the cart.
+Impact: Selling the same item to the same customer in two separate
+scans/entries produced two cart rows instead of one row with the
+combined quantity — confusing on the receipt, and meant the salesman
+had to notice and manually work around it mid-sale.
+Fix: New pure `mergeCartLine(cart, newLine)` in `CartTable.tsx` — merges
+into an existing line when `itemId` AND `saleUomId` both match
+(`undefined === undefined` correctly merges two stock-unit adds; a
+stock-unit line and an alt-unit line for the same item stay distinct,
+since they represent physically different units sold). `confirmLine()`
+now calls it instead of always appending. TDD: 5 tests covering empty
+cart, different item, same-item merge, alt-unit-vs-stock-unit staying
+separate, and two same-alt-unit adds merging — written and run failing
+(`mergeCartLine is not a function`) before implementation.
+Status: FIXED — 2026-08-30, `apps/client/src/pages/sales/CartTable.tsx`
+(+ new `CartTable.test.ts`, this app's first test file),
+`apps/client/src/pages/sales/SalePage.tsx`.
+**Confirmed fixed on real hardware, 2026-08-30** — owner reports the
+cart now merges duplicate items correctly (screenshot: "Compressor 2
+Piece Rs 6,000 Rs 12,000", one merged line, correct total).
+
+### BUG-C: Customer search Enter key silently did nothing if pressed before the debounced search resolved — HIGH, FIXED
+
+Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
+Description: `SearchSelect.tsx`'s Enter handler only acted on
+`results[highlighted]`; `results` is populated by a 200ms-debounced
+async search. A fast typist — exactly what this keyboard-driven counter
+is built for (30-second sale target) — can press Enter before that
+search resolves. With nothing highlighted yet and a non-empty query,
+neither the "select the highlighted result" branch nor the
+"empty-query -> walk-in" branch fired: the keypress was silently
+swallowed, no selection, no error, no feedback. `selectedCustomer`
+simply never got set, leaving the sale on Walk-in with no indication
+anything had gone wrong.
+Impact: A credit sale intended for a specific customer could silently
+post as a walk-in cash-implied sale with no party_ledger row for the
+intended customer — a real money/ledger correctness risk, not just a
+UX annoyance, which is why this is rated HIGH rather than LOW/MEDIUM.
+Fix: On Enter with no highlighted result and a non-empty query,
+`SearchSelect` now runs the search immediately (not waiting for the
+debounce) and acts on its real result once it resolves — selecting the
+first match, or leaving genuinely-empty results visible so the user
+gets feedback instead of silence.
+Status: FIXED (code) — 2026-08-30,
+`apps/client/src/pages/sales/SearchSelect.tsx`. **Real-hardware
+verification still outstanding** — this sandbox cannot launch
+Electron (BUG-7). Owner must, on the real machine: search for an
+existing customer by name, confirm the line updates from Walk-in to
+the found customer, complete a credit sale against that customer, and
+query `party_ledger` directly to confirm a row exists with the correct
+`party_id`/amount. Not yet performed or claimed as verified here.
+
+### BUG-X: Item codes display as `ITM-A-000001` (old device-coded format) — MEDIUM, RESOLVED (decision: leave as-is)
+
+Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
+Description: ADR-0012 (2026-08-28) reformatted `sale`/`customer`/
+`supplier`/`purchase`/`payment` document numbers to `PREFIX-NNNN`, but
+never covered item codes. Items still display as `ITM-A-000001`
+(device-coded, 6-digit padding) — the pre-ADR-0012 format everywhere
+else was cleaned up.
+Impact: Cosmetic inconsistency — item codes look visibly different
+from every other document number in the system (receipts, invoices,
+customer/supplier codes). No money/stock correctness impact.
+Decision (owner, 2026-08-30): **leave item codes as-is, no migration.**
+ADR-0012 applies to customer-facing document numbers only. Item codes
+are internal catalogue references, not customer-facing document
+numbers, and were never in that ADR's scope. ADR-0012 amended with an
+explicit sentence recording this (see the ADR file itself).
+Status: RESOLVED — not a bug, a scope clarification. No code change.
+
+### BUG-Y: Negative-stock confirmation is inline text with keyboard instructions, not a modal dialog — LOW, deferred
+
+Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
+Description: The sale screen's warning-gate step (`SalePage.tsx`,
+`step === 'warning-gate'`) shows the credit-limit/negative-stock
+warning as inline text ("Press Enter to keep this sale, or Escape to
+cancel it") rather than a modal dialog.
+Impact: Functions correctly — the keyboard-only interaction model this
+app is built around still works — but reads as less visually
+deliberate than a modal for a warning of this weight, and may be
+harder for a new/non-technical salesman to notice against a busy
+screen.
+Fix: Convert to a modal dialog, kept keyboard-driven (Enter/Escape
+still the only interactions). Deferred to Phase 8's UI pass, per
+explicit instruction — not built this phase.
+Status: DEFERRED — Phase 8.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]
@@ -835,22 +1011,22 @@ Status: UNFIXED — waiting for [phase / migration / decision]
 
 ---
 
-## 4. Open questions (blocking design — do NOT invent answers)
+## 5. Open questions (blocking design — do NOT invent answers)
 
-| #   | Question                                                                                                                                                             | Blocks                   | Asked      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                                                                                            | Item UoM conversion      | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                                                                                                         | Container tracking       | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                                                                                           | Pricing engine           | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q4  | Which items genuinely need serial tracking?                                                                                                                          | Billing speed            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q5  | Fridge warranty work — who pays for parts?                                                                                                                           | Payer model              | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q6  | Approximate SKU count (300–500 assumed)                                                                                                                              | Import effort            | 2026-08-08 | ~300–500                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Q7  | Thermal printer model                                                                                                                                                | Print driver             | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q8  | PC specification                                                                                                                                                     | Electron perf            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?                                                                                    | Unit P&L shape           | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                                                                                                | Overhead reporting       | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                           | P0-8 verification        | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q12 | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it? | Phase 4 cash-book design | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
+| #   | Question                                                                                                                                                             | Blocks                                                                                                  | Asked      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1  | Gas sold by whole cylinder, or by weight from a cylinder?                                                                                                            | Item UoM conversion                                                                                     | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q2  | Empty cylinders returnable / held on deposit? Who owns them?                                                                                                         | Container tracking                                                                                      | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q3  | Wholesale price: fixed amount / % off retail / negotiated?                                                                                                           | Pricing engine                                                                                          | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q4  | Which items genuinely need serial tracking?                                                                                                                          | Billing speed                                                                                           | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q5  | Fridge warranty work — who pays for parts?                                                                                                                           | Payer model                                                                                             | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q6  | Approximate SKU count (300–500 assumed)                                                                                                                              | Import effort                                                                                           | 2026-08-08 | ~300–500                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q7  | Thermal printer model                                                                                                                                                | Print driver                                                                                            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q8  | PC specification                                                                                                                                                     | Electron perf; also Phase 4 P4-5 pull-the-plug test (needs the actual shop machine, flagged 2026-08-29) | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q9  | Should Repair carry a cost of goods for parts consumed (internal transfer price)?                                                                                    | Unit P&L shape                                                                                          | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q10 | Allocation method per expense category (rent, electricity, bike fuel)                                                                                                | Overhead reporting                                                                                      | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q11 | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                           | P0-8 verification                                                                                       | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q12 | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it? | Phase 4 cash-book design                                                                                | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
 
 ### P0-8 baseline (derived, not assumed)
 
@@ -884,7 +1060,7 @@ regression test, not just a one-time manual check — see
 
 ---
 
-## 5. Decisions taken (full ADRs in `docs/decisions/`, indexed in [`docs/decisions/README.md`](docs/decisions/README.md))
+## 6. Decisions taken (full ADRs in `docs/decisions/`, indexed in [`docs/decisions/README.md`](docs/decisions/README.md))
 
 | ADR  | Decision                                                                                                                                                           | Date       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
@@ -904,7 +1080,7 @@ regression test, not just a one-time manual check — see
 
 ---
 
-## 6. Risks
+## 7. Risks
 
 | #   | Risk                                                           | Severity | Mitigation                                                                       | Status   |
 | --- | -------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- | -------- |
@@ -918,6 +1094,6 @@ regression test, not just a one-time manual check — see
 
 ---
 
-## 7. Session log
+## 8. Session log
 
 See `PROGRESS.md`.

@@ -15,6 +15,29 @@ export interface CartLine {
   readonly saleToStockFactor?: number | undefined;
 }
 
+/**
+ * BUG-B fix (found P4-1d real-hardware testing): adding the same item
+ * twice created two separate lines instead of merging quantity into
+ * the existing one. "Same line" means same itemId AND same saleUomId
+ * — undefined matches undefined (two stock-unit adds merge), but a
+ * stock-unit line and an alt-unit line for the same item stay distinct
+ * even though they share an itemId, since they represent physically
+ * different units being sold.
+ */
+export function mergeCartLine(cart: readonly CartLine[], newLine: CartLine): readonly CartLine[] {
+  const matchIndex = cart.findIndex(
+    (line) => line.itemId === newLine.itemId && line.saleUomId === newLine.saleUomId,
+  );
+  if (matchIndex === -1) {
+    return [...cart, newLine];
+  }
+  return cart.map((line, index) =>
+    index === matchIndex
+      ? { ...line, quantityMilli: line.quantityMilli + newLine.quantityMilli }
+      : line,
+  );
+}
+
 export function lineTotalPaisa(line: CartLine): number | null {
   return line.unitPricePaisa === null
     ? null

@@ -4,8 +4,9 @@ import { CustomersImportPage } from '../pages/parties/CustomersImportPage.js';
 import { SuppliersPage } from '../pages/parties/SuppliersPage.js';
 import { PurchasePage } from '../pages/purchases/PurchasePage.js';
 import { SalePage } from '../pages/sales/SalePage.js';
+import { SettingsPage } from '../pages/settings/SettingsPage.js';
 
-type Tab = 'sales' | 'items' | 'suppliers' | 'purchases' | 'customerBalances';
+type Tab = 'sales' | 'items' | 'suppliers' | 'purchases' | 'customerBalances' | 'settings';
 
 export function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('sales');
@@ -57,6 +58,15 @@ export function App(): React.JSX.Element {
           }}
         >
           Customer Balances
+        </button>{' '}
+        <button
+          type="button"
+          disabled={tab === 'settings'}
+          onClick={() => {
+            setTab('settings');
+          }}
+        >
+          Settings
         </button>
       </nav>
       <hr />
@@ -65,6 +75,7 @@ export function App(): React.JSX.Element {
       {tab === 'suppliers' && <SuppliersPage />}
       {tab === 'purchases' && <PurchasePage />}
       {tab === 'customerBalances' && <CustomersImportPage />}
+      {tab === 'settings' && <SettingsPage />}
     </div>
   );
 }

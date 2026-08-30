@@ -41,6 +41,641 @@
 
 ---
 
+## [2026-08-30] Session 13 — Phase 4: BUG-A/B/C fixed, BUG-X resolved, P4-2 (invoice) fully built and wired end-to-end
+
+**Goal:** Fix, in order, three bugs the owner found running P4-1d
+real-hardware receipt-printing/sale-flow testing — a broken print
+mechanism, duplicate cart lines, and a customer-search selection race
+condition — each test-first where a test was feasible, `npm run verify`
+after every fix. Then log all three as FIXED and two further items
+(item-code format, a UI polish deferral) as owner decisions, not fixes.
+
+**Done:**
+
+- **BUG-A (CRITICAL)** — `printFile()`
+  (`apps/server/src/printing/print-file.ts`) passed the PDF path as a
+  trailing spawn argument, expecting PowerShell to bind it to
+  `$args[0]` inside a `-Command` script. `$args` is only populated that
+  way under `-File`; the real path never reached PowerShell at all —
+  nothing could ever print. Read the file before touching it, per
+  instruction. Fixed by interpolating the path directly into the
+  command string, single-quote-escaped. TDD: rewrote
+  `print-file.test.ts` to assert the real path appears in the command
+  text (and the old `$args[0]`/trailing-argument shape does not, plus a
+  single-quote-escaping case), confirmed both new assertions failed
+  against the pre-fix code, then fixed.
+- **BUG-B (MEDIUM)** — `SalePage.tsx`'s `confirmLine()` always appended
+  a new cart line, never checking for an existing line for the same
+  item. New pure `mergeCartLine(cart, newLine)` in `CartTable.tsx`
+  (this app's first test file, `CartTable.test.ts`) — merges when
+  `itemId` AND `saleUomId` both match, keeping alt-unit and stock-unit
+  lines for the same item distinct. TDD: 5 tests written and run
+  failing (`mergeCartLine is not a function`) before implementation.
+- **BUG-C (HIGH)** — `SearchSelect.tsx`'s Enter handler only acted on
+  `results[highlighted]`, populated by a 200ms-debounced async search.
+  A fast typist — this counter's whole design target is a 30-second
+  keyboard-only sale — can press Enter before that search resolves;
+  with nothing highlighted and a non-empty query, neither branch of the
+  old `if/else if` fired, silently swallowing the keypress with zero
+  feedback. `selectedCustomer` simply never got set. Traced the full
+  path first (`SalePage.tsx` → `SearchSelect.tsx` → `debounce.ts` →
+  `preload.ts` → `CustomerSearchInput` contract →
+  `party.repository.ts`'s `searchCustomers`) before concluding this was
+  the actual defect, not a wiring/backend issue — all of those other
+  layers checked out correct. Fixed by running the search immediately
+  on Enter when nothing was highlighted yet, acting on its real result
+  once it resolves, instead of silently doing nothing. No automated
+  test — BUG-C's instructions asked for real-hardware verification
+  (search → selection → credit sale → `party_ledger` query), not a unit
+  test, and no React component-testing library exists in this repo yet
+  to add one without an unauthorized new dependency.
+- `PROJECT.md` — BUG-A/B/C logged as FIXED with today's date, full
+  root-cause/fix descriptions, keeping the user's own `BUG-A`/`BUG-B`/
+  `BUG-C` labels (not renumbered into the sequential `BUG-N` scheme,
+  for traceability against this session's code comments and
+  conversation). BUG-X (item code format, `ITM-A-000001` vs
+  ADR-0012's `PREFIX-NNNN` shape — never covered by that ADR) and
+  BUG-Y (negative-stock warning should be a modal, deferred to Phase 8)
+  logged as owner-decision items, not attempted.
+
+**Verified:**
+
+- `npm run verify` run after every single fix, not batched at the end:
+  BUG-A alone → 226/226 (after also clearing a fresh BUG-7 ABI
+  recurrence, restored via the documented `npm install better-sqlite3
+--no-save` precedent) → BUG-B → 231/231 → BUG-C → 231/231 (no new
+  test). Final state: typecheck clean, lint clean, **231/231 tests**.
+  `npm run build --workspace=@shop/server` / `@shop/client` both exit 0
+  after all three fixes.
+- BUG-A's fix verified by real generated command strings inspected in
+  the test, not by trusting the diff — confirmed the fixed code
+  produces a command containing the literal path and confirmed the old
+  code's test assertions genuinely failed first.
+- BUG-B's merge logic verified against 5 cases including the one that
+  actually matters for correctness (alt-unit vs. stock-unit lines for
+  the same item must NOT merge, since they're physically different
+  units).
+
+**Not done / deferred:**
+
+- **BUG-C's real-hardware verification** — search for an existing
+  customer, confirm the line updates from Walk-in, complete a credit
+  sale, query `party_ledger` directly and confirm the row. Not
+  performed — this sandbox cannot launch Electron (BUG-7). The fix is
+  code-complete and reasoned through the full call path, but not yet
+  proven on real hardware. Owner is running this now (in progress as
+  of this update) and will report back.
+- BUG-A's fix is likewise unverified against a real physical printer
+  in this session — P4-1d's original real-hardware print attempt is
+  what surfaced BUG-A in the first place; a re-run on real hardware
+  confirming a page actually comes out is still owed. Also in progress.
+- BUG-Y — deferred to Phase 8 by explicit instruction.
+
+**Bugs found:** BUG-A, BUG-B, BUG-C (all fixed this session); BUG-Y
+(logged, deferred, not fixed).
+
+**Continued same day — BUG-X resolved, P4-2 (A4 wholesale invoice)
+built through every checkpoint and wired into the app:**
+
+- **BUG-X resolved, not just logged**: owner decided to leave item
+  codes as-is — ADR-0012 covers customer-facing document numbers only,
+  item codes are internal catalogue references, no migration needed.
+  `PROJECT.md` BUG-X entry updated from "decision needed" to RESOLVED;
+  `docs/decisions/ADR-0012-document-numbering.md` amended with the
+  owner's exact sentence recording the scope boundary.
+- **P4-2 data query** — before writing anything, ran
+  `SELECT sql FROM sqlite_master WHERE type='table' AND name='sale'`
+  against a freshly-migrated real database (not just read the `.sql`
+  file) to confirm `paid_amount` exists, per explicit instruction.
+  `getSaleInvoiceData` (`packages/db/src/repositories/invoice.repository.ts`)
+  extends `getSaleReceiptData` by composition (calls it directly for
+  docNo/lines/totalAmountPaisa, reusing `ReceiptSaleLine` — the required
+  comment recording this reuse decision is at the top of the file) and
+  adds a purpose-built `party` query for customer name/phone/address —
+  deliberately not widening `party.repository.ts`'s existing
+  `CustomerRecord`/`getCustomerById`, matching the same precedent
+  `getSaleReceiptData` itself set against `sale.repository.ts` in
+  P4-1c. Found and fixed a real gap along the way: `PartyTable`
+  (Kysely schema) was missing `address`, which the live `party` table
+  has always had (same class of gap as `SettingTable` earlier this
+  session). TDD: failing test first, then implementation, 3/3 tests —
+  `balanceDuePaisa` asserted explicitly (800,000 = 1,300,000 −
+  500,000), not just inferred from total/paid separately, plus a
+  walk-in case proving null customer fields don't throw.
+- **P4-2 layout** — `buildInvoiceLayout`
+  (`packages/core/src/printing/invoice-layout.ts`), pure, reuses
+  `ReceiptLineData`. TDD, 2/2, including the "Walk-in" /
+  omitted-Phone-Address case.
+- **P4-2 PDF generation** — `renderInvoicePdf` reuses `renderReceiptPdf`
+  directly (hardcoded `'A4'`) rather than duplicating the pdfkit
+  drawing logic, per instruction ("same pdfkit code path as receipt").
+  One real correction here: first wrote a test asserting the invoice's
+  field content is greppable in the raw PDF bytes; checked empirically
+  and that's false — pdfkit compresses the content stream by default.
+  Also tried recovering it with Node's built-in `zlib.inflateSync()`
+  against the stream/endstream blocks; that didn't reliably work
+  either, and doing it properly would need a real PDF-parsing library
+  (not authorized) or a hand-rolled parser. **The receipt PDF test from
+  P4-1b never actually verified field content this way either** — only
+  structure (magic bytes + MediaBox) — a fact I'd mis-described as "the
+  same method" before actually re-checking it. Fixed the invoice test
+  to match reality and added the known-gap note to `PHASE_4.md` §5 the
+  owner then asked for verbatim.
+- **P4-2 wiring — the equivalent of P4-1c for invoices:**
+  `printInvoiceForSale` (throwing, composable core, mirrors
+  `printReceiptForSale`) plus `printInvoiceSafely` (error-isolating
+  wrapper — catches everything, returns `{filePath, printError}`,
+  never throws) per the owner's explicit instruction that "Print
+  Invoice" uses the SAME non-throwing error isolation as the receipt's
+  print-after-commit, not Reprint's throwing behavior. Both TDD, 3+3
+  tests. New `invoice:printSaleInvoice` IPC channel, wired end-to-end
+  (`main.ts`/`preload.ts`/`electron-api.d.ts`). "Print Invoice" button
+  added to `SalePage.tsx`'s confirmation message: shown only when the
+  sale's customer is not Walk-in AND `customerType === 'wholesale'`.
+  Had to capture this at the exact moment `lastCompletedSaleId` is
+  captured (in `finishSuccess`), since `selectedCustomer` itself gets
+  reset to `null` immediately after, for the next sale — reading it at
+  render time would always see `null`.
+- `docs/phases/PHASE_4.md` — task table updated (P4-2b/c DONE, P4-2d
+  PENDING real hardware, new P4-2e for the wiring itself DONE), stale
+  R5 disclaimer note fixed (it said "still awaiting owner pick" — that
+  was resolved earlier the same day and the note was never updated),
+  header status line rewritten, and the exact known-test-coverage-gap
+  sentence added to §5 verbatim as instructed.
+
+**Verified (continued):**
+
+- `npm run verify` run after every individual checkpoint, not batched:
+  invoice data query → 234/234 → invoice layout → 236/236 → invoice PDF
+  → 238/238 → IPC wiring → 244/244 → UI button → 244/244 (no new test,
+  per instruction — documented as a manual P4-2d step instead). Final
+  state: typecheck clean, lint clean, **244/244 tests**.
+  `npm run build --workspace=@shop/server` (512.28 kB, up from 508.10 —
+  confirms the invoice code is now actually bundled into the real
+  entry point, unlike the P4-1b checkpoint which stayed flat because
+  nothing imported it yet) / `--workspace=@shop/client` both exit 0.
+
+**Not done / deferred (continued):**
+
+- **P4-2d real-hardware verification** — needs the owner's printer,
+  same as P4-1d. Not attempted here.
+- No automated test for the "Print Invoice" button's conditional
+  rendering — explicit instruction to document as a manual step
+  (P4-2d) instead, since no React component-testing library exists in
+  this repo (same reasoning as BUG-C's fix having no automated test).
+
+**Decisions taken:** none promoted to a new ADR; ADR-0012 amended
+in-place with the owner's exact sentence resolving BUG-X's scope
+question.
+
+**Continued same day — real-hardware results started coming back;
+BUG-B confirmed fixed; BUG-A's original fix superseded by a print
+mechanism change:**
+
+- **BUG-B confirmed fixed on real hardware**: owner reports the cart
+  now merges duplicate items correctly (screenshot: "Compressor 2
+  Piece Rs 6,000 Rs 12,000", one merged line, correct total).
+  `PROJECT.md`'s BUG-B entry updated with this confirmation.
+- **Print mechanism replaced**: BUG-A's original fix (correcting how
+  the PDF path reached PowerShell's `Start-Process -Verb Print`) turned
+  out to be necessary but not sufficient — real-hardware testing after
+  that fix hit the documented fallback scenario anyway: the PDF
+  generated correctly and the PowerShell command ran, but the shop PC's
+  default PDF viewer (Edge) ignores the `Print` verb entirely, so
+  nothing ever reached the printer. Replaced the whole
+  spawn/PowerShell mechanism with Electron's built-in
+  `shell.openPath()` — no new dependency, opens the PDF in the
+  system's default viewer for the owner to print from (one click with
+  a printer connected; Windows offers "Microsoft Print to PDF" when
+  none is). TDD: read the current `printFile` in full first, pasted it
+  verbatim, then rewrote `print-file.test.ts` to mock `openPathFn`
+  instead of `spawnFn`, confirmed all 3 rewritten assertions failed
+  against the pre-change spawn-based code, then implemented. One
+  deliberate adaptation from the owner's literal snippet: kept an
+  injectable dependency parameter (`OpenPathFn`, default
+  `(path) => shell.openPath(path)`) rather than a hardcoded `shell`
+  import, matching every other function in this printing module and
+  avoiding introducing a new `vi.mock('electron', ...)` pattern this
+  codebase doesn't otherwise use — flagged before implementing, not
+  silently diverged. One real lint catch along the way: `shell.openPath`
+  passed directly as a bare default parameter value trips
+  `@typescript-eslint/unbound-method` (detaches the method from its
+  `this` binding); fixed by wrapping it in an arrow function.
+  `PROJECT.md`'s print-mechanism note and BUG-A's entry both updated —
+  BUG-A marked FIXED-then-SUPERSEDED rather than silently rewritten, so
+  the history stays visible. `docs/phases/PHASE_4.md`'s P4-1c row
+  updated to match.
+- **Could not perform**: "run the app, complete a sale, confirm the PDF
+  opens in the system viewer" — needs a real Electron window, which
+  this sandbox cannot launch (BUG-7, unchanged limitation). Not
+  attempted, not fabricated — flagged directly to the owner instead of
+  guessing at a result.
+
+**Verified (continued):**
+
+- Rewritten `print-file.test.ts`: 3/3 tests failing against the
+  pre-change code for the right reason (`TypeError: Cannot read
+properties of undefined (reading 'on')` — the old spawn-shaped mock
+  didn't match the new `shell.openPath`-shaped call), then 3/3 passing
+  after the rewrite.
+- A fresh BUG-7 ABI recurrence hit mid-checkpoint (expected — the owner
+  was actively running the app for hardware testing between turns);
+  cleared via the documented `npm install better-sqlite3 --no-save`
+  precedent, confirmed not a real regression.
+- Final state: typecheck clean, lint clean, **243/243 tests** (net −1
+  from 244 — the rewritten print-file suite has 3 tests where the old
+  one had 4, not a coverage loss, just a different shape of the same
+  mechanism). `npm run build --workspace=@shop/server` (511.66 kB) /
+  `--workspace=@shop/client` both exit 0.
+
+**Blocked on:** owner's real-hardware confirmation that the PDF now
+actually opens in the system viewer after a completed sale (the one
+verification step this session couldn't perform), and BUG-C's
+`party_ledger` query output — still outstanding as of this update.
+
+**Next session should:** get the "PDF opens in system viewer" result
+and BUG-C's real-hardware verification. If both check out, P4-1 is
+fully done including print; P4-2's equivalent (P4-2d) still needs its
+own physical-printer confirmation separately. Then P4-5b.
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted after every
+      checkpoint across bug fixes, the full P4-2 build, and the print
+      mechanism replacement, not batched
+- [x] No unresolved bugs introduced by this phase — the PDF
+      field-content test-assertion mistake and the unbound-method lint
+      error were both caught and corrected before shipping
+- [x] PROJECT.md updated with new status — BUG-A marked
+      FIXED-then-SUPERSEDED, BUG-B confirmed fixed on real hardware,
+      print-mechanism note rewritten
+- [x] PROGRESS.md updated with session entry (this entry, extended
+      same-day rather than a new dated entry)
+- [ ] Next phase prerequisites are met — the "PDF opens in system
+      viewer" check and BUG-C's real-hardware verification are both
+      still outstanding
+- [x] Any new bugs documented in PROJECT.md — none new; BUG-A's entry
+      updated to reflect supersession, not a new bug number
+- [x] Test suite passing — **243/243** in this sandbox
+
+---
+
+## [2026-08-29] Session 12 — Phase 4: kickoff, P4-3/P4-4/P4-5a, and P4-1a/b/c (receipt printing) all built
+
+**Goal:** Execute the mandatory Phase 4 kickoff protocol, get every
+blocking design question resolved with the owner, write the approved
+`docs/phases/PHASE_4.md`, then build every task that does not depend on
+P4-0's real-hardware smoke test: P4-3's prerequisite view-reading step
+and all five reports (R1–R5), P4-4 (backup/restore/retention), and
+P4-5a (WAL/synchronous confirmation). P4-1/P4-2 (printing) stay on hold
+pending a real-machine `pdfkit` version check; P4-0 and P4-5b need the
+owner's own hardware and are not attempted in this sandbox.
+
+**Done:**
+
+- Read all 11 mandated files, confirmed each individually before any
+  planning began.
+- `git log --oneline -10` — branch `main`, last commit `706a37d`
+  (Phase 2G close), two commits ahead of the session prompt's stated
+  baseline `1cb97de`.
+- `npm run verify` — first run failed (100/187 tests) on the
+  pre-existing BUG-7 ABI mismatch (better-sqlite3 left
+  Electron-targeted by a prior session's `npm run dev` attempt).
+  Recovered via the documented `npm install better-sqlite3 --no-save`
+  precedent; re-ran clean: 187/187, exit 0.
+- Produced a full `docs/phases/PHASE_4.md` draft (Goal/Scope/Tasks/Exit
+  criteria/Binding constraints/Open questions), then iterated it through
+  several rounds of owner decisions before writing it to disk:
+  - **Printer confirmed:** standard Windows printer, A4/A5 paper, no
+    thermal unit owned. Unblocks P4-1/P4-2 (CF-5 rewritten — thermal
+    deferred to Phase 5/8, logged as a future feature).
+  - **P4-1/P4-2 merged onto one PDF code path** (`pdfkit`, main-process
+    only — never `apps/client`/`@react-pdf/renderer`) with two
+    templates (receipt, invoice), not a separate thermal driver.
+  - **Receipt paper size:** one parameterized template
+    (`'A4' | 'A5'`), a new "Receipt paper size" dashboard setting
+    (existing `setting` table, default `A4`), no 2-up printing this
+    phase (logged as a future feature request in PROJECT.md).
+  - **R4 cash-book discriminator verified against live code, not
+    assumed:** read `packages/db/src/migrations/0001_init.sql:460-476`
+    and `packages/db/src/kysely-schema.ts:251-264` directly —
+    `payment.direction` (`'in' | 'out'`) exists on the `payment` table;
+    `payment` has **no** `doc_type` column at all (`doc_type` lives only
+    on the separate `document_sequence` table). An owner-proposed
+    correction to `doc_type='payment_in'` was checked against this
+    evidence, found incorrect, and not applied — the owner acknowledged
+    after seeing the file:line citations. R4 stays
+    `payment.amount WHERE direction='in'`, matching PHASE_3.md §5/§8's
+    original, previously-verified design.
+  - **PDF library:** `pdfkit` approved. A sandbox
+    `npm view pdfkit version` returned `0.20.1` (2026-08-29) —
+    explicitly **not** pinned from this reading; the owner separately
+    instructed that the real pin must come from
+    `npm view pdfkit version`/`dist-tags` run on the shop machine. Left
+    as a pending task (P4-2a), not resolved this session.
+  - **Backup encryption rejected entirely for Phase 4**, not just the
+    key-storage mechanism. An earlier hidden-key design (a derived
+    secret stored in Electron's `userData` directory) was flagged by
+    the agent as a silent total-backup-loss risk on PC replacement or
+    reinstall before the owner rejected encryption outright. Backups
+    are now plain, unencrypted `.db` copies
+    (`ShopERP_backup_YYYY-MM-DD.db`); the owner's reasoning is recorded
+    verbatim in `docs/phases/PHASE_4.md` CF-7.
+- `docs/phases/PHASE_4.md` — written to disk (new file), final approved
+  version, nine binding constraints (CF-1–CF-9) recorded.
+- `PROJECT.md` — added §2 "Known Hardware" (printer confirmed, thermal
+  deferred) with a "Future feature requests" list (2-up printing,
+  thermal toggle); all subsequent sections renumbered (old §2 Phase
+  status → §3, §3 Known bugs → §4, §4 Open questions → §5, §5 Decisions
+  taken → §6, §6 Risks → §7, §7 Session log → §8). The instruction to
+  "log Q13 (PC spec)" was not followed literally — Q8 already tracks
+  this exact question since 2026-08-08; updated Q8's "Blocks" column to
+  add the Phase 4 P4-5 dependency instead of creating a duplicate
+  question number.
+- **P4-3 prerequisite** — read every `CREATE VIEW` statement directly
+  from the migration `.sql` files (not docs, not memory, re-confirmed
+  fresh a second time on request): `v_daily_sales`/`v_stock_on_hand`/
+  `v_party_balance` (`0001_init.sql`), and found the "unit-margin view"
+  is ambiguous — two real candidates exist, `v_unit_pl`
+  (`0002_business_units.sql:217`) and `v_unit_direct_margin`
+  (`0003_shared_overhead.sql:111`). Built R5 against
+  `v_unit_direct_margin` (matches the phase brief's naming and the
+  view's own "this is FACT, show this as the primary number" comment).
+- **`packages/db/src/backup.ts` (new) — P4-4b/c.** `pruneBackups()`
+  (retention, TDD: failing test on missing module, then implemented,
+  then green), `createBackup()`, `restoreBackup()`. Mid-build
+  correction, not shipped-then-fixed: the first `createBackup` used a
+  plain `copyFileSync`, which is wrong for a WAL-mode database — a
+  committed row can sit only in the `.db-wal` sidecar file, uncheckpointed,
+  and a raw file copy would silently miss it. Switched to
+  `better-sqlite3`'s `db.backup()` (SQLite's own Online Backup API).
+  Proved the fix matters with a real test: inserted a row, left the
+  source connection open (no close, no checkpoint), confirmed via
+  `existsSync`/`statSync` that the `.db-wal` file genuinely held
+  non-zero data at that moment, then backed up/restored and confirmed
+  the row survived — not just a plausible-sounding comment.
+- **`apps/server/src/ipc/middleware/restore-state.ts` (new),
+  `with-error.ts` — P4-4d race guard.** Confirmed handlers are `async`
+  (pasted `sale.handler.ts`'s signature) before designing this, per
+  instruction. A module-level `isRestoring` boolean, checked once
+  inside the shared `withError()` wrapper so every `withError`-wrapped
+  handler rejects with `RESTORE_IN_PROGRESS` while a restore's file
+  copy is in flight, rather than duplicating the check per handler.
+  Documented, not silently left implicit: a few older handlers
+  (`item:create`/`item:search`/`item:lookups`, the three `import:*`
+  handlers) predate `withError` and aren't covered — same pre-existing
+  gap PHASE_3.5.md §8 already flagged.
+- **`apps/server/src/ipc/handlers/backup.handler.ts` (new)** —
+  `backup:now` (native folder-picker dialog, `createBackup` +
+  `pruneBackups`), `backup:restore` (native file-picker, then
+  `dialog.showMessageBox` with the exact required confirmation text and
+  `['Confirm', 'Cancel']` buttons, Cancel as `defaultId`/`cancelId`,
+  restore only on `response === 0`). Read `main.ts` in full first and
+  found there is no persistent database connection anywhere in this
+  app — every handler opens/closes per call (BUG-15's documented
+  pattern) — so "close all connections, reopen" from the phase brief
+  doesn't map onto a literal step here; documented that reasoning in
+  the code instead of building a no-op "close" step. Wired end-to-end:
+  `main.ts` → `preload.ts` → `electron-api.d.ts`, matching every prior
+  phase's pattern.
+- **`packages/db/src/repositories/report.repository.ts` (new) — P4-3
+  R1–R5, in the requested order R2, R1, R4, R3, R5.** All five read
+  from existing views/tables, never re-implementing view arithmetic:
+  - **R2** `getStockValuationReport` — reads `item.last_purchase_cost`
+    (never `avg_cost`, even though `createPurchase` keeps them
+    numerically identical), labels asserted literally as `"Last
+Purchase Cost"` / `"Valuation (Last Purchase Cost)"` (CF-3).
+  - **R1** `getDailySalesReport` — thin read over `v_daily_sales`.
+  - **R4** `getCashBookReport` — no view backs this (confirmed by the
+    P4-3 prerequisite read); unions `purchase.payment_mode='cash'`
+    (out) with `sale.paid_amount` and `payment WHERE direction='in'`
+    (in, two genuinely separate events, never double-counted), running
+    balance accumulated via `Money.add`/`subtract`. Implemented before
+    its test (process deviation, flagged in the same turn, not hidden)
+    — the only report of the five not built strictly test-first.
+  - **R3** `getReceivablesAgingReport` — `v_party_balance` alone isn't
+    enough (only one aggregate per party, no per-entry date); reads
+    `party_ledger` directly, buckets via SQLite `julianday()` day-count
+    arithmetic, `<=30`/`31-60`/`61-90`/`>90` as an exact, non-overlapping
+    partition. Test-first, strictly followed after the R4 lapse.
+  - **R5** `getUnitPlReport` — reads `v_unit_direct_margin`, always
+    returns exactly 3 rows (Parts/Repair/Total) even with zero activity,
+    `cogsColumnLabel` contains `"(Last Purchase Cost)"` on every row,
+    `disclaimer` field carries the R5-specific wording from the phase
+    brief — flagged to the owner that the general CF-3 section states a
+    different sentence for the same requirement; not yet resolved.
+    All five exported through `packages/db/src/index.ts`.
+- Pushed back on two owner instructions that turned out to be
+  factually wrong against live evidence already gathered this session,
+  per Golden Rule 6 ("live code is the truth") — did not apply either:
+  1. A proposed correction that `v_party_balance` "was never created in
+     a migration" — false; it exists at `0001_init.sql:699`, already
+     quoted twice this session, and is already read directly by
+     `party.repository.ts`'s `getSupplierBalance`/`getCustomerBalance`.
+  2. A request to add a correction note for a "Cash book view" row in
+     `SYSTEM_DESIGN.md` §7 — no such row exists in that table and never
+     has; nothing there to correct.
+- `docs/SYSTEM_DESIGN.md` §7 — one _genuine_ correction applied (the
+  `v_unit_pl` → `v_unit_direct_margin` naming ambiguity found during the
+  P4-3 prerequisite step): table row changed with an inline "(name
+  corrected — PHASE_4.md 2026-08-29)" note, not a silent edit, per
+  explicit instruction. Recorded again below under Bugs found.
+- `docs/phases/PHASE_4.md` — task table updated: P4-3 (prerequisite +
+  R1–R5), P4-4b/c/d, P4-5a all marked DONE — 2026-08-29. P4-0 stays
+  PENDING; P4-1/P4-2 stay at their prior status (ON HOLD); P4-5b stays
+  NOT STARTED (needs real hardware). Header **Status** line updated to
+  IN PROGRESS.
+
+**Verified:**
+
+- `npm run verify` — 187/187 (kickoff) → 191 (P4-4b/c) → 194 (P4-4d
+  guard) → 196 (R2) → 198 (R1) → 199 (R4) → 200 (R3) → 202 (R5). Every
+  step exit 0, real output pasted at each checkpoint, not summarized.
+  Final state: **typecheck clean, lint clean, 202/202 tests passing.**
+- `npm run build --workspace=@shop/server` and `--workspace=@shop/client`
+  — both exit 0, checked after P4-4d's wiring and again after all five
+  reports.
+- R4's discriminator claim verified against two independent live-code
+  sources (`0001_init.sql`, `kysely-schema.ts`), not assumed from either
+  the phase brief or the owner's proposed correction.
+- Every report's test seeds exact known paisa/milli-unit values, states
+  them in a comment, hand-calculates the expected result in a comment
+  directly above the assertion, and — for R2/R1/R3/R5 — was written and
+  run failing before the implementation existed. R4 is the one
+  exception (see Bugs found).
+- P4-4's WAL-correctness fix (see Done) verified with a real test that
+  checked `.db-wal` genuinely held non-zero data before the backup ran,
+  not just a comment asserting the scenario.
+- pdfkit's current published version checked via a real `npm view` call
+  (`0.20.1`) — explicitly logged as sandbox-only information, not
+  treated as the real version pin.
+
+**Not done / deferred:**
+
+- **P4-0** (real-hardware smoke test of SuppliersPage/PurchasePage) —
+  status still not confirmed by the owner. Per explicit instruction
+  this session, work proceeded on everything that doesn't depend on it
+  (P4-3, P4-4, P4-5a) rather than waiting.
+- **P4-1/P4-2** (printing) — on hold. Real-machine `pdfkit`
+  version/dist-tags check still outstanding; explicit instruction not
+  to start these yet even though P4-3/P4-4 are done.
+- **P4-5b** (10x pull-the-plug test) — needs real hardware, not
+  attempted in this sandbox.
+- R5's disclaimer wording — two candidate exact strings from the
+  original brief, not yet resolved by the owner (see Bugs found /
+  Blocked on).
+
+**Bugs found:** none in the codebase's business logic. Three
+process/documentation findings this session:
+
+1. The owner's proposed R4 correction (`doc_type='payment_in'`) was
+   inconsistent with the live schema; caught before it could be
+   applied.
+2. `getCashBookReport` (R4) was implemented before its test was
+   written — the one report of five not built strictly test-first.
+   Flagged in the same turn it happened, not discovered later.
+3. Two further owner-proposed corrections were checked against live
+   evidence and found false, not applied (see Done: the
+   `v_party_balance`-doesn't-exist claim and the "Cash book view" row
+   claim, both contradicted by evidence already gathered this session).
+
+**Documentation correction (2026-08-29, mid-session, recorded not
+silently applied):** `docs/SYSTEM_DESIGN.md` §7's read-model table
+listed `v_unit_pl` as the view answering "Revenue, COGS, margin split
+by business unit." Reading the actual migration SQL for R5 (P4-3)
+found two candidate views, not one — `v_unit_pl`
+(`0002_business_units.sql:217`) and `v_unit_direct_margin`
+(`0003_shared_overhead.sql:111`) — and `v_unit_direct_margin` is the
+one that actually matches that description (its own migration comment:
+"This is FACT — no allocation assumptions. Show this to the owner as
+the primary number"); `v_unit_pl` is an older, coarser view that
+additionally splits by `line_kind` and never subtracts direct expense.
+R5 was built against `v_unit_direct_margin`. `docs/SYSTEM_DESIGN.md`
+§7's table row corrected to `v_unit_direct_margin`, with an inline
+"(name corrected — PHASE_4.md 2026-08-29)" note rather than a silent
+edit, per explicit instruction.
+
+**Decisions taken:** none promoted to a full ADR this session — all
+nine are phase-scoped `docs/phases/PHASE_4.md` binding constraints
+(CF-1 through CF-5 carried forward from earlier phases; CF-6 through
+CF-9 new this session: PDF library choice, backup-encryption rejection,
+receipt paper size, R4 discriminator verification).
+
+**Continued this session — P4-0 resolved (pragmatic substitute), CF-3
+disclaimer locked, pdfkit pinned for real, P4-1a/b/c fully built:**
+
+- **P4-0:** owner ran the smoke test on their **developer machine**
+  rather than the shop PC — an explicit, owner-stated pragmatic
+  substitute covering code correctness only, not hardware compatibility
+  or non-technical user flow. Recorded verbatim in both
+  `docs/phases/PHASE_4.md` (header, P4-0 task row, exit criteria
+  checkbox, §6) and `PROJECT.md` §2. Shop PC verification and P4-5b
+  remain required before Phase 4 COMPLETE or go-live — neither
+  downgraded to "done."
+- **CF-3 disclaimer:** owner picked the R5-specific wording
+  ("Margin shown uses last purchase cost per item. True
+  weighted-average costing is Phase 8 work.") as canonical — it already
+  matched verbatim in `report.repository.ts` and its test; only
+  `docs/phases/PHASE_4.md` CF-3 was missing the actual sentence, now
+  added.
+- **pdfkit real version confirmed:** `0.20.1`,
+  `dist-tags: { latest: '0.20.1' }` — matches the sandbox reading
+  exactly. Installed `pdfkit@0.20.1` in `apps/server` (`^0.20.1` in
+  `package.json` — checked first that every other dependency in that
+  file already uses a caret range before "fixing" it to an exact pin,
+  which would have been an unrequested deviation). `@types/pdfkit`
+  added as a devDependency (pdfkit ships no types of its own) — stated
+  before installing, per the standing rule.
+- **P4-1a (shop name)** — `getShopName`/`setShopName` added to
+  `setting.repository.ts`, same pattern as `receiptPaperSize`, default
+  placeholder `"Shop ERP"`. Documented in `PROJECT.md` as a real
+  go-live blocker, not a cosmetic default. Wired end-to-end into
+  `SettingsPage.tsx`.
+- **P4-1b (receipt template)** — two layers, both TDD: `buildReceiptLayout`
+  (`packages/core/src/printing/receipt-layout.ts`, pure, no pdfkit —
+  caught `Money.format`'s real "omits `.00` when exact" behavior by
+  reading the function rather than assuming) and `renderReceiptPdf`
+  (`apps/server/src/printing/receipt-pdf.ts`, real pdfkit). Before
+  writing the PDF test, generated real A4/A5 PDFs via a throwaway
+  script and read the actual `/MediaBox` bytes rather than guessing
+  pdfkit's page dimensions — confirmed `595.28 x 841.89` (A4) and
+  `419.53 x 595.28` (A5) straight from pdfkit's own source.
+- **P4-1c (print-after-commit + Reprint), full component stack, all
+  test-first except one flagged deviation:**
+  - `printFile` (PowerShell `Start-Process -Verb Print`, spawned via
+    injectable `SpawnFn` so the test exercises real promise/control-flow
+    without shelling out) — TDD.
+  - `saveReceiptToTempFile` (`os.tmpdir()`, real files, no mocks) — TDD.
+    Not cleaned up this phase — logged as a future task in `PROJECT.md`
+    per explicit instruction, not silently skipped.
+  - `getSaleReceiptData` (`packages/db/src/repositories/receipt.repository.ts`,
+    new) — reading `sale.repository.ts` first surfaced that
+    `sale_line.description` is a name **snapshot** taken at sale time
+    (`docs/DATABASE_RULES.md`'s own rule), not something to re-join
+    against the live `item` table — used the snapshot correctly instead
+    of the join I'd first assumed I needed. Test proves both branches of
+    the CF-2 UoM fallback: explicit `sale_uom_id` (alt unit, "Foot") vs.
+    NULL falling back to the item's stock UoM ("Piece").
+  - `printReceiptForSale` — one shared orchestration used by **both**
+    print-after-commit and Reprint (not duplicated), fully
+    dependency-injected. Its own test doubles as the explicitly-required
+    "reprint handler calls the PDF generator with the correct data"
+    check.
+  - `createSaleAndPrintReceipt` — the print-after-commit error-isolation
+    wrapper. Its test is the explicitly-required one: mocked `createSale`
+    succeeding + mocked `printReceipt` rejecting, asserted the full sale
+    result (id/docNo/total/warnings) survives intact with `printError`
+    set separately, never thrown.
+  - Wired into the real `sale.handler.ts` (`sale:create` now returns
+    `CreateSaleAndPrintResult`, extending `SaleResult` with
+    `printError: string | null`) and a new `print.handler.ts`
+    (`print:reprintReceipt`, reusing the identical orchestration).
+  - Reprint button added to `SalePage.tsx`'s confirmation message
+    (this app has no separate confirmation screen — the button sits
+    next to the existing post-sale `successMessage`); a non-blocking
+    `printError` notice shown separately, sale never blocked by it.
+  - **One flagged process deviation:** the `KyselyDatabase`-typing
+    mistake from earlier in the session (using the misleadingly-named
+    plain-schema type instead of `Kysely<Schema>`) recurred once more in
+    `receipt.repository.test.ts` — caught immediately by `tsc`, fixed
+    the same way as before.
+
+**Blocked on:**
+
+- **P4-1d / P4-2d** — both need the real shop printer; nothing left to
+  build in the sandbox for print-after-commit/Reprint's control flow.
+- **P4-5b** — needs shop PC, cannot be substituted by unit tests at all
+  (unlike P4-0).
+- **Shop PC verification of P4-0** — developer-machine substitution
+  covers code correctness only.
+
+**Next session should:** P4-1d — print a real receipt on the actual
+printer (not a PDF sitting in `tmp`), confirming doc number, at least
+one line with its UoM, and the total are legible on paper. If the
+default PDF viewer doesn't honor the `Print` verb silently, the
+documented SumatraPDF fallback (`PROJECT.md` §2) is the next thing to
+try, not a new mechanism. Then P4-2 (invoice template + real print).
+
+**Checklist:**
+
+- [x] All verification checks passed — real output pasted at every
+      checkpoint (TDD cycles across P4-4, R1–R5, and now the full P4-1a/
+      b/c component stack), not "looks correct"
+- [x] No unresolved bugs introduced by this phase — the WAL/copyFileSync
+      issue (P4-4) and the recurring `KyselyDatabase` typing mistake
+      (P4-1c) were both caught and fixed before shipping
+- [x] PROJECT.md updated with new status — P4-0 substitution, print
+      mechanism + SumatraPDF fallback, shop-name placeholder warning,
+      receipt-temp-file-cleanup future task
+- [x] PROGRESS.md updated with session entry (this update)
+- [ ] Next phase prerequisites are met — P4-1d/P4-2d/P4-5b all need real
+      hardware; nothing further to build in this sandbox until that
+      happens
+- [x] Any new bugs documented — none in business logic
+- [x] Test suite passing — **225/225** in this sandbox
+
+---
+
 ## [2026-08-28] Session 11 — Phase 2G: P2-1/P2-2 IPC+UI gap closure, all sub-phases (PG-A–PG-D) built
 
 **Goal:** Close the P2-1/P2-2 IPC+UI gap — supplier CRUD and purchase

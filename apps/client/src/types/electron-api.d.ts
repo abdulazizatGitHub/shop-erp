@@ -58,6 +58,38 @@ export interface UomConversionOption {
   readonly factorMilli: number;
 }
 
+export interface BackupNowResult {
+  readonly backupPath: string;
+  readonly sizeBytes: number;
+}
+
+export interface RestoreResult {
+  readonly restoredFrom: string;
+}
+
+export type ReceiptPaperSize = 'A4' | 'A5';
+
+export interface SetReceiptPaperSizeInput {
+  readonly value: ReceiptPaperSize;
+}
+
+export interface SetShopNameInput {
+  readonly value: string;
+}
+
+export interface CreateSaleAndPrintResult extends SaleResult {
+  readonly printError: string | null;
+}
+
+export interface PrintReceiptResult {
+  readonly filePath: string;
+}
+
+export interface InvoicePrintOutcome {
+  readonly filePath: string | null;
+  readonly printError: string | null;
+}
+
 export interface ElectronApi {
   readonly system: {
     readonly ping: () => Promise<{ tableCount: number }>;
@@ -88,8 +120,14 @@ export interface ElectronApi {
     readonly cancel: (input: PurchaseIdInput) => Promise<void>;
   };
   readonly sale: {
-    readonly create: (input: CreateSaleInput) => Promise<SaleResult>;
+    readonly create: (input: CreateSaleInput) => Promise<CreateSaleAndPrintResult>;
     readonly cancel: (input: CancelSaleInput) => Promise<void>;
+  };
+  readonly print: {
+    readonly reprintReceipt: (saleId: string) => Promise<PrintReceiptResult>;
+  };
+  readonly invoice: {
+    readonly printSaleInvoice: (saleId: string) => Promise<InvoicePrintOutcome>;
   };
   readonly payment: {
     readonly receive: (input: CreatePaymentInput) => Promise<PaymentDto>;
@@ -108,6 +146,16 @@ export interface ElectronApi {
   readonly importCustomerBalance: {
     readonly dryRun: () => Promise<CustomerBalanceImportResult | null>;
     readonly commit: () => Promise<CustomerBalanceImportResult | null>;
+  };
+  readonly backup: {
+    readonly now: () => Promise<BackupNowResult | null>;
+    readonly restore: () => Promise<RestoreResult | null>;
+  };
+  readonly setting: {
+    readonly getReceiptPaperSize: () => Promise<ReceiptPaperSize>;
+    readonly setReceiptPaperSize: (input: SetReceiptPaperSizeInput) => Promise<void>;
+    readonly getShopName: () => Promise<string>;
+    readonly setShopName: (input: SetShopNameInput) => Promise<void>;
   };
 }
 

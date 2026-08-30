@@ -54,6 +54,12 @@ export function SearchSelect<T>({
     debouncedSearch(query);
   }, [query, debouncedSearch]);
 
+  function selectAndReset(item: T): void {
+    onSelect(item);
+    setQuery('');
+    setResults([]);
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -65,11 +71,32 @@ export function SearchSelect<T>({
       event.preventDefault();
       const picked = results[highlighted];
       if (picked) {
-        onSelect(picked);
-        setQuery('');
-        setResults([]);
+        selectAndReset(picked);
       } else if (query.trim().length === 0) {
         onEmptyEnter?.();
+      } else {
+        // BUG-C fix (found P4-1d real-hardware testing): results[] is
+        // populated by a 200ms-debounced async search. A fast typist —
+        // exactly what this keyboard-driven counter is built for —
+        // can press Enter before that search resolves. With nothing
+        // highlighted yet, this branch used to do nothing at all: no
+        // selection, no feedback, the field silently stayed on
+        // Walk-in. Run the search right now instead of waiting for
+        // the debounce, and act on its real result once it arrives.
+        search(query)
+          .then((rows) => {
+            setResults(rows);
+            setHighlighted(0);
+            const firstMatch = rows[0];
+            if (firstMatch) {
+              selectAndReset(firstMatch);
+            }
+            // else: genuinely zero matches — rows now shows that in
+            // the UI instead of leaving the user with no feedback.
+          })
+          .catch(() => {
+            setResults([]);
+          });
       }
     }
   };

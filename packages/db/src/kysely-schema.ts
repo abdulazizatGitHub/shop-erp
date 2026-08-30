@@ -120,6 +120,13 @@ export interface BrandTable {
   deletedAt: string | null;
 }
 
+export interface SettingTable {
+  tenantId: string;
+  key: string;
+  value: string | null;
+  updatedAt: string;
+}
+
 export interface WarehouseTable {
   id: string;
   tenantId: string;
@@ -137,6 +144,7 @@ export interface PartyTable {
   name: string;
   shopName: string | null;
   phone: string | null;
+  address: string | null;
   cityArea: string | null;
   paymentTerms: string | null;
   // customer-specific — added P3-1. See 0001_init.sql's party table.
@@ -318,4 +326,5 @@ export interface Database {
   payment: PaymentTable;
   auditLog: AuditLogTable;
   syncOutbox: SyncOutboxTable;
+  setting: SettingTable;
 }

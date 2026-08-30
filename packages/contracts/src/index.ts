@@ -37,3 +37,5 @@ export {
   PurchaseLineDto,
   PurchaseDto,
 } from './purchase/purchase.js';
+
+export { SetReceiptPaperSizeInput, SetShopNameInput } from './setting/setting.js';

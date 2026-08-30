@@ -8,7 +8,7 @@ import type {
 } from '@shop/contracts';
 import { Money, Qty } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
-import { CartTable, lineTotalPaisa, type CartLine } from './CartTable.js';
+import { CartTable, lineTotalPaisa, mergeCartLine, type CartLine } from './CartTable.js';
 import { SearchSelect } from './SearchSelect.js';
 
 type Step = 'search-item' | 'quantity' | 'checkout' | 'warning-gate';
@@ -29,6 +29,19 @@ export function SalePage(): React.JSX.Element {
   const [lastResult, setLastResult] = useState<SaleResult | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // P4-1c: kept independently of lastResult (which finishSuccess clears)
+  // so the Reprint button on the confirmation message survives the cart
+  // reset. printError surfaces print-after-commit's non-blocking failure
+  // — the sale itself already succeeded by the time this can be set.
+  const [lastCompletedSaleId, setLastCompletedSaleId] = useState<string | null>(null);
+  // P4-2: captured at the same moment as lastCompletedSaleId, from the
+  // CURRENT selectedCustomer — finishSuccess resets selectedCustomer to
+  // null right after this, for the next sale, so the render-time check
+  // can't read selectedCustomer directly by then.
+  const [lastCompletedSaleIsWholesale, setLastCompletedSaleIsWholesale] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [reprinting, setReprinting] = useState(false);
+  const [invoicePrinting, setInvoicePrinting] = useState(false);
 
   const paymentModeRef = useRef<HTMLDivElement>(null);
   const amountPaidRef = useRef<HTMLInputElement>(null);
@@ -89,20 +102,20 @@ export function SalePage(): React.JSX.Element {
     // set (the toggle isn't rendered otherwise) — altUomId/altUomFactorMilli
     // are guaranteed non-null in that case.
     const useAltUnit = saleUnit === 'alt' && pendingItem.altUomId !== null;
-    setCart((prev) => [
-      ...prev,
-      {
-        itemId: pendingItem.id,
-        itemLabel: pendingItem.nameEn,
-        quantityMilli,
-        unitPricePaisa: pendingItem.retailPricePaisa,
-        unitLabel: useAltUnit
-          ? uomName(pendingItem.altUomId as string)
-          : uomName(pendingItem.stockUomId),
-        saleUomId: useAltUnit ? (pendingItem.altUomId as string) : undefined,
-        saleToStockFactor: useAltUnit ? (pendingItem.altUomFactorMilli as number) : undefined,
-      },
-    ]);
+    const newLine: CartLine = {
+      itemId: pendingItem.id,
+      itemLabel: pendingItem.nameEn,
+      quantityMilli,
+      unitPricePaisa: pendingItem.retailPricePaisa,
+      unitLabel: useAltUnit
+        ? uomName(pendingItem.altUomId as string)
+        : uomName(pendingItem.stockUomId),
+      saleUomId: useAltUnit ? (pendingItem.altUomId as string) : undefined,
+      saleToStockFactor: useAltUnit ? (pendingItem.altUomFactorMilli as number) : undefined,
+    };
+    // BUG-B fix: merge into an existing line for the same item + same
+    // unit rather than always appending a duplicate.
+    setCart((prev) => mergeCartLine(prev, newLine));
     setPendingItem(null);
     setQtyInput('1');
     setSaleUnit('stock');
@@ -120,11 +133,47 @@ export function SalePage(): React.JSX.Element {
     setSuccessMessage(
       `Sale ${result.docNo} — ${Money.format(Money.of(result.totalAmountPaisa))}${costNote}`,
     );
+    setLastCompletedSaleId(result.id);
+    // DECISION (P4-2): Print Invoice shows only for a non-Walk-in
+    // wholesale customer. Counter sales to retail customers or Walk-in
+    // never show it.
+    setLastCompletedSaleIsWholesale(
+      selectedCustomer !== null && selectedCustomer.customerType === 'wholesale',
+    );
     setCart([]);
     setSelectedCustomer(null);
     setPaymentMode('cash');
     setLastResult(null);
     setStep('search-item');
+  }
+
+  async function handleReprint(): Promise<void> {
+    if (!lastCompletedSaleId) return;
+    setReprinting(true);
+    try {
+      await ipc.print.reprintReceipt(lastCompletedSaleId);
+      setPrintError(null);
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : 'Reprint failed');
+    } finally {
+      setReprinting(false);
+    }
+  }
+
+  async function handlePrintInvoice(): Promise<void> {
+    if (!lastCompletedSaleId) return;
+    setInvoicePrinting(true);
+    try {
+      // invoice:printSaleInvoice never throws for a print failure — same
+      // error isolation as the receipt — so this reads printError off
+      // the result rather than relying on a catch for that case.
+      const outcome = await ipc.invoice.printSaleInvoice(lastCompletedSaleId);
+      setPrintError(outcome.printError);
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : 'Print invoice failed');
+    } finally {
+      setInvoicePrinting(false);
+    }
   }
 
   async function handleCheckout(): Promise<void> {
@@ -157,6 +206,7 @@ export function SalePage(): React.JSX.Element {
     try {
       const result = await ipc.sale.create(input);
       setLastResult(result);
+      setPrintError(result.printError);
       setSuccessMessage(null);
       if (result.warnings.creditLimitExceeded || result.warnings.stockBelowZero) {
         setStep('warning-gate');
@@ -183,7 +233,39 @@ export function SalePage(): React.JSX.Element {
     <div>
       <h1>Counter sale</h1>
       {error && <p role="alert">{error}</p>}
-      {successMessage && <p role="status">{successMessage}</p>}
+      {successMessage && (
+        <p role="status">
+          {successMessage}{' '}
+          {lastCompletedSaleId && (
+            <button
+              type="button"
+              disabled={reprinting}
+              onClick={() => {
+                void handleReprint();
+              }}
+            >
+              Reprint
+            </button>
+          )}{' '}
+          {lastCompletedSaleId && lastCompletedSaleIsWholesale && (
+            <button
+              type="button"
+              disabled={invoicePrinting}
+              onClick={() => {
+                void handlePrintInvoice();
+              }}
+            >
+              Print Invoice
+            </button>
+          )}
+        </p>
+      )}
+      {printError && (
+        <p role="alert">
+          Receipt/invoice did not print: {printError} — the sale itself is saved; use Reprint or
+          Print Invoice above once the printer issue is fixed.
+        </p>
+      )}
 
       {step === 'search-item' && (
         <SearchSelect<ItemDto>

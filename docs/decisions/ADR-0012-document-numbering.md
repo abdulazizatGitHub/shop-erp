@@ -17,6 +17,12 @@ RCP — receipt (payment received from customer)
 PMT — payment out (to supplier)
 PUR — purchase from supplier
 
+Item codes (item.code) are explicitly out of scope. This ADR covers
+customer-facing document numbers only. (Added 2026-08-30, resolving
+PROJECT.md BUG-X: item codes are internal catalogue references, not
+customer-facing document numbers, and remain in their existing
+`ITM-A-000001` format — no migration.)
+
 ## Rules
 
 1. The counter is stored in document_sequence.next_number as

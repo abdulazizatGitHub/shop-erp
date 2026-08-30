@@ -100,3 +100,8 @@ export type {
   PaymentRecord,
   PaymentRepositoryPort,
 } from './payment/payment.repository.port.js';
+
+export { buildReceiptLayout } from './printing/receipt-layout.js';
+export type { ReceiptData, ReceiptLineData } from './printing/receipt-layout.js';
+export { buildInvoiceLayout } from './printing/invoice-layout.js';
+export type { InvoiceLayoutData } from './printing/invoice-layout.js';
