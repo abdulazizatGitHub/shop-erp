@@ -16,6 +16,8 @@ import { registerBackupHandlers } from './ipc/handlers/backup.handler.js';
 import { registerSettingHandlers } from './ipc/handlers/setting.handler.js';
 import { registerPrintHandlers } from './ipc/handlers/print.handler.js';
 import { registerInvoiceHandlers } from './ipc/handlers/invoice.handler.js';
+import { registerReportHandlers } from './ipc/handlers/report.handler.js';
+import { registerPurchasePrintHandlers } from './ipc/handlers/purchase-print.handler.js';
 
 // CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
 // .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
@@ -84,6 +86,8 @@ function registerIpcHandlers(dbPath: string): void {
   registerSettingHandlers({ dbPath, tenantId });
   registerPrintHandlers({ dbPath, tenantId });
   registerInvoiceHandlers({ dbPath, tenantId });
+  registerReportHandlers({ dbPath, tenantId });
+  registerPurchasePrintHandlers({ dbPath, tenantId });
 
   ipcMain.handle(channels.system.ping, () => {
     const db = openDatabase(resolveDbPath());

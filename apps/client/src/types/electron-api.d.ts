@@ -1,5 +1,7 @@
 import type {
   CancelSaleInput,
+  CashBookReportInput,
+  CashBookRowDto,
   CreateCustomerInput,
   CreateItemInput,
   CreatePaymentInput,
@@ -9,15 +11,24 @@ import type {
   CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
+  DailySalesReportInput,
+  DailySalesReportRowDto,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
   PaymentDto,
   PurchaseIdInput,
+  PurchaseListInput,
+  PurchaseListRowDto,
+  ReceivablesAgingRowDto,
   SaleResult,
+  SaleSearchInput,
+  SaleSummaryDto,
+  StockValuationReportDto,
   SupplierBalanceDto,
   SupplierDto,
   SupplierSearchInput,
+  UnitPlReportDto,
 } from '@shop/contracts';
 
 export interface ImportResult {
@@ -90,6 +101,11 @@ export interface InvoicePrintOutcome {
   readonly printError: string | null;
 }
 
+export interface PurchasePrintOutcome {
+  readonly filePath: string | null;
+  readonly printError: string | null;
+}
+
 export interface ElectronApi {
   readonly system: {
     readonly ping: () => Promise<{ tableCount: number }>;
@@ -118,10 +134,16 @@ export interface ElectronApi {
       totalAmountPaisa: number;
     }>;
     readonly cancel: (input: PurchaseIdInput) => Promise<void>;
+    readonly list: (input: PurchaseListInput) => Promise<readonly PurchaseListRowDto[]>;
+    readonly printOrder: (purchaseId: string) => Promise<PurchasePrintOutcome>;
   };
   readonly sale: {
     readonly create: (input: CreateSaleInput) => Promise<CreateSaleAndPrintResult>;
     readonly cancel: (input: CancelSaleInput) => Promise<void>;
+    // P4.5-6: was already wired end-to-end (handler + preload) but
+    // missing from this type — the Daily Sales report's per-sale table
+    // is the first client caller.
+    readonly listByDate: (input: SaleSearchInput) => Promise<readonly SaleSummaryDto[]>;
   };
   readonly print: {
     readonly reprintReceipt: (saleId: string) => Promise<PrintReceiptResult>;
@@ -156,6 +178,15 @@ export interface ElectronApi {
     readonly setReceiptPaperSize: (input: SetReceiptPaperSizeInput) => Promise<void>;
     readonly getShopName: () => Promise<string>;
     readonly setShopName: (input: SetShopNameInput) => Promise<void>;
+  };
+  readonly report: {
+    readonly stockValuation: () => Promise<StockValuationReportDto>;
+    readonly dailySales: (
+      input: DailySalesReportInput,
+    ) => Promise<readonly DailySalesReportRowDto[]>;
+    readonly receivables: () => Promise<readonly ReceivablesAgingRowDto[]>;
+    readonly cashBook: (input: CashBookReportInput) => Promise<readonly CashBookRowDto[]>;
+    readonly unitPl: () => Promise<UnitPlReportDto>;
   };
 }
 

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CancelSaleInput,
+  CashBookReportInput,
+  CashBookRowDto,
   CreateCustomerInput,
   CreateItemInput,
   CreatePaymentInput,
@@ -10,18 +12,25 @@ import type {
   CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
+  DailySalesReportInput,
+  DailySalesReportRowDto,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
   PaymentDto,
   PurchaseIdInput,
+  PurchaseListInput,
+  PurchaseListRowDto,
+  ReceivablesAgingRowDto,
   SaleSearchInput,
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
+  StockValuationReportDto,
   SupplierBalanceDto,
   SupplierDto,
   SupplierSearchInput,
+  UnitPlReportDto,
 } from '@shop/contracts';
 import type { SaleRecord } from '@shop/core';
 import type { ReceiptPaperSize, UomConversionOption } from '@shop/db';
@@ -36,6 +45,7 @@ import type { BackupNowResult, RestoreResult } from './ipc/handlers/backup.handl
 import type { CreateSaleAndPrintResult } from './printing/create-sale-and-print.js';
 import type { PrintReceiptResult } from './printing/print-receipt.js';
 import type { InvoicePrintOutcome } from './printing/print-invoice-safely.js';
+import type { PurchasePrintOutcome } from './printing/print-purchase-safely.js';
 
 interface CreateItemResult {
   readonly id: string;
@@ -84,6 +94,12 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.purchase.create, input) as Promise<CreatePurchaseResult>,
     cancel: (input: PurchaseIdInput): Promise<void> =>
       ipcRenderer.invoke(channels.purchase.cancel, input) as Promise<void>,
+    list: (input: PurchaseListInput): Promise<readonly PurchaseListRowDto[]> =>
+      ipcRenderer.invoke(channels.purchase.list, input) as Promise<readonly PurchaseListRowDto[]>,
+    printOrder: (purchaseId: string): Promise<PurchasePrintOutcome> =>
+      ipcRenderer.invoke(channels.purchase.printOrder, {
+        id: purchaseId,
+      }) as Promise<PurchasePrintOutcome>,
   },
   sale: {
     create: (input: CreateSaleInput): Promise<CreateSaleAndPrintResult> =>
@@ -106,6 +122,20 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.invoice.printSaleInvoice, {
         id: saleId,
       }) as Promise<InvoicePrintOutcome>,
+  },
+  report: {
+    stockValuation: (): Promise<StockValuationReportDto> =>
+      ipcRenderer.invoke(channels.report.stockValuation) as Promise<StockValuationReportDto>,
+    dailySales: (input: DailySalesReportInput): Promise<readonly DailySalesReportRowDto[]> =>
+      ipcRenderer.invoke(channels.report.dailySales, input) as Promise<
+        readonly DailySalesReportRowDto[]
+      >,
+    receivables: (): Promise<readonly ReceivablesAgingRowDto[]> =>
+      ipcRenderer.invoke(channels.report.receivables) as Promise<readonly ReceivablesAgingRowDto[]>,
+    cashBook: (input: CashBookReportInput): Promise<readonly CashBookRowDto[]> =>
+      ipcRenderer.invoke(channels.report.cashBook, input) as Promise<readonly CashBookRowDto[]>,
+    unitPl: (): Promise<UnitPlReportDto> =>
+      ipcRenderer.invoke(channels.report.unitPl) as Promise<UnitPlReportDto>,
   },
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>

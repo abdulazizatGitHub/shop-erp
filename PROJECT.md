@@ -3,44 +3,28 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-08-30
-**Current phase:** Phase 4 — Printing + core reports
-**Phase status:** ✅ COMPLETE — 2026-08-30. Receipt printing (P4-1) and
-A4 wholesale invoice printing (P4-2), all 5 core reports (P4-3: stock
-valuation, daily sales, cash book, receivables aging, unit P&L),
-backup/restore/retention (P4-4), and P4-5a (WAL + `synchronous=FULL`
-confirmed live) are built, TDD-verified, and wired end-to-end in the
-app. Three real bugs found during hardware testing — BUG-A (print
-mechanism), BUG-B (cart line merge), BUG-C (customer search race
-condition) — all fixed; BUG-C additionally confirmed fixed on real
-hardware (search updates correctly to both Ahmad Retail and Khan
-Wholesale, credit sale posts the expected `party_ledger` row). Full
-test suite: 245/245 passing, typecheck clean, lint clean — see
-PROGRESS.md Session 13.
-**Closed with two items short of their originally-written exit bar, by
-explicit owner decision — not silently:**
-
-1. **P4-0's smoke test** was verified on the developer machine only
-   (2026-08-29), not the shop PC. Shop PC verification remains
-   recommended before go-live.
-2. **P4-5b's pull-the-plug test** completed 8/10 real hardware kill
-   runs, `integrity_check`=ok every time; the final 2 were waived by
-   owner decision. A programmatic transaction-rollback test
-   (`packages/db/src/transaction-atomicity.test.ts`) supplements but
-   does not replace this. Note: Phase 5's own exit criteria
-   (`docs/PHASES.md` §Phase 5) separately requires "power-cut test
-   passed 10 times with no data loss" on the real shop PC during
-   parallel run — the full 10x test will be re-covered there regardless.
-   Related: P4-1d and P4-2d's "physical page out of the printer"
-   requirement was confirmed only as far as the PDF opening correctly
-   in the system viewer (`shell.openPath()`) — no photo/description of
-   actual paper output exists for either receipt or invoice printing.
-
-See `docs/phases/PHASE_4.md` §4 for the full exit-criteria breakdown.
+**Last updated:** 2026-09-01
+**Current phase:** Phase 4.5 — Full UI Redesign
+**Phase status:** ✅ COMPLETE — 2026-09-01. All nine sub-phases
+(P4.5-0 through P4.5-8), purchase PDF printing, and three post-P4.5-8
+UI improvements (import modals everywhere via a shared `ImportModal`
+component, Purchases two-step modal, Settings restore double-gate
+removed) are code-complete, test-verified (**294/294 passing**,
+typecheck clean, lint clean, both workspace builds exit 0), and fully
+confirmed on real hardware — every screen, including Reports (all five
+tabs), Settings, Customers, and purchase PDF printing. One real bug
+was found and fixed mid-session during hardware testing, not deferred:
+Reports initially failed on hardware with "No handler registered for
+report:*" — investigation confirmed the source (`main.ts`,
+`report.handler.ts`) was already correct and the compiled `main.cjs`
+already contained the handler; the cause was a stale Electron main
+process from before the handler existed, resolved by a full app
+restart, not a code change.
+See `docs/phases/PHASE_4_5.md` for the full sub-phase breakdown and
+exit-criteria status.
 **Next milestone:** Phase 5 — Deploy + parallel run (`docs/PHASES.md`).
 Phase 3's still-outstanding real-hardware timing number (unrelated to
-Phase 4, still blocking Phase 3 COMPLETE — see `docs/phases/PHASE_3.md`
-§4) remains open and unresolved by this phase.
+this phase) remains open and unresolved.
 
 ---
 
@@ -104,7 +88,11 @@ this setting.
 - **2-up printing** — printing two A5 receipts on one A4 sheet.
   Requested 2026-08-29 during Phase 4 planning; explicitly out of scope
   for Phase 4 (`docs/phases/PHASE_4.md` §2). No phase assigned.
-- **Thermal printing toggle** — see Known Hardware above.
+- **Thermal printing toggle** — see Known Hardware above. Refined
+  2026-09-01: add this to Settings only after the thermal printer
+  hardware is actually confirmed/purchased and a driver/ESC-POS
+  library is selected — not before, since there's nothing real to wire
+  it to yet. Planned for Phase 8.
 - **Receipt temp file cleanup** — `saveReceiptToTempFile()`
   (`apps/server/src/printing/receipt-file.ts`, P4-1c) writes
   `receipt-{saleId}-{timestamp}.pdf` into `os.tmpdir()` on every print
@@ -113,24 +101,56 @@ this setting.
   matching this pattern older than 7 days is acceptable but was not
   built this phase — logged here per explicit instruction rather than
   silently skipped. No phase assigned.
+- **Item slug field** — requested 2026-08-31 during Phase 4.5's Items
+  screen work. Would need a schema migration (`item` table has no slug
+  column today) — out of scope for a UI-only phase. No phase assigned.
+- **On-screen Urdu keyboard** — requested 2026-08-31, same session.
+  Owner decision: for now, instruct staff to enable Urdu as an input
+  language in Windows' own language settings rather than building an
+  in-app virtual keyboard. No phase assigned; revisit if that's
+  insufficient in practice.
+- **GRN and batch tracking workflow** — requested 2026-09-01 during
+  Phase 4.5 close-out. Staff records goods receipt against a purchase
+  order, generates a batch number, links the stock movement to that
+  batch. Requires new schema: `purchase_order`, `grn`, `batch` tables —
+  a real business-logic/schema change, out of scope for a UI-only
+  phase. Planned for Phase 8, after go-live.
+- **Purchase entry as a modal** — requested 2026-09-01, same session.
+  The Purchases screen's entry form is inline (matches the Sales
+  screen's pattern, per P4.5-5's explicit layout instruction); a modal
+  variant was raised as a possible future alternative. Deferred pending
+  feedback from real use — no phase assigned.
+- **Low stock warnings** — requested 2026-09-01. A `reorder_point`
+  field on the `item` table, with dashboard alerts when stock is at or
+  below it. Requires a schema migration — out of scope for a UI-only
+  phase. Planned for Phase 8.
+- **Per-module settings** (customer, supplier, item, sales, purchase,
+  report settings) — requested 2026-09-01. The current `setting` table
+  is a flat key-value store (see `setting.repository.ts`'s
+  `receiptPaperSize`/`shopName` pattern); per-module settings groups
+  would need the settings schema expanded beyond that shape — a real
+  schema/business-logic decision, not a UI change. Planned for Phase 8.
+- **Stock consumption tracking and inventory management dashboard** —
+  requested 2026-09-01. Planned for Phase 8.
 
 ---
 
 ## 3. Phase status
 
-| Phase | Name                                    | Status                                                                                                                         | Completed                                                                                     |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| 0     | Foundation & Environment                | COMPLETE                                                                                                                       | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                |
-| 1     | Item master + import                    | COMPLETE                                                                                                                       | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                 |
-| 2     | Purchases + suppliers                   | COMPLETE                                                                                                                       | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                    |
-| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                                                                                                       | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                   |
-| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                           | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                    |
-| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                  | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4 |
-| 4     | Printing + reports                      | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs) | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                    |
-| 5     | Deploy + parallel run                   | NOT STARTED                                                                                                                    | —                                                                                             |
-| 6     | Repair jobs (two-unit split)            | NOT STARTED                                                                                                                    | —                                                                                             |
-| 7     | Staff, wages, expenses                  | NOT STARTED                                                                                                                    | —                                                                                             |
-| 8     | Bug-fix & hardening                     | NOT STARTED                                                                                                                    | —                                                                                             |
+| Phase | Name                                    | Status                                                                                                                         | Completed                                                                                                                             |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment                | COMPLETE                                                                                                                       | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
+| 1     | Item master + import                    | COMPLETE                                                                                                                       | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
+| 2     | Purchases + suppliers                   | COMPLETE                                                                                                                       | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
+| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                                                                                                       | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
+| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                           | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
+| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                  | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
+| 4     | Printing + reports                      | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs) | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
+| 4.5   | Full UI Redesign                        | ✅ COMPLETE                                                                                                                    | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
+| 5     | Deploy + parallel run                   | NOT STARTED                                                                                                                    | —                                                                                                                                     |
+| 6     | Repair jobs (two-unit split)            | NOT STARTED                                                                                                                    | —                                                                                                                                     |
+| 7     | Staff, wages, expenses                  | NOT STARTED                                                                                                                    | —                                                                                                                                     |
+| 8     | Bug-fix & hardening                     | NOT STARTED                                                                                                                    | —                                                                                                                                     |
 
 ---
 
@@ -1002,7 +1022,7 @@ numbers, and were never in that ADR's scope. ADR-0012 amended with an
 explicit sentence recording this (see the ADR file itself).
 Status: RESOLVED — not a bug, a scope clarification. No code change.
 
-### BUG-Y: Negative-stock confirmation is inline text with keyboard instructions, not a modal dialog — LOW, deferred
+### BUG-Y: Negative-stock confirmation is inline text with keyboard instructions, not a modal dialog — LOW, FIXED
 
 Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
 Description: The sale screen's warning-gate step (`SalePage.tsx`,
@@ -1014,10 +1034,21 @@ app is built around still works — but reads as less visually
 deliberate than a modal for a warning of this weight, and may be
 harder for a new/non-technical salesman to notice against a busy
 screen.
-Fix: Convert to a modal dialog, kept keyboard-driven (Enter/Escape
-still the only interactions). Deferred to Phase 8's UI pass, per
-explicit instruction — not built this phase.
-Status: DEFERRED — Phase 8.
+Fix: Converted to the `ConfirmDialog` component (`packages/ui/src/patterns/ConfirmDialog.tsx`,
+built in P4.5-0), kept keyboard-driven — Enter still confirms (keep
+the sale), Escape still cancels it, no interaction lost. Title/message
+adapt to which warning(s) triggered (stock below zero, credit limit
+exceeded, or both); confirm button uses the new `warning` Button
+variant, per Phase 4.5's design system. **Known data gap, not silently
+dropped:** the originally-requested wording named the specific item
+("This sale will take [item name] below zero") — `SaleResult.warnings`
+only carries booleans, no per-item name is returned by `sale:create`,
+so the dialog uses item-agnostic wording ("one or more items")
+instead. Naming the item would require changing `sale:create`'s
+response shape — a business-logic/contract change, out of scope for
+Phase 4.5 (UI only).
+Status: FIXED — Phase 4.5 (P4.5-2), 2026-08-31.
+`apps/client/src/pages/sales/SalePage.tsx`.
 
 ### BUG-NEW: No standalone customer creation form — LOW, deferred
 
@@ -1033,6 +1064,35 @@ money/stock correctness issue.
 Fix: A simple "Add Customer" form on the Customer Balances page,
 matching the pattern already used by `SuppliersPage.tsx`.
 Status: DEFERRED — Phase 8.
+
+### BUG-NEW2: Item category filter can never match anything — `ItemDto`/`CreateItemInput` never carry a `categoryId` — LOW, deferred
+
+Found in: Phase 4.5, 2026-08-31, while redesigning the Items screen
+(P4.5-3) — checked `packages/contracts/src/item/item.ts` field-by-field
+before building the Add Item form, per explicit instruction not to
+invent fields.
+Description: `ItemLookups` carries a real `categories` list (already
+used pre-redesign to populate the old category filter `<select>`), and
+`ItemSearchInput.categoryId` genuinely accepts a value and passes it
+through to `item:search`. But neither `CreateItemInput` nor `ItemDto`
+has a `categoryId` field anywhere — there is no code path, old or new,
+that can ever attach a category to an item. So the category filter
+dropdown that existed on the pre-redesign Items screen could never
+have filtered anything: every item has an implicit `category_id =
+NULL`, so filtering by any real category id would always return zero
+rows.
+Impact: Cosmetic/dead-code only — no money or stock correctness
+impact. The old filter's presence was actively misleading (implying a
+working feature that could not work). Not a Phase 4.5 regression: this
+was already true before the redesign; the redesign just removed the
+dead UI rather than leaving it in front of a broken filter.
+Fix: Category filtering removed from the redesigned Items screen
+entirely (owner decision, P4.5-3 kickoff). A real fix would need
+`item.category_id` added to `CreateItemInput`/`ItemDto` and the
+`item` repository/table — a business-logic/contract change, out of
+scope for a UI-only phase.
+Status: DEFERRED — Phase 8, pending owner decision on whether item
+categorization is wanted at all.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 

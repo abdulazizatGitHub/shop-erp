@@ -71,6 +71,7 @@ export type {
   NewPurchaseResult,
   PurchaseLineRecord,
   PurchaseRecord,
+  PurchaseListRow,
 } from './purchase/purchase.repository.port.js';
 
 export {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TextInput } from '@shop/ui';
 import { debounce } from '../../lib/debounce.js';
 
 /**
@@ -17,6 +18,14 @@ export interface SearchSelectProps<T> {
   /** Enter pressed with an empty query and no results — e.g. checkout trigger or "walk-in". */
   readonly onEmptyEnter?: () => void;
   readonly inputRef?: React.RefObject<HTMLInputElement>;
+  /**
+   * Optional richer per-result row (e.g. multi-column: name/code/price/unit).
+   * Falls back to a plain `getLabel(item)` text row when not given, so
+   * every existing caller (SuppliersPage, PurchasePage) is unaffected.
+   */
+  readonly renderItem?: (item: T, highlighted: boolean) => React.ReactNode;
+  /** Shown below the input when a non-empty search returns zero results. */
+  readonly renderEmpty?: () => React.ReactNode;
 }
 
 export function SearchSelect<T>({
@@ -28,6 +37,8 @@ export function SearchSelect<T>({
   onSelect,
   onEmptyEnter,
   inputRef,
+  renderItem,
+  renderEmpty,
 }: SearchSelectProps<T>): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly T[]>([]);
@@ -51,6 +62,14 @@ export function SearchSelect<T>({
   );
 
   useEffect(() => {
+    // An empty query must show nothing, not "every row" — item.search /
+    // customer.search treat '' as no filter and return everything, which
+    // is correct for those IPC calls but wrong for a closed/untouched
+    // dropdown. Skip the call entirely rather than special-case the result.
+    if (query.trim().length === 0) {
+      setResults([]);
+      return;
+    }
     debouncedSearch(query);
   }, [query, debouncedSearch]);
 
@@ -67,6 +86,12 @@ export function SearchSelect<T>({
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (event.key === 'Escape') {
+      // Clears the results list only — no stopPropagation, so a parent's
+      // own Escape handler (e.g. cancelling a pending item/quantity step)
+      // still fires. Focus stays on the input; nothing here moves it.
+      event.preventDefault();
+      setResults([]);
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const picked = results[highlighted];
@@ -103,8 +128,9 @@ export function SearchSelect<T>({
 
   return (
     <div>
-      <input
+      <TextInput
         ref={effectiveRef}
+        variant="search"
         autoFocus={autoFocus}
         placeholder={placeholder}
         value={query}
@@ -114,28 +140,32 @@ export function SearchSelect<T>({
         onKeyDown={handleKeyDown}
       />
       {results.length > 0 && (
-        <ul>
-          {results.map((item, index) => (
-            <li key={getKey(item)}>
-              <button
-                type="button"
-                aria-selected={index === highlighted}
-                onMouseEnter={() => {
-                  setHighlighted(index);
-                }}
-                onClick={() => {
-                  onSelect(item);
-                  setQuery('');
-                  setResults([]);
-                }}
-              >
-                {index === highlighted ? '> ' : '  '}
-                {getLabel(item)}
-              </button>
-            </li>
-          ))}
+        <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-line">
+          {results.map((item, index) => {
+            const isHighlighted = index === highlighted;
+            return (
+              <li key={getKey(item)}>
+                <button
+                  type="button"
+                  aria-selected={isHighlighted}
+                  onMouseEnter={() => {
+                    setHighlighted(index);
+                  }}
+                  onClick={() => {
+                    selectAndReset(item);
+                  }}
+                  className={`block w-full border-b border-line px-3 py-2 text-left text-sm last:border-b-0 ${
+                    isHighlighted ? 'bg-brand-subtle' : 'hover:bg-surface-sunken'
+                  }`}
+                >
+                  {renderItem ? renderItem(item, isHighlighted) : getLabel(item)}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
+      {results.length === 0 && query.trim().length > 0 && renderEmpty?.()}
     </div>
   );
 }

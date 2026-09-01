@@ -29,7 +29,12 @@ export const channels = {
     get: 'customer:get',
     balance: 'customer:balance',
   },
-  purchase: { create: 'purchase:create', cancel: 'purchase:cancel' },
+  purchase: {
+    create: 'purchase:create',
+    cancel: 'purchase:cancel',
+    list: 'purchase:list',
+    printOrder: 'purchase:printOrder',
+  },
   payment: { receive: 'payment:receive', pay: 'payment:pay' },
   uom: { listConversions: 'uom:listConversions' },
   report: {
@@ -37,6 +42,7 @@ export const channels = {
     receivables: 'report:receivables',
     stockValuation: 'report:stockValuation',
     cashBook: 'report:cashBook',
+    unitPl: 'report:unitPl',
   },
   importData: {
     dryRun: 'import:dryRun',

@@ -44,6 +44,11 @@ export type {
   UnitPlReport,
   UnitPlRow,
 } from './repositories/report.repository.js';
+export { getPurchasePrintData } from './repositories/purchase-print.repository.js';
+export type {
+  PurchasePrintData,
+  PurchasePrintLine,
+} from './repositories/purchase-print.repository.js';
 export {
   getReceiptPaperSize,
   setReceiptPaperSize,

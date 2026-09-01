@@ -7,10 +7,6 @@ import { setRestoreInProgress } from '../middleware/restore-state.js';
 // docs/DATABASE_RULES.md section 7: keep the last 30 daily backups.
 const MAX_BACKUPS = 30;
 
-// Exact text required — do not reword.
-const RESTORE_CONFIRM_MESSAGE =
-  'This will replace all current data with the selected backup.\nThis cannot be undone. Are you sure?';
-
 export interface BackupHandlerDeps {
   readonly dbPath: string;
   readonly defaultBackupDir: string;
@@ -57,15 +53,13 @@ export function registerBackupHandlers(deps: BackupHandlerDeps): void {
       const backupPath = picked.filePaths[0];
       if (backupPath === undefined) return null;
 
-      const confirmation = await dialog.showMessageBox({
-        type: 'warning',
-        message: RESTORE_CONFIRM_MESSAGE,
-        buttons: ['Confirm', 'Cancel'],
-        defaultId: 1, // Cancel is the default — a restore is destructive
-        cancelId: 1,
-      });
-      if (confirmation.response !== 0) return null; // anything but "Confirm" (index 0)
-
+      // P4.5 improvement 3: the native confirm dialog that used to sit
+      // here is gone — the renderer's own ConfirmDialog ("Restore from
+      // backup?") is the sole confirmation gate now, no more double-gate.
+      // The native file picker above stays: it's how the caller specifies
+      // *which* backup file to restore — there's no other source for that
+      // path (no client-side file browsing, nothing stored client-side).
+      //
       // See restore-state.ts / with-error.ts: no persistent connection to
       // close here — this flag blocks every withError-wrapped handler
       // from opening a new connection while the copy below is in flight.

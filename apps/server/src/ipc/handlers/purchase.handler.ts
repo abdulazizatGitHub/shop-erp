@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
-import { CreatePurchaseInput, PurchaseIdInput } from '@shop/contracts';
+import { CreatePurchaseInput, PurchaseIdInput, PurchaseListInput } from '@shop/contracts';
+import type { PurchaseListRowDto } from '@shop/contracts';
 import { createKyselyDb, KyselyPurchaseRepository, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
 import { withError } from '../middleware/with-error.js';
@@ -47,6 +48,24 @@ export function registerPurchaseHandlers(deps: PurchaseHandlerDeps): void {
           deps.deviceCode,
         );
         await repo.cancelPurchase(input.id);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.purchase.list,
+    withError(async (_event, raw: unknown): Promise<readonly PurchaseListRowDto[]> => {
+      const input = PurchaseListInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyPurchaseRepository(
+          createKyselyDb(db),
+          deps.tenantId,
+          deps.deviceCode,
+        );
+        return await repo.listPurchases(input.limit);
       } finally {
         db.close();
       }

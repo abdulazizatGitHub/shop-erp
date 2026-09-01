@@ -1,4 +1,15 @@
-import { Money, Qty } from '@shop/shared';
+import { Money } from '@shop/shared';
+import {
+  EmptyState,
+  MoneyDisplay,
+  QuantityDisplay,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@shop/ui';
 
 export interface CartLine {
   readonly itemId: string;
@@ -51,49 +62,66 @@ export interface CartTableProps {
 }
 
 export function CartTable({ cart, subtotalPaisa, onRemove }: CartTableProps): React.JSX.Element {
+  if (cart.length === 0) {
+    return <EmptyState message="Cart is empty." hint="Search for an item above to add it." />;
+  }
+
   return (
-    <>
-      <h2>Cart</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Unit price</th>
-            <th>Line total</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {cart.map((line, index) => (
-            <tr key={`${line.itemId}-${String(index)}`}>
-              <td>{line.itemLabel}</td>
-              <td>
-                {Qty.format(Qty.of(line.quantityMilli))} {line.unitLabel}
-              </td>
-              <td>
-                {line.unitPricePaisa !== null ? Money.format(Money.of(line.unitPricePaisa)) : '—'}
-              </td>
-              <td>
-                {lineTotalPaisa(line) !== null
-                  ? Money.format(Money.of(lineTotalPaisa(line) ?? 0))
-                  : '—'}
-              </td>
-              <td>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRemove(index);
-                  }}
-                >
-                  Remove
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>Subtotal: {Money.format(Money.of(subtotalPaisa))}</p>
-    </>
+    <div>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableHeaderCell>Item</TableHeaderCell>
+            <TableHeaderCell>Qty</TableHeaderCell>
+            <TableHeaderCell>Unit</TableHeaderCell>
+            <TableHeaderCell className="text-right">Unit Price</TableHeaderCell>
+            <TableHeaderCell className="text-right">Line Total</TableHeaderCell>
+            <TableHeaderCell />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {cart.map((line, index) => {
+            const lineTotal = lineTotalPaisa(line);
+            return (
+              <TableRow key={`${line.itemId}-${String(index)}`}>
+                <TableCell className="max-w-xs truncate" title={line.itemLabel}>
+                  {line.itemLabel}
+                </TableCell>
+                <TableCell>
+                  <QuantityDisplay quantityMilli={line.quantityMilli} />
+                </TableCell>
+                <TableCell>{line.unitLabel}</TableCell>
+                <TableCell className="text-right">
+                  {line.unitPricePaisa !== null ? (
+                    <MoneyDisplay paisaValue={line.unitPricePaisa} />
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {lineTotal !== null ? <MoneyDisplay paisaValue={lineTotal} /> : '—'}
+                </TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${line.itemLabel}`}
+                    onClick={() => {
+                      onRemove(index);
+                    }}
+                    className="rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger-subtle"
+                  >
+                    × Remove
+                  </button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      <div className="mt-3 flex items-center justify-end gap-3 border-t border-line pt-3">
+        <span className="text-lg font-semibold text-ink">Subtotal</span>
+        <MoneyDisplay paisaValue={subtotalPaisa} size="xl" />
+      </div>
+    </div>
   );
 }

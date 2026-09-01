@@ -9,5 +9,10 @@ export const colors = {
   brand: { default: '#1B5E8C', hover: '#164E75', subtle: '#E7F0F6' },
   /** Semantic, never decorative. in = received, out = paid, due = outstanding. */
   money: { in: '#116149', out: '#A32B1F', due: '#8A5B00' },
+  /** UI state colours — kept distinct from `money` even where values are close,
+   *  so the two vocabularies never collide in a className. */
+  danger: { default: '#B3261E', subtle: '#FBEAE9' },
+  warning: { default: '#9A6300', subtle: '#FBF0DA' },
+  success: { default: '#146C43', subtle: '#E7F5EC' },
   focus: '#0B84FF',
 } as const;

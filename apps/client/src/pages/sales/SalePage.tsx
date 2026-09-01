@@ -7,14 +7,32 @@ import type {
   SaleResult,
 } from '@shop/contracts';
 import { Money, Qty } from '@shop/shared';
+import {
+  Alert,
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  MoneyDisplay,
+  PageHeader,
+  TextInput,
+} from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
 import { CartTable, lineTotalPaisa, mergeCartLine, type CartLine } from './CartTable.js';
 import { SearchSelect } from './SearchSelect.js';
 
-type Step = 'search-item' | 'quantity' | 'checkout' | 'warning-gate';
+type Step = 'search-item' | 'quantity' | 'warning-gate';
 type PaymentMode = 'cash' | 'credit';
 /** Which unit the quantity field is being entered in, for the current pendingItem. */
 type SaleUnit = 'stock' | 'alt';
+
+interface ConfirmedSale {
+  readonly id: string;
+  readonly docNo: string;
+  readonly totalAmountPaisa: number;
+  readonly isWholesale: boolean;
+  readonly costNote: string | null;
+}
 
 export function SalePage(): React.JSX.Element {
   const [step, setStep] = useState<Step>('search-item');
@@ -27,18 +45,13 @@ export function SalePage(): React.JSX.Element {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [amountPaidRupees, setAmountPaidRupees] = useState('');
   const [lastResult, setLastResult] = useState<SaleResult | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // P4.5-2: the confirmation Card's data — replaces the old successMessage
+  // string + lastCompletedSaleId + lastCompletedSaleIsWholesale trio. Its
+  // presence is also what blocks the left panel's search/quantity slot
+  // until "New sale" is clicked (per the P4.5-2 spec).
+  const [confirmedSale, setConfirmedSale] = useState<ConfirmedSale | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // P4-1c: kept independently of lastResult (which finishSuccess clears)
-  // so the Reprint button on the confirmation message survives the cart
-  // reset. printError surfaces print-after-commit's non-blocking failure
-  // — the sale itself already succeeded by the time this can be set.
-  const [lastCompletedSaleId, setLastCompletedSaleId] = useState<string | null>(null);
-  // P4-2: captured at the same moment as lastCompletedSaleId, from the
-  // CURRENT selectedCustomer — finishSuccess resets selectedCustomer to
-  // null right after this, for the next sale, so the render-time check
-  // can't read selectedCustomer directly by then.
-  const [lastCompletedSaleIsWholesale, setLastCompletedSaleIsWholesale] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
   const [reprinting, setReprinting] = useState(false);
   const [invoicePrinting, setInvoicePrinting] = useState(false);
@@ -62,27 +75,16 @@ export function SalePage(): React.JSX.Element {
     [cart],
   );
 
-  // Step D's amount-paid prefill: total for cash, 0 for credit.
+  // P4.5-2: the checkout panel is always visible now (no more a dedicated
+  // "checkout step" to enter), so this prefill runs continuously rather
+  // than once on step entry — it still only ever overwrites the field in
+  // response to a payment-mode switch or the subtotal changing, exactly as
+  // it did before within the old checkout step.
   useEffect(() => {
-    if (step !== 'checkout') return;
     setAmountPaidRupees(
       paymentMode === 'cash' ? String(Money.toRupees(Money.of(cartSubtotalPaisa))) : '0',
     );
-  }, [step, paymentMode, cartSubtotalPaisa]);
-
-  // Checkout trigger — F10 from the item-search step, cart non-empty.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'F10' && step === 'search-item' && cart.length > 0) {
-        event.preventDefault();
-        setStep('checkout');
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [step, cart.length]);
+  }, [paymentMode, cartSubtotalPaisa]);
 
   function confirmLine(): void {
     if (!pendingItem) return;
@@ -127,19 +129,15 @@ export function SalePage(): React.JSX.Element {
   }
 
   function finishSuccess(result: SaleResult): void {
-    const costNote = result.warnings.unitCostMissing
-      ? ' (note: cost missing on at least one line — margin reporting will show a gap for it)'
-      : '';
-    setSuccessMessage(
-      `Sale ${result.docNo} — ${Money.format(Money.of(result.totalAmountPaisa))}${costNote}`,
-    );
-    setLastCompletedSaleId(result.id);
-    // DECISION (P4-2): Print Invoice shows only for a non-Walk-in
-    // wholesale customer. Counter sales to retail customers or Walk-in
-    // never show it.
-    setLastCompletedSaleIsWholesale(
-      selectedCustomer !== null && selectedCustomer.customerType === 'wholesale',
-    );
+    setConfirmedSale({
+      id: result.id,
+      docNo: result.docNo,
+      totalAmountPaisa: result.totalAmountPaisa,
+      isWholesale: selectedCustomer !== null && selectedCustomer.customerType === 'wholesale',
+      costNote: result.warnings.unitCostMissing
+        ? 'Cost missing on at least one line — margin reporting will show a gap for it.'
+        : null,
+    });
     setCart([]);
     setSelectedCustomer(null);
     setPaymentMode('cash');
@@ -148,10 +146,10 @@ export function SalePage(): React.JSX.Element {
   }
 
   async function handleReprint(): Promise<void> {
-    if (!lastCompletedSaleId) return;
+    if (!confirmedSale) return;
     setReprinting(true);
     try {
-      await ipc.print.reprintReceipt(lastCompletedSaleId);
+      await ipc.print.reprintReceipt(confirmedSale.id);
       setPrintError(null);
     } catch (err) {
       setPrintError(err instanceof Error ? err.message : 'Reprint failed');
@@ -161,13 +159,13 @@ export function SalePage(): React.JSX.Element {
   }
 
   async function handlePrintInvoice(): Promise<void> {
-    if (!lastCompletedSaleId) return;
+    if (!confirmedSale) return;
     setInvoicePrinting(true);
     try {
       // invoice:printSaleInvoice never throws for a print failure — same
       // error isolation as the receipt — so this reads printError off
       // the result rather than relying on a catch for that case.
-      const outcome = await ipc.invoice.printSaleInvoice(lastCompletedSaleId);
+      const outcome = await ipc.invoice.printSaleInvoice(confirmedSale.id);
       setPrintError(outcome.printError);
     } catch (err) {
       setPrintError(err instanceof Error ? err.message : 'Print invoice failed');
@@ -207,7 +205,6 @@ export function SalePage(): React.JSX.Element {
       const result = await ipc.sale.create(input);
       setLastResult(result);
       setPrintError(result.printError);
-      setSuccessMessage(null);
       if (result.warnings.creditLimitExceeded || result.warnings.stockBelowZero) {
         setStep('warning-gate');
       } else {
@@ -221,231 +218,363 @@ export function SalePage(): React.JSX.Element {
   async function handleCancelAfterWarning(saleId: string): Promise<void> {
     try {
       await ipc.sale.cancel({ id: saleId });
-      setSuccessMessage('Sale cancelled.');
+      setNotice('Sale cancelled.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cancel sale');
     }
     setLastResult(null);
-    setStep('checkout'); // keep the cart and checkout selections so the salesman can retry
+    setStep('search-item'); // keep the cart and checkout selections so the salesman can retry
   }
 
+  // Checkout trigger — F10, whenever the cart is actionable. Re-subscribes
+  // on every value handleCheckout's closure actually reads, so the listener
+  // is never left holding a stale customer/payment-mode/amount-paid snapshot
+  // now that the checkout panel is edited continuously rather than entered
+  // as a discrete step.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (
+        event.key === 'F10' &&
+        cart.length > 0 &&
+        step !== 'quantity' &&
+        step !== 'warning-gate' &&
+        confirmedSale === null
+      ) {
+        event.preventDefault();
+        void handleCheckout();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [cart, step, confirmedSale, selectedCustomer, paymentMode, amountPaidRupees]);
+
+  // BUG-Y fix: this used to be inline alertdialog text; ConfirmDialog (P4.5-0)
+  // replaces it. Data gap, flagged rather than fabricated: SaleResult's
+  // warnings are booleans only (stockBelowZero/creditLimitExceeded) — there
+  // is no per-item name available to name in the message, so the wording
+  // below is deliberately item-agnostic rather than inventing a name.
+  const warningTitle =
+    lastResult?.warnings.stockBelowZero === true && lastResult.warnings.creditLimitExceeded
+      ? 'Stock below zero & credit limit exceeded'
+      : lastResult?.warnings.stockBelowZero === true
+        ? 'Stock below zero'
+        : 'Credit limit exceeded';
+  const warningMessages = [
+    lastResult?.warnings.stockBelowZero === true &&
+      'This sale will take stock below zero for one or more items. Stock will go negative.',
+    lastResult?.warnings.creditLimitExceeded === true &&
+      "This sale exceeds the customer's credit limit.",
+  ].filter((message): message is string => typeof message === 'string');
+
   return (
-    <div>
-      <h1>Counter sale</h1>
-      {error && <p role="alert">{error}</p>}
-      {successMessage && (
-        <p role="status">
-          {successMessage}{' '}
-          {lastCompletedSaleId && (
-            <button
-              type="button"
-              disabled={reprinting}
-              onClick={() => {
-                void handleReprint();
+    <div className="flex h-full flex-col gap-4">
+      <PageHeader title="Counter Sale" />
+
+      <div className="flex min-h-0 flex-1 gap-6">
+        {/* Left panel — 60%: item search, cart. Scrolls independently. */}
+        <div className="flex w-3/5 flex-col gap-4 overflow-y-auto pr-1">
+          {error && <Alert variant="danger">{error}</Alert>}
+          {notice && (
+            <Alert
+              variant="success"
+              onDismiss={() => {
+                setNotice(null);
               }}
             >
-              Reprint
-            </button>
-          )}{' '}
-          {lastCompletedSaleId && lastCompletedSaleIsWholesale && (
-            <button
-              type="button"
-              disabled={invoicePrinting}
-              onClick={() => {
-                void handlePrintInvoice();
-              }}
-            >
-              Print Invoice
-            </button>
+              {notice}
+            </Alert>
           )}
-        </p>
-      )}
-      {printError && (
-        <p role="alert">
-          Receipt/invoice did not print: {printError} — the sale itself is saved; use Reprint or
-          Print Invoice above once the printer issue is fixed.
-        </p>
-      )}
-
-      {step === 'search-item' && (
-        <SearchSelect<ItemDto>
-          key="item-search"
-          autoFocus
-          placeholder="Search item (Enter on empty = checkout)"
-          search={(query) => ipc.item.search({ query, categoryId: null })}
-          getKey={(item) => item.id}
-          getLabel={(item) => `${item.nameEn} (${item.itemCode})`}
-          onSelect={(item) => {
-            setPendingItem(item);
-            setQtyInput('1');
-            setSaleUnit('stock');
-            setStep('quantity');
-          }}
-          onEmptyEnter={() => {
-            if (cart.length > 0) setStep('checkout');
-          }}
-        />
-      )}
-
-      {step === 'quantity' && pendingItem && (
-        <div>
-          <p>
-            {pendingItem.nameEn} — quantity in{' '}
-            {saleUnit === 'alt' && pendingItem.altUomId !== null
-              ? uomName(pendingItem.altUomId)
-              : uomName(pendingItem.stockUomId)}
-            ?
-          </p>
-          <input
-            autoFocus
-            inputMode="decimal"
-            value={qtyInput}
-            onChange={(e) => {
-              setQtyInput(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                confirmLine();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                setPendingItem(null);
-                setStep('search-item');
-              }
-            }}
-          />
-          {pendingItem.altUomId !== null && (
-            <div
-              tabIndex={0}
-              role="radiogroup"
-              aria-label="Selling unit"
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                  setSaleUnit((u) => (u === 'stock' ? 'alt' : 'stock'));
-                } else if (e.key === 'Enter') {
-                  e.preventDefault();
-                  confirmLine();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setPendingItem(null);
-                  setStep('search-item');
-                }
+          {printError && (
+            <Alert
+              variant="warning"
+              onDismiss={() => {
+                setPrintError(null);
               }}
             >
-              <span role="radio" aria-checked={saleUnit === 'stock'}>
-                {saleUnit === 'stock' ? '[x]' : '[ ]'} {uomName(pendingItem.stockUomId)} (Stock
-                Unit)
-              </span>{' '}
-              <span role="radio" aria-checked={saleUnit === 'alt'}>
-                {saleUnit === 'alt' ? '[x]' : '[ ]'} {uomName(pendingItem.altUomId)} (Alt Unit)
-              </span>
+              Receipt/invoice did not print: {printError} — the sale itself is saved; use Reprint or
+              Print Invoice below once the printer issue is fixed.
+            </Alert>
+          )}
+
+          {confirmedSale ? (
+            <Card>
+              <div className="flex flex-col items-start gap-2 border-l-4 border-success pl-4">
+                <p className="text-sm font-medium text-ink-muted">Sale complete</p>
+                <p className="text-xl font-semibold text-ink">{confirmedSale.docNo}</p>
+                <MoneyDisplay paisaValue={confirmedSale.totalAmountPaisa} size="total" />
+                {confirmedSale.costNote && (
+                  <p className="text-xs text-warning">{confirmedSale.costNote}</p>
+                )}
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button
+                    variant="secondary"
+                    disabled={reprinting}
+                    onClick={() => {
+                      void handleReprint();
+                    }}
+                  >
+                    Reprint
+                  </Button>
+                  {confirmedSale.isWholesale && (
+                    <Button
+                      variant="secondary"
+                      disabled={invoicePrinting}
+                      onClick={() => {
+                        void handlePrintInvoice();
+                      }}
+                    >
+                      Print Invoice
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setConfirmedSale(null);
+                    }}
+                  >
+                    New sale
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ) : step === 'quantity' && pendingItem ? (
+            <div className="rounded-lg border border-line bg-surface p-4">
+              <p className="mb-2 text-base text-ink">
+                {pendingItem.nameEn} — quantity in{' '}
+                {saleUnit === 'alt' && pendingItem.altUomId !== null
+                  ? uomName(pendingItem.altUomId)
+                  : uomName(pendingItem.stockUomId)}
+                ?
+              </p>
+              <input
+                autoFocus
+                inputMode="decimal"
+                value={qtyInput}
+                onChange={(e) => {
+                  setQtyInput(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    confirmLine();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setPendingItem(null);
+                    setStep('search-item');
+                  }
+                }}
+                className="w-full rounded-md border border-line px-3 py-2 font-mono text-xl text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+              />
+              {pendingItem.altUomId !== null && (
+                <div
+                  tabIndex={0}
+                  role="radiogroup"
+                  aria-label="Selling unit"
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                      setSaleUnit((u) => (u === 'stock' ? 'alt' : 'stock'));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      confirmLine();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setPendingItem(null);
+                      setStep('search-item');
+                    }
+                  }}
+                  className="mt-3 flex gap-4 text-sm text-ink"
+                >
+                  <span role="radio" aria-checked={saleUnit === 'stock'}>
+                    {saleUnit === 'stock' ? '● ' : '○ '}
+                    {uomName(pendingItem.stockUomId)} (Stock Unit)
+                  </span>
+                  <span role="radio" aria-checked={saleUnit === 'alt'}>
+                    {saleUnit === 'alt' ? '● ' : '○ '}
+                    {uomName(pendingItem.altUomId)} (Alt Unit)
+                  </span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {step === 'checkout' && (
-        <div>
-          <h2>Checkout</h2>
-          <SearchSelect<CustomerDto>
-            key="customer-search"
-            autoFocus
-            placeholder="Customer (Enter on empty = walk-in)"
-            search={(query) => ipc.customer.search({ query })}
-            getKey={(customer) => customer.id}
-            getLabel={(customer) =>
-              customer.shopName ? `${customer.name} — ${customer.shopName}` : customer.name
-            }
-            onSelect={(customer) => {
-              setSelectedCustomer(customer);
-              paymentModeRef.current?.focus();
-            }}
-            onEmptyEnter={() => {
-              setSelectedCustomer(null);
-              paymentModeRef.current?.focus();
-            }}
-          />
-          <p>Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
-
-          <div
-            ref={paymentModeRef}
-            tabIndex={0}
-            role="radiogroup"
-            aria-label="Payment mode"
-            onKeyDown={(e) => {
-              if (e.key === 'c' || e.key === 'C') {
-                setPaymentMode('cash');
-              } else if (e.key === 'u' || e.key === 'U') {
-                setPaymentMode('credit');
-              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                setPaymentMode((m) => (m === 'cash' ? 'credit' : 'cash'));
-              } else if (e.key === 'Enter') {
-                e.preventDefault();
-                amountPaidRef.current?.focus();
-              }
-            }}
-          >
-            <span role="radio" aria-checked={paymentMode === 'cash'}>
-              {paymentMode === 'cash' ? '[x]' : '[ ]'} Cash (C)
-            </span>{' '}
-            <span role="radio" aria-checked={paymentMode === 'credit'}>
-              {paymentMode === 'credit' ? '[x]' : '[ ]'} Udhaar / Credit (U)
-            </span>
-          </div>
-
-          <label>
-            Amount paid (Rs)
-            <input
-              ref={amountPaidRef}
-              inputMode="decimal"
-              value={amountPaidRupees}
-              onChange={(e) => {
-                setAmountPaidRupees(e.target.value);
+          ) : (
+            <SearchSelect<ItemDto>
+              key="item-search"
+              autoFocus
+              placeholder="Search items (Enter on empty to confirm line)"
+              search={(query) => ipc.item.search({ query, categoryId: null })}
+              getKey={(item) => item.id}
+              getLabel={(item) => `${item.nameEn} (${item.itemCode})`}
+              onSelect={(item) => {
+                setPendingItem(item);
+                setQtyInput('1');
+                setSaleUnit('stock');
+                setStep('quantity');
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void handleCheckout();
-                }
+              onEmptyEnter={() => {
+                if (cart.length > 0) void handleCheckout();
               }}
+              renderItem={(item) => (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-ink">{item.nameEn}</p>
+                    <p className="text-xs text-ink-faint">{item.itemCode}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {item.retailPricePaisa !== null ? (
+                      <MoneyDisplay paisaValue={item.retailPricePaisa} size="sm" />
+                    ) : (
+                      <span className="text-xs text-ink-faint">—</span>
+                    )}
+                    <p className="text-xs text-ink-faint">{uomName(item.stockUomId)}</p>
+                  </div>
+                </div>
+              )}
+              renderEmpty={() => <EmptyState message="No items found" />}
             />
-          </label>
-        </div>
-      )}
+          )}
 
-      {step === 'warning-gate' && lastResult && (
-        <div
-          tabIndex={0}
-          autoFocus
-          role="alertdialog"
-          aria-label="Sale warning"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              finishSuccess(lastResult);
-            } else if (e.key === 'Escape') {
-              void handleCancelAfterWarning(lastResult.id);
-            }
-          }}
-        >
-          <p role="alert">
-            {lastResult.warnings.creditLimitExceeded && 'Credit limit exceeded for this customer. '}
-            {lastResult.warnings.stockBelowZero && 'This sale takes stock below zero. '}
-            Press Enter to keep this sale, or Escape to cancel it.
-          </p>
+          <CartTable cart={cart} subtotalPaisa={cartSubtotalPaisa} onRemove={removeLine} />
         </div>
-      )}
 
-      <hr />
-      <CartTable cart={cart} subtotalPaisa={cartSubtotalPaisa} onRemove={removeLine} />
-      <button
-        type="button"
-        disabled={cart.length === 0}
-        onClick={() => {
-          setStep('checkout');
+        {/* Right panel — 40%: checkout. Fixed, never scrolls. */}
+        <div className="w-2/5 shrink-0">
+          <Card title="Checkout">
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="mb-1 text-sm font-medium text-ink-muted">Customer</p>
+                <SearchSelect<CustomerDto>
+                  key="customer-search"
+                  placeholder="Search customer (Enter on empty = walk-in)"
+                  search={(query) => ipc.customer.search({ query })}
+                  getKey={(customer) => customer.id}
+                  getLabel={(customer) =>
+                    customer.shopName ? `${customer.name} — ${customer.shopName}` : customer.name
+                  }
+                  onSelect={(customer) => {
+                    setSelectedCustomer(customer);
+                    paymentModeRef.current?.focus();
+                  }}
+                  onEmptyEnter={() => {
+                    setSelectedCustomer(null);
+                    paymentModeRef.current?.focus();
+                  }}
+                />
+                <p
+                  className={`mt-2 text-lg font-semibold ${
+                    selectedCustomer ? 'text-ink' : 'text-ink-faint'
+                  }`}
+                >
+                  {selectedCustomer ? selectedCustomer.name : 'Walk-in'}
+                </p>
+              </div>
+
+              <div>
+                <p className="mb-1 text-sm font-medium text-ink-muted">Payment mode</p>
+                <div
+                  ref={paymentModeRef}
+                  tabIndex={0}
+                  role="radiogroup"
+                  aria-label="Payment mode"
+                  onKeyDown={(e) => {
+                    if (e.key === 'c' || e.key === 'C') {
+                      setPaymentMode('cash');
+                    } else if (e.key === 'u' || e.key === 'U') {
+                      setPaymentMode('credit');
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                      setPaymentMode((m) => (m === 'cash' ? 'credit' : 'cash'));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      amountPaidRef.current?.focus();
+                    }
+                  }}
+                  className="grid grid-cols-2 gap-3 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                >
+                  {/* tabIndex=-1: mouse-clickable, but the radiogroup div above
+                      stays the sole keyboard-focusable stop, unchanged from before. */}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    role="radio"
+                    aria-checked={paymentMode === 'cash'}
+                    onClick={() => {
+                      setPaymentMode('cash');
+                    }}
+                    className={`rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+                      paymentMode === 'cash'
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+                    }`}
+                  >
+                    Cash (C)
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    role="radio"
+                    aria-checked={paymentMode === 'credit'}
+                    onClick={() => {
+                      setPaymentMode('credit');
+                    }}
+                    className={`rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+                      paymentMode === 'credit'
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+                    }`}
+                  >
+                    Udhaar / Credit (U)
+                  </button>
+                </div>
+              </div>
+
+              <TextInput
+                ref={amountPaidRef}
+                label="Amount paid (Rs)"
+                variant="number"
+                size="large"
+                align="right"
+                value={amountPaidRupees}
+                onChange={(e) => {
+                  setAmountPaidRupees(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleCheckout();
+                  }
+                }}
+              />
+
+              <Button
+                variant="primary"
+                size="large"
+                fullWidth
+                disabled={cart.length === 0 || confirmedSale !== null}
+                onClick={() => {
+                  void handleCheckout();
+                }}
+              >
+                Checkout (F10)
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={step === 'warning-gate' && lastResult !== null}
+        title={warningTitle}
+        confirmVariant="warning"
+        confirmLabel="Continue"
+        onConfirm={() => {
+          if (lastResult) finishSuccess(lastResult);
+        }}
+        onCancel={() => {
+          if (lastResult) void handleCancelAfterWarning(lastResult.id);
         }}
       >
-        Checkout (F10)
-      </button>
+        {warningMessages.join(' ')} Continue anyway or cancel the sale?
+      </ConfirmDialog>
     </div>
   );
 }

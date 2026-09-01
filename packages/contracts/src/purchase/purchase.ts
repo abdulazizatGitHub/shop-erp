@@ -66,3 +66,22 @@ export const PurchaseDto = z.object({
   lines: z.array(PurchaseLineDto),
 });
 export type PurchaseDto = z.infer<typeof PurchaseDto>;
+
+/** P4.5-5 correction 2 (BUG-16's real-list fix) — the Purchases screen's list input. */
+export const PurchaseListInput = z.object({
+  limit: z.number().int().positive().max(1000).default(100),
+});
+export type PurchaseListInput = z.infer<typeof PurchaseListInput>;
+
+/** Mirrors PurchaseListRow (purchase.repository.port.ts's listPurchases return type) exactly. */
+export const PurchaseListRowDto = z.object({
+  id: z.string().uuid(),
+  docNo: z.string(),
+  supplierId: z.string().uuid(),
+  supplierName: z.string(),
+  purchaseDate: z.string(),
+  paymentMode: z.enum(['cash', 'credit']),
+  totalAmountPaisa: z.number().int(),
+  status: z.string(),
+});
+export type PurchaseListRowDto = z.infer<typeof PurchaseListRowDto>;

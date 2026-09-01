@@ -790,3 +790,92 @@ describe('document_sequence concurrency — does racing createPurchase ever prod
     }
   });
 });
+
+describe('KyselyPurchaseRepository.listPurchases', () => {
+  it('returns purchases most-recent-first, with the supplier name resolved, not just its id', async () => {
+    const first = await repo.createPurchase({
+      supplierId,
+      warehouseId: null,
+      purchaseDate: '2026-08-24',
+      supplierInvoiceNo: null,
+      paymentMode: 'cash',
+      billReference: null,
+      dueDate: null,
+      billNotes: null,
+      notes: null,
+      lines: [
+        { itemId: compressorItemId, quantityMilli: 1000, unitCostPaisa: 500_000, notes: null },
+      ],
+    });
+    const second = await repo.createPurchase({
+      supplierId,
+      warehouseId: null,
+      purchaseDate: '2026-08-25',
+      supplierInvoiceNo: null,
+      paymentMode: 'credit',
+      billReference: null,
+      dueDate: null,
+      billNotes: null,
+      notes: null,
+      lines: [{ itemId: gasItemId, quantityMilli: 1000, unitCostPaisa: 35_000, notes: null }],
+    });
+
+    const rows = await repo.listPurchases(100);
+
+    // Most-recent-first: `second` was created after `first`.
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id).toBe(second.id);
+    expect(rows[0]?.docNo).toBe(second.docNo);
+    expect(rows[0]?.supplierId).toBe(supplierId);
+    expect(rows[0]?.supplierName).toBe('Test Gas & Compressor Supplier');
+    expect(rows[0]?.purchaseDate).toBe('2026-08-25');
+    expect(rows[0]?.paymentMode).toBe('credit');
+    expect(rows[0]?.totalAmountPaisa).toBe(35_000);
+    expect(rows[0]?.status).toBe('confirmed');
+    expect(rows[1]?.id).toBe(first.id);
+  });
+
+  it('respects the limit', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      await repo.createPurchase({
+        supplierId,
+        warehouseId: null,
+        purchaseDate: '2026-08-24',
+        supplierInvoiceNo: null,
+        paymentMode: 'cash',
+        billReference: null,
+        dueDate: null,
+        billNotes: null,
+        notes: null,
+        lines: [
+          { itemId: compressorItemId, quantityMilli: 1000, unitCostPaisa: 500_000, notes: null },
+        ],
+      });
+    }
+
+    const rows = await repo.listPurchases(2);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("reflects a cancelled purchase's status — cancelling never removes it from the list", async () => {
+    const created = await repo.createPurchase({
+      supplierId,
+      warehouseId: null,
+      purchaseDate: '2026-08-24',
+      supplierInvoiceNo: null,
+      paymentMode: 'cash',
+      billReference: null,
+      dueDate: null,
+      billNotes: null,
+      notes: null,
+      lines: [
+        { itemId: compressorItemId, quantityMilli: 1000, unitCostPaisa: 500_000, notes: null },
+      ],
+    });
+    await repo.cancelPurchase(created.id);
+
+    const rows = await repo.listPurchases(100);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe('cancelled');
+  });
+});

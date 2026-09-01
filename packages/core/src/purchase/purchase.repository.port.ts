@@ -68,6 +68,18 @@ export interface PurchaseRecord {
   readonly lines: readonly PurchaseLineRecord[];
 }
 
+/** Row shape for the Purchases screen's list — one row per purchase, no lines. */
+export interface PurchaseListRow {
+  readonly id: string;
+  readonly docNo: string;
+  readonly supplierId: string;
+  readonly supplierName: string;
+  readonly purchaseDate: string;
+  readonly paymentMode: PurchasePaymentMode;
+  readonly totalAmountPaisa: number;
+  readonly status: string;
+}
+
 export interface PurchaseRepositoryPort {
   /**
    * Inserts purchase + purchase_line + stock_movement (+ party_ledger for
@@ -88,4 +100,11 @@ export interface PurchaseRepositoryPort {
    * purchase.status = 'cancelled'.
    */
   cancelPurchase(id: string): Promise<void>;
+  /**
+   * Read-only, most-recent-first list for the Purchases screen (P4.5-5
+   * correction 2 — BUG-16's real-list fix, PROJECT.md). Includes
+   * cancelled purchases (status carries that, never excludes them) — the
+   * screen still needs to show them, just without a Cancel action.
+   */
+  listPurchases(limit: number): Promise<readonly PurchaseListRow[]>;
 }

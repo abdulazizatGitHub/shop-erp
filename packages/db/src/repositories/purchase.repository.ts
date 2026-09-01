@@ -6,6 +6,8 @@ import {
   type NewPurchaseInput,
   type NewPurchaseResult,
   type PurchaseLineRecord,
+  type PurchaseListRow,
+  type PurchasePaymentMode,
   type PurchaseRecord,
   type PurchaseRepositoryPort,
 } from '@shop/core';
@@ -476,5 +478,40 @@ export class KyselyPurchaseRepository implements PurchaseRepositoryPort {
           .execute();
       }),
     );
+  }
+
+  async listPurchases(limit: number): Promise<readonly PurchaseListRow[]> {
+    const rows = await this.db
+      .selectFrom('purchase')
+      .innerJoin('party', 'party.id', 'purchase.supplierId')
+      .select([
+        'purchase.id as id',
+        'purchase.docNo as docNo',
+        'purchase.supplierId as supplierId',
+        'party.name as supplierName',
+        'purchase.purchaseDate as purchaseDate',
+        'purchase.paymentMode as paymentMode',
+        'purchase.totalAmount as totalAmountPaisa',
+        'purchase.status as status',
+      ])
+      .where('purchase.tenantId', '=', this.tenantId)
+      .where('party.tenantId', '=', this.tenantId)
+      .orderBy('purchase.createdAt', 'desc')
+      .limit(limit)
+      .execute();
+
+    return rows.map((row): PurchaseListRow => ({
+      id: row.id,
+      docNo: row.docNo,
+      supplierId: row.supplierId,
+      supplierName: row.supplierName,
+      purchaseDate: row.purchaseDate,
+      // Same cast as getPurchaseById above — every real row has a
+      // non-null paymentMode; the column type is nullable only for
+      // schema-level reasons, not because createPurchase ever omits it.
+      paymentMode: row.paymentMode as PurchasePaymentMode,
+      totalAmountPaisa: row.totalAmountPaisa,
+      status: row.status,
+    }));
   }
 }

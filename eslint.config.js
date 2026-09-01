@@ -86,6 +86,17 @@ export default tseslint.config(
     },
   },
 
+  // packages/i18n — string dictionaries + a hook, no domain knowledge
+  {
+    files: ['packages/i18n/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@shop/core', '@shop/db', '@shop/contracts', '@shop/ui', 'electron'] },
+      ],
+    },
+  },
+
   // apps/client — sandboxed browser context
   {
     files: ['apps/client/**/*.{ts,tsx}'],
