@@ -1094,6 +1094,90 @@ scope for a UI-only phase.
 Status: DEFERRED — Phase 8, pending owner decision on whether item
 categorization is wanted at all.
 
+### BUG-NEW3: No UI anywhere in the app to record a customer payment received — `payment:receive` is fully wired server-side but has zero call sites in the client — CRITICAL
+
+Found in: Phase 5, 2026-09-02, while building the P5-3a Urdu staff
+cheat sheet. Checked the live Customers screen before writing the
+"record a payment" section, per instruction to verify against real
+code rather than write from the spec text as given — the spec's
+example content ("Customers → کسٹمر → Record Payment") does not
+correspond to anything in the app. Severity raised HIGH → CRITICAL
+same day after tracing the consequence through to the parallel run
+(see Impact, revised).
+Description: `apps/client/src/pages/parties/CustomerListView.tsx`
+(the entire Customers screen, read in full) is read-only: search box,
+name, phone, balance columns — no row action, no detail page, no
+button of any kind. `CustomersPage.tsx` (the page that mounts it,
+also read in full) has exactly one header action, "Import Balances" —
+nothing else. Grepped all of `apps/client/src` for `Payment` — the
+only hits are Sales' payment-mode toggle (Cash/Udhaar at sale time),
+Purchases' equivalent, the Daily Sales report display, and an
+unrelated "Payment Terms" field on Add Supplier. No standalone
+payment-recording component exists anywhere. The backend side is
+actually complete: `payment:receive` has a real handler
+(`apps/server/src/ipc/handlers/payment.handler.ts`), is exposed
+through `preload.ts`, and is fully typed in `electron-api.d.ts`
+(`ipc.payment.receive`, taking a `CreatePaymentInput`) — but grepping
+`apps/client/src` for `ipc.payment` returns **zero matches**, checked
+twice on two separate turns. Same shape as `sale:listByDate`/
+`report:*` before Phase 4.5 wired them up, except this one was never
+picked up by any phase. **This is not a discoverability/navigation
+gap** — reaching the Customers screen does not get a user any closer
+to recording a payment, because nothing there (or anywhere else in
+the app) calls the endpoint. The feature is invisible to all users,
+staff and owner alike, without direct database access.
+Impact (revised, 2026-09-02): every udhaar sale entered during the
+Phase 5 parallel run creates a receivable that **cannot be cleared
+through the app** once the customer pays it down. Concretely: (1) R3
+Receivables Aging will show every udhaar customer's balance growing
+monotonically for the life of the parallel run, never decreasing, even
+as real payments come in at the counter; (2) P5-4b's daily
+reconciliation (register total vs. R1 Daily Sales report total) cannot
+produce a valid result on any day a customer pays against an existing
+udhaar balance, because that cash movement has no corresponding entry
+anywhere in the system for R1 to include; (3) the workaround (paper
+register + tell the owner) does not resolve this — it records the
+event on paper but still leaves the app's own `party_ledger`/reports
+permanently out of sync with reality, for every payment, for the
+entire two-week run, since there is no later step where someone
+reconciles paper back into the app. This blocks a core transaction the
+Phase 3 spec required (udhaar is central to CLAUDE.md §1's defining
+business fact) and that Phase 5's exit criteria depend on (P5-4b).
+Fix: a "Record Payment" form/modal — customer search + amount, calling
+the already-complete `ipc.payment.receive` — built as
+`apps/client/src/pages/parties/RecordPaymentModal.tsx`, structurally
+copied from `AddSupplierModal.tsx` (open/onClose/onX props,
+reset-on-open, local `blankToNull`, try/catch submit). No customer
+search needed inside the modal itself — `apps/client/src/pages/parties/CustomerListView.tsx`
+gained a per-row "Record Payment" button (disabled until that row's
+balance has actually loaded, so the modal is never opened with a
+stale/unknown balance) which passes `partyId`/`customerName`/
+`currentBalancePaisa` in directly from state already held by the list,
+rather than re-searching. `amountPaisa` is parsed from a rupee string
+via the existing `Money.fromRupees()` helper. On success the modal
+closes, `CustomerListView` shows a success `Alert` with the new
+document number, and re-fetches only that one customer's balance via
+the same `ipc.customer.balance()` call the initial load already
+uses — no full-list reload, no navigate-away-and-back.
+`CustomersPage.tsx` was not touched, per explicit decision (the
+success message stays self-contained in `CustomerListView`). No new
+IPC channel, no schema change, no new dependency — `payment:receive`
+already existed complete and unused; this closes the gap on the
+client side only.
+Status: **FIXED — 2026-09-02.** `npm run verify` green after the fix:
+typecheck clean, lint clean, **294/294 tests passing** (no test count
+change — this was pure UI wiring against an already-tested repository
+method; `payment.repository.test.ts`'s existing 4 tests already cover
+the server-side path this UI now actually calls). See the commit
+titled `fix(payment): add Record Payment UI — closes BUG-NEW3
+(CRITICAL)` and the `git log`/`git show` output in that session's
+transcript for the exact hash — not repeated here since this file is
+itself part of that commit and can't quote its own hash in advance.
+This was explicitly authorized as a Phase 5 exception to
+`docs/phases/PHASE_5.md` §6's "no new UI screen ... under any
+circumstance" — frontend-only, no new IPC channel, no schema change,
+no new dependency, per that authorization.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]

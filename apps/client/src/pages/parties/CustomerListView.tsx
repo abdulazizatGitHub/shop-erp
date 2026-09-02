@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CustomerDto } from '@shop/contracts';
+import type { CustomerDto, PaymentDto } from '@shop/contracts';
 import {
   Alert,
+  Button,
   EmptyState,
   MoneyDisplay,
   Spinner,
@@ -14,16 +15,37 @@ import {
   TextInput,
 } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { RecordPaymentModal } from './RecordPaymentModal.js';
 
 /** A customer's balance is 'error' once its own fetch has failed — never retried silently. */
 type BalanceState = number | 'error';
 
-/** P4.5-8 — same eager-parallel-balance-load pattern as SupplierListView. */
+/**
+ * P4.5-8 — same eager-parallel-balance-load pattern as SupplierListView.
+ * BUG-NEW3 fix (CRITICAL, Phase 5): added the "Record Payment" action,
+ * self-contained here per explicit decision — CustomersPage.tsx is not
+ * touched. loadBalance() is the same fetch the mount effect always did,
+ * pulled into a named function so a successful payment can re-run it for
+ * just the one affected customer instead of reloading the whole list.
+ */
 export function CustomerListView(): React.JSX.Element {
   const [customers, setCustomers] = useState<readonly CustomerDto[]>([]);
   const [balances, setBalances] = useState<Record<string, BalanceState>>({});
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<CustomerDto | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  function loadBalance(customerId: string): void {
+    ipc.customer
+      .balance(customerId)
+      .then((balance) => {
+        setBalances((prev) => ({ ...prev, [customerId]: balance.balancePaisa }));
+      })
+      .catch(() => {
+        setBalances((prev) => ({ ...prev, [customerId]: 'error' }));
+      });
+  }
 
   useEffect(() => {
     ipc.customer
@@ -32,14 +54,7 @@ export function CustomerListView(): React.JSX.Element {
         setCustomers(rows);
         setError(null);
         rows.forEach((customer) => {
-          ipc.customer
-            .balance(customer.id)
-            .then((balance) => {
-              setBalances((prev) => ({ ...prev, [customer.id]: balance.balancePaisa }));
-            })
-            .catch(() => {
-              setBalances((prev) => ({ ...prev, [customer.id]: 'error' }));
-            });
+          loadBalance(customer.id);
         });
       })
       .catch((err: unknown) => {
@@ -58,9 +73,19 @@ export function CustomerListView(): React.JSX.Element {
     );
   }, [customers, query]);
 
+  function handlePaid(result: PaymentDto): void {
+    setPaymentTarget(null);
+    setSuccessMessage(`Payment recorded — ${result.docNo}`);
+    loadBalance(result.partyId);
+  }
+
+  const targetBalance = paymentTarget && balances[paymentTarget.id];
+  const targetBalancePaisa = typeof targetBalance === 'number' ? targetBalance : 0;
+
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
+      {successMessage && <Alert variant="success">{successMessage}</Alert>}
       <TextInput
         variant="search"
         placeholder="Search customers by name, code, or phone"
@@ -84,11 +109,13 @@ export function CustomerListView(): React.JSX.Element {
               <TableHeaderCell>Name</TableHeaderCell>
               <TableHeaderCell>Phone</TableHeaderCell>
               <TableHeaderCell className="text-right">Balance</TableHeaderCell>
+              <TableHeaderCell className="text-right">Actions</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.map((customer) => {
               const customerBalance = balances[customer.id];
+              const balanceReady = typeof customerBalance === 'number';
               return (
                 <TableRow key={customer.id}>
                   <TableCell>{customer.partyCode}</TableCell>
@@ -106,11 +133,36 @@ export function CustomerListView(): React.JSX.Element {
                       />
                     )}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="secondary"
+                      disabled={!balanceReady}
+                      onClick={() => {
+                        setSuccessMessage(null);
+                        setPaymentTarget(customer);
+                      }}
+                    >
+                      Record Payment
+                    </Button>
+                  </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
+      )}
+
+      {paymentTarget && (
+        <RecordPaymentModal
+          open
+          onClose={() => {
+            setPaymentTarget(null);
+          }}
+          partyId={paymentTarget.id}
+          customerName={paymentTarget.name}
+          currentBalancePaisa={targetBalancePaisa}
+          onPaid={handlePaid}
+        />
       )}
     </div>
   );
