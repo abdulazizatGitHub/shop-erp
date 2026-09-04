@@ -132,6 +132,9 @@ this setting.
   schema/business-logic decision, not a UI change. Planned for Phase 8.
 - **Stock consumption tracking and inventory management dashboard** —
   requested 2026-09-01. Planned for Phase 8.
+- **Custom install wizard** (multi-screen NSIS setup with shop name,
+  printer config, install location) — requested 2026-09-02. Relevant
+  if the app is ever distributed to multiple shops. No phase assigned.
 
 ---
 
@@ -1177,6 +1180,107 @@ This was explicitly authorized as a Phase 5 exception to
 `docs/phases/PHASE_5.md` §6's "no new UI screen ... under any
 circumstance" — frontend-only, no new IPC channel, no schema change,
 no new dependency, per that authorization.
+
+### BUG-PACK-1: Packaged app fails to load better-sqlite3 native module — CRITICAL
+
+Found in: Phase 5, 2026-09-03/04, during P5-1 prerequisite work
+(building and verifying a Windows installer).
+Symptom: `Cannot find module 'better-sqlite3'` on launch, or silent
+exit with no window at all, depending on which installer variant was
+tested. Neither symptom produces a Windows Error Reporting event, an
+Application-log error entry, or any console output on a plain launch
+— both fail exactly the way `main.ts`'s own error handling would fail
+silently (see root cause).
+Root cause identified: `better-sqlite3` is a native module declared
+in `packages/db/package.json` (not `apps/server/package.json`), so
+electron-builder's dependency walker places it at
+`app.asar.unpacked/node_modules/@shop/db/node_modules/better-sqlite3`
+— a nested path that Node's `require()` resolution from inside
+`app.asar/dist/main/main.cjs` never walks to (bare-specifier
+resolution only checks ancestor `node_modules` directories relative
+to the requiring file's own location, which is not inside
+`@shop/db`'s directory tree once bundled into one file).
+Approaches attempted this session and their outcomes:
+
+- **`asarUnpack` glob** (`node_modules/better-sqlite3/**/*`, then a
+  two-pattern version also matching the nested path): broke
+  packaging outright with a symlink-resolution error in
+  electron-builder's `getRelativePath` (`app-builder-lib`) —
+  `packages/contracts/package.json must be under apps/server/` — an
+  unrelated npm-workspace symlinked package, not `better-sqlite3`
+  itself, tripped the same enumeration path. The presence of any
+  `asarUnpack` entry appears to make electron-builder relativize
+  every packed file against `apps/server/`, which fails for any
+  workspace package resolved through a symlink outside it.
+- **`extraFiles` to `resources/app.asar.unpacked/node_modules/better-sqlite3`**
+  (copying from `packages/db/node_modules/better-sqlite3`, the
+  location that actually has the compiled `.node` binary — confirmed
+  by direct inspection; the root `node_modules/better-sqlite3` copy
+  had only intermediate build artifacts, no final `.node` file): the
+  binary landed exactly where expected (confirmed via `dir` on the
+  installed app), but `app.asar`'s own internal manifest had no
+  record of that path at all (confirmed by extracting the archive and
+  listing its `node_modules/` — `better-sqlite3` was absent at the
+  top level, only present nested under `@shop/db`). `extraFiles`
+  copies files onto the final `resources/` tree entirely outside the
+  asar-packing step, so the archive never "knows" the path exists —
+  Node's asar-aware `require()` resolution consults the archive's own
+  listing and never looked there.
+- **`extraResources` to `node_modules/better-sqlite3`** (a different
+  destination, sibling to `app.asar.unpacked` rather than inside it):
+  wrong path — `extraResources`'s `to` is always relative to
+  `resources/` itself (confirmed: the pre-existing migrations entry
+  lands at `resources/migrations`), landing at
+  `resources/node_modules/better-sqlite3`, which is not on Node's
+  resolution walk from inside the asar at all.
+- **`connection.ts` dynamic require (module-load-time IIFE) + `extraFiles`**:
+  bundle inspection (extracting the installed `app.asar` and grepping
+  `main.cjs`) confirmed Vite preserved the dynamic
+  `require(path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3'))`
+  call exactly as written, and the binary was confirmed present at
+  that exact path on disk. The app still exited silently with no
+  window. Diagnosed that the `Database` IIFE ran at module-load time
+  (`const Database = ((): ... => {...})()`), before `app.whenReady()`
+  and before the one `.catch()` in `main.ts` even exists — any throw
+  there is unreachable by any error handler in the file, explaining
+  the silence.
+- **`connection.ts` lazy require (`loadBetterSqlite3()` called inside
+  `openDatabase()`) + `extraFiles`**: moved the `require()` behind a
+  function call so it only runs after Electron is bootstrapped and
+  `openDatabase()` is actually invoked from inside the
+  `app.whenReady().then()` chain, where the existing `.catch()` could
+  see any throw. Owner reports the app **still does not open, even
+  with no database file present** — the specific reason is not
+  diagnosed. This was the most-fixed variant reached this session and
+  still failed.
+- **Reverted to `f9faf43` baseline** (original bare
+  `import Database from 'better-sqlite3'`, no `asarUnpack`, no
+  `extraFiles`, no extra `extraResources` entry): confirmed via
+  `git checkout f9faf43 -- packages/db/src/connection.ts apps/server/package.json`
+  and diffed to match exactly. This is the same state that produced
+  the _original_ `Cannot find module 'better-sqlite3'` crash that
+  started this investigation — **not a previously-working baseline
+  being restored**, a return to the same broken starting point. There
+  is no commit in this repository's history with a confirmed-working
+  packaged installer.
+  What is needed to fix this properly:
+- Enable Electron's own logging before investigating further: set
+  `ELECTRON_ENABLE_LOGGING=1` and `ELECTRON_LOG_FILE` to a writable
+  path before launching, so any startup crash is captured rather than
+  silently swallowed. This session's own attempts to capture output
+  (stdout/stderr redirection, Playwright's `_electron` launcher,
+  Windows Event Viewer) all came back empty or inconclusive — a real
+  Electron-level log file is the next thing to try, not another
+  packaging-config variant.
+- Investigate whether the lazy-require + `extraFiles` combination
+  (the most-fixed variant reached this session) actually resolves
+  `better-sqlite3` correctly but something _else_ causes the silent
+  exit, or whether `require()` still fails to resolve even with the
+  IIFE made lazy — this was not distinguished before the session
+  ended.
+  Status: **OPEN.** Do not attempt P5-1 shop-PC install until this is
+  resolved. The `f9faf43` baseline installer is also broken — there is
+  no working installer at any commit as of this entry.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
