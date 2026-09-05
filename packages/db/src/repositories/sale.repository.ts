@@ -279,6 +279,7 @@ export class KyselySaleRepository implements SaleRepositoryPort {
             createdAt: now,
             updatedAt: now,
             createdBy: null,
+            jobId: null,
           })
           .execute();
 
@@ -306,6 +307,14 @@ export class KyselySaleRepository implements SaleRepositoryPort {
               businessUnitId: line.businessUnitId,
               saleUomId: line.saleUomId,
               saleToStockFactor: line.saleToStockFactor,
+              // A counter sale's lines are always physical parts, never
+              // labour — job.repository.ts's deliverJob is the only path
+              // that ever sets these to something else.
+              lineKind: 'part',
+              jobPartId: null,
+              serviceChargeId: null,
+              payerPartyId: null,
+              revenueType: 'customer_paid',
             })
             .execute();
 

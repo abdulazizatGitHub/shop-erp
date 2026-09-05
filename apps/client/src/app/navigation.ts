@@ -1,5 +1,13 @@
 export type Tab =
-  'sales' | 'items' | 'suppliers' | 'purchases' | 'reports' | 'customers' | 'settings';
+  | 'sales'
+  | 'items'
+  | 'suppliers'
+  | 'purchases'
+  | 'jobs'
+  | 'technician-custody'
+  | 'reports'
+  | 'customers'
+  | 'settings';
 
 export interface NavItem {
   readonly key: Tab;
@@ -16,4 +24,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'reports', label: 'Reports', shortcutDigit: '5' },
   { key: 'customers', label: 'Customers', shortcutDigit: '6' },
   { key: 'settings', label: 'Settings', shortcutDigit: '7' },
+  { key: 'jobs', label: 'Jobs', shortcutDigit: '8' },
+  { key: 'technician-custody', label: 'Custody', shortcutDigit: '9' },
 ];

@@ -31,6 +31,33 @@ export {
 export { CreatePaymentInput, PaymentDto } from './payment/payment.js';
 
 export {
+  JobStatus,
+  CreateJobInput,
+  JobStatusTransitionInput,
+  AssignTechnicianInput,
+  JobIdInput,
+  JobSearchInput,
+  JobDto,
+  JobSummaryDto,
+  TechnicianCustodyInput,
+  IssuePartsToTechnicianInput,
+  IssuePartsToTechnicianResult,
+  IssuePartsToJobInput,
+  IssuePartsToJobResult,
+  RevenueType,
+  DeliverJobPartLineInput,
+  DeliverJobLabourLineInput,
+  DeliverJobInput,
+  DeliverJobResult,
+  InternalTransferReason,
+  InternalTransferLineInput,
+  CreateInternalTransferInput,
+  NewInternalTransferResult,
+  RecordCustodyReconciliationInput,
+  CustodyReconciliationResult,
+} from './job/job.js';
+
+export {
   PurchaseLineInput,
   CreatePurchaseInput,
   PurchaseIdInput,

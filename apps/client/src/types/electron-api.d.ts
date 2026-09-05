@@ -1,26 +1,44 @@
 import type {
+  AssignTechnicianInput,
   CancelSaleInput,
   CashBookReportInput,
   CashBookRowDto,
   CreateCustomerInput,
+  CreateInternalTransferInput,
   CreateItemInput,
+  CreateJobInput,
   CreatePaymentInput,
   CreatePurchaseInput,
   CreateSaleInput,
   CreateSupplierInput,
+  CustodyReconciliationResult,
   CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
   DailySalesReportInput,
   DailySalesReportRowDto,
+  DeliverJobInput,
+  DeliverJobResult,
+  IssuePartsToJobInput,
+  IssuePartsToJobResult,
+  IssuePartsToTechnicianInput,
+  IssuePartsToTechnicianResult,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
+  JobDto,
+  JobIdInput,
+  JobSearchInput,
+  JobStatusTransitionInput,
+  JobSummaryDto,
+  TechnicianCustodyInput,
+  NewInternalTransferResult,
   PaymentDto,
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
   ReceivablesAgingRowDto,
+  RecordCustodyReconciliationInput,
   SaleResult,
   SaleSearchInput,
   SaleSummaryDto,
@@ -58,6 +76,61 @@ export interface CustomerBalanceImportResult {
   readonly accepted: number;
   readonly rejected: number;
   readonly skipped: number;
+}
+
+/** Mirrors @shop/core's JobSplitRecord — v_job_split's columns exactly. */
+export interface JobSplitRecord {
+  readonly jobId: string;
+  readonly docNo: string;
+  readonly receivedDate: string;
+  readonly jobType: string;
+  readonly revenueType: string;
+  readonly status: string;
+  readonly customerName: string | null;
+  readonly billedToName: string | null;
+  readonly technicianName: string | null;
+  readonly partsChargedPaisa: number;
+  readonly partsCostPaisa: number;
+  readonly partsMarginPaisa: number;
+  readonly labourChargePaisa: number;
+  readonly totalBillPaisa: number;
+}
+
+/** Mirrors @shop/core's JobPartRecord. */
+export interface JobPartRecord {
+  readonly id: string;
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly quantityMilli: number;
+  readonly unitCostPaisa: number;
+  readonly unitPricePaisa: number;
+  readonly entryType: string;
+  readonly reversesJobPartId: string | null;
+  readonly isBillable: boolean;
+  readonly issuedAt: string;
+}
+
+/** Mirrors @shop/core's TechnicianCustodyRecord. */
+export interface TechnicianCustodyRecord {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly qtyHeldMilli: number;
+  readonly lastMovement: string | null;
+  readonly warehouseId: string;
+}
+
+/** Mirrors @shop/db's TechnicianOption. */
+export interface TechnicianOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** Mirrors @shop/db's ServiceChargeOption. */
+export interface ServiceChargeOption {
+  readonly id: string;
+  readonly name: string;
+  readonly businessUnitId: string;
+  readonly retailChargePaisa: number;
 }
 
 export interface UomConversionOption {
@@ -153,6 +226,31 @@ export interface ElectronApi {
   };
   readonly payment: {
     readonly receive: (input: CreatePaymentInput) => Promise<PaymentDto>;
+  };
+  readonly job: {
+    readonly create: (input: CreateJobInput) => Promise<JobDto>;
+    readonly assignTechnician: (input: AssignTechnicianInput) => Promise<JobDto>;
+    readonly transitionStatus: (input: JobStatusTransitionInput) => Promise<JobDto>;
+    readonly getById: (input: JobIdInput) => Promise<JobDto | null>;
+    readonly list: (input: JobSearchInput) => Promise<readonly JobSummaryDto[]>;
+    readonly issueToTechnician: (
+      input: IssuePartsToTechnicianInput,
+    ) => Promise<IssuePartsToTechnicianResult>;
+    readonly issueToJob: (input: IssuePartsToJobInput) => Promise<IssuePartsToJobResult>;
+    readonly listJobParts: (id: string) => Promise<readonly JobPartRecord[]>;
+    readonly deliver: (input: DeliverJobInput) => Promise<DeliverJobResult>;
+    readonly createInternalTransfer: (
+      input: CreateInternalTransferInput,
+    ) => Promise<NewInternalTransferResult>;
+    readonly reconcileCustody: (
+      input: RecordCustodyReconciliationInput,
+    ) => Promise<CustodyReconciliationResult>;
+    readonly getJobSplit: (id: string) => Promise<JobSplitRecord | null>;
+    readonly getTechnicianCustody: (
+      input: TechnicianCustodyInput,
+    ) => Promise<readonly TechnicianCustodyRecord[]>;
+    readonly listTechnicians: () => Promise<readonly TechnicianOption[]>;
+    readonly listServiceCharges: () => Promise<readonly ServiceChargeOption[]>;
   };
   readonly uom: {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;

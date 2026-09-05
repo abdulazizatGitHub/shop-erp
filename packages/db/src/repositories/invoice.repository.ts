@@ -17,18 +17,30 @@ export interface InvoiceData {
   readonly totalAmountPaisa: number;
   readonly paidAmountPaisa: number;
   readonly balanceDuePaisa: number;
+  /** The job's own JOB-NNNN doc_no (distinct from this invoice's INV-NNNN
+   * docNo above) — null unless this sale came from a job delivery (P6-5). */
+  readonly jobDocNo: string | null;
+  readonly reportedFault: string | null;
+  readonly technicianName: string | null;
 }
 
 interface SaleHeaderRow {
   saleDate: string;
   paidAmount: number;
   customerId: string | null;
+  jobId: string | null;
 }
 
 interface CustomerRow {
   name: string;
   phone: string | null;
   address: string | null;
+}
+
+interface JobHeaderRow {
+  docNo: string;
+  reportedFault: string | null;
+  assignedTo: string | null;
 }
 
 /**
@@ -52,7 +64,7 @@ export async function getSaleInvoiceData(
 
   const saleHeader = (await db
     .selectFrom('sale')
-    .select(['saleDate', 'paidAmount', 'customerId'])
+    .select(['saleDate', 'paidAmount', 'customerId', 'jobId'])
     .where('id', '=', saleId)
     .where('tenantId', '=', tenantId)
     .executeTakeFirst()) as SaleHeaderRow | undefined;
@@ -85,6 +97,34 @@ export async function getSaleInvoiceData(
     Money.of(saleHeader.paidAmount),
   );
 
+  let jobDocNo: string | null = null;
+  let reportedFault: string | null = null;
+  let technicianName: string | null = null;
+
+  if (saleHeader.jobId !== null) {
+    const jobRow = (await db
+      .selectFrom('job')
+      .select(['docNo', 'reportedFault', 'assignedTo'])
+      .where('id', '=', saleHeader.jobId)
+      .where('tenantId', '=', tenantId)
+      .executeTakeFirst()) as JobHeaderRow | undefined;
+
+    if (jobRow) {
+      jobDocNo = jobRow.docNo;
+      reportedFault = jobRow.reportedFault;
+
+      if (jobRow.assignedTo !== null) {
+        const technicianRow = await db
+          .selectFrom('party')
+          .select('name')
+          .where('id', '=', jobRow.assignedTo)
+          .where('tenantId', '=', tenantId)
+          .executeTakeFirst();
+        technicianName = technicianRow?.name ?? null;
+      }
+    }
+  }
+
   return {
     docNo: receiptData.docNo,
     saleDate: saleHeader.saleDate,
@@ -95,5 +135,8 @@ export async function getSaleInvoiceData(
     totalAmountPaisa: receiptData.totalAmountPaisa,
     paidAmountPaisa: saleHeader.paidAmount,
     balanceDuePaisa,
+    jobDocNo,
+    reportedFault,
+    technicianName,
   };
 }

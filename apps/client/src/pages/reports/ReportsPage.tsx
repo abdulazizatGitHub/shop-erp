@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Card, PageHeader, Tabs } from '@shop/ui';
 import { CashBookReport } from './CashBookReport.js';
 import { DailySalesReport } from './DailySalesReport.js';
+import { JobsReport } from './JobsReport.js';
 import { ReceivablesAgingReport } from './ReceivablesAgingReport.js';
 import { StockValuationReport } from './StockValuationReport.js';
 import { UnitPlReport } from './UnitPlReport.js';
 
-type ReportTab = 'dailySales' | 'stockValuation' | 'receivables' | 'cashBook' | 'unitPl';
+type ReportTab = 'dailySales' | 'stockValuation' | 'receivables' | 'cashBook' | 'unitPl' | 'jobs';
 
 const TAB_ITEMS = [
   { key: 'dailySales', label: 'Daily Sales' },
@@ -14,6 +15,7 @@ const TAB_ITEMS = [
   { key: 'receivables', label: 'Receivables Aging' },
   { key: 'cashBook', label: 'Cash Book' },
   { key: 'unitPl', label: 'Unit P&L' },
+  { key: 'jobs', label: 'Jobs' },
 ] as const;
 
 const TAB_TITLES: Record<ReportTab, string> = {
@@ -22,6 +24,7 @@ const TAB_TITLES: Record<ReportTab, string> = {
   receivables: 'Receivables Aging',
   cashBook: 'Cash Book',
   unitPl: 'Unit P&L',
+  jobs: 'Jobs',
 };
 
 export function ReportsPage(): React.JSX.Element {
@@ -37,6 +40,7 @@ export function ReportsPage(): React.JSX.Element {
         {tab === 'receivables' && <ReceivablesAgingReport />}
         {tab === 'cashBook' && <CashBookReport />}
         {tab === 'unitPl' && <UnitPlReport />}
+        {tab === 'jobs' && <JobsReport />}
       </Card>
     </div>
   );

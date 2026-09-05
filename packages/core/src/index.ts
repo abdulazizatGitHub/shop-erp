@@ -102,6 +102,56 @@ export type {
   PaymentRepositoryPort,
 } from './payment/payment.repository.port.js';
 
+export type {
+  JobStatus,
+  JobRecord,
+  JobSearchQuery,
+  JobSummaryRecord,
+  JobSplitRecord,
+  TechnicianCustodyRecord,
+  NewJobInput,
+  JobStatusTransitionInput,
+  AssignTechnicianInput,
+  JobRepositoryPort,
+} from './job/job.repository.port.js';
+export { createJob, assignTechnician, transitionJobStatus } from './job/job.service.js';
+
+export type {
+  IssuePartsToTechnicianInput,
+  IssuePartsToTechnicianResult,
+  IssuePartsToJobInput,
+  IssuePartsToJobResult,
+  JobPartRecord,
+  JobIssueRepositoryPort,
+} from './job/job-issue.repository.port.js';
+export { issuePartsToTechnician, issuePartsToJob } from './job/job-issue.service.js';
+
+export { distinctPayerIds, validateMultiPayerPayment } from './job/job-delivery.js';
+export type {
+  DeliverJobPartLineInput,
+  DeliverJobLabourLineInput,
+  DeliverJobInput,
+  DeliverJobResult,
+  JobDeliveryRepositoryPort,
+} from './job/job-delivery.repository.port.js';
+export { deliverJob } from './job/job-delivery.service.js';
+
+export type {
+  InternalTransferReason,
+  InternalTransferLineInput,
+  NewInternalTransferInput,
+  NewInternalTransferResult,
+  InternalTransferRepositoryPort,
+} from './job/internal-transfer.repository.port.js';
+export { createInternalTransfer } from './job/internal-transfer.service.js';
+
+export type {
+  RecordCustodyReconciliationInput,
+  CustodyReconciliationResult,
+  CustodyRepositoryPort,
+} from './job/custody.repository.port.js';
+export { recordCustodyReconciliation } from './job/custody.service.js';
+
 export { buildReceiptLayout } from './printing/receipt-layout.js';
 export type { ReceiptData, ReceiptLineData } from './printing/receipt-layout.js';
 export { buildInvoiceLayout } from './printing/invoice-layout.js';

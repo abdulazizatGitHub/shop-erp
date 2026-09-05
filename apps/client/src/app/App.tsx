@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ItemsPage } from '../pages/items/ItemsPage.js';
+import JobsPage from '../pages/jobs/JobsPage.js';
+import TechnicianCustodyPage from '../pages/jobs/TechnicianCustodyPage.js';
 import { CustomersPage } from '../pages/parties/CustomersPage.js';
 import { SuppliersPage } from '../pages/parties/SuppliersPage.js';
 import { PurchasePage } from '../pages/purchases/PurchasePage.js';
@@ -13,7 +15,7 @@ import { Sidebar } from './Sidebar.js';
 export function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('sales');
 
-  // Alt+1..7 — direct tab switching, documented on each sidebar item.
+  // Alt+1..9 — direct tab switching, documented on each sidebar item.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (!event.altKey) return;
@@ -36,6 +38,8 @@ export function App(): React.JSX.Element {
         {tab === 'items' && <ItemsPage />}
         {tab === 'suppliers' && <SuppliersPage />}
         {tab === 'purchases' && <PurchasePage />}
+        {tab === 'jobs' && <JobsPage />}
+        {tab === 'technician-custody' && <TechnicianCustodyPage />}
         {tab === 'reports' && <ReportsPage />}
         {tab === 'customers' && <CustomersPage />}
         {tab === 'settings' && <SettingsPage />}

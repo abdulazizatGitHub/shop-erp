@@ -151,6 +151,8 @@ export interface PartyTable {
   customerType: string | null;
   priceLevelId: string | null;
   creditLimit: number | null;
+  // staff-specific — added P6-8. See 0001_init.sql's party table.
+  staffRole: string | null;
   notes: string | null;
   isActive: number;
   createdAt: string;
@@ -217,6 +219,7 @@ export interface SaleTable {
   createdAt: string;
   updatedAt: string;
   createdBy: string | null;
+  jobId: string | null;
 }
 
 export interface SaleLineTable {
@@ -224,7 +227,7 @@ export interface SaleLineTable {
   tenantId: string;
   saleId: string;
   lineNo: number;
-  itemId: string;
+  itemId: string | null;
   description: string | null;
   quantity: number;
   unitPrice: number;
@@ -236,6 +239,11 @@ export interface SaleLineTable {
   businessUnitId: string | null;
   saleUomId: string | null;
   saleToStockFactor: number | null;
+  lineKind: string;
+  jobPartId: string | null;
+  serviceChargeId: string | null;
+  payerPartyId: string | null;
+  revenueType: string;
 }
 
 export interface PartyLedgerTable {
@@ -305,6 +313,133 @@ export interface UomConversionTable {
   factorMilli: number;
 }
 
+export interface JobTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  customerId: string | null;
+  customerNameAdhoc: string | null;
+  customerPhone: string | null;
+  jobType: string;
+  applianceType: string | null;
+  applianceBrand: string | null;
+  applianceModel: string | null;
+  applianceSerial: string | null;
+  reportedFault: string | null;
+  accessoriesReceived: string | null;
+  receivedDate: string;
+  promisedDate: string | null;
+  estimateAmount: number | null;
+  estimateApproved: number;
+  assignedTo: string | null;
+  status: string;
+  diagnosis: string | null;
+  workDone: string | null;
+  labourCharge: number;
+  partsCost: number;
+  totalCharge: number;
+  warrantyDays: number;
+  isWarrantyRework: number;
+  parentJobId: string | null;
+  deliveredDate: string | null;
+  saleId: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  businessUnitId: string | null;
+  billToPartyId: string | null;
+  revenueType: string;
+  contractId: string | null;
+  claimReference: string | null;
+  claimStatus: string | null;
+}
+
+export interface JobPartTable {
+  id: string;
+  tenantId: string;
+  jobId: string;
+  itemId: string;
+  quantity: number;
+  unitCost: number;
+  unitPrice: number;
+  serialId: string | null;
+  isReturned: number;
+  issuedAt: string;
+  issuedBy: string | null;
+  businessUnitId: string | null;
+  isBillable: number;
+  entryType: string;
+  reversesJobPartId: string | null;
+}
+
+export interface ServiceChargeTable {
+  id: string;
+  tenantId: string;
+  businessUnitId: string;
+  name: string;
+  jobType: string | null;
+  retailCharge: number;
+  wholesaleCharge: number | null;
+  commissionAmount: number | null;
+  commissionBp: number | null;
+  typicalMinutes: number | null;
+  isActive: number;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface InternalTransferTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  transferDate: string;
+  fromUnitId: string;
+  toUnitId: string;
+  reason: string;
+  jobId: string | null;
+  valuationMethod: string;
+  totalAmount: number;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+export interface InternalTransferLineTable {
+  id: string;
+  tenantId: string;
+  transferId: string;
+  itemId: string;
+  quantity: number;
+  unitValue: number;
+  lineTotal: number;
+}
+
+export interface CustodyReconciliationTable {
+  id: string;
+  tenantId: string;
+  warehouseId: string;
+  custodianPartyId: string;
+  reconciledOn: string;
+  shortageValue: number;
+  actionTaken: string;
+  ledgerEntryId: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+export interface JobStatusHistoryTable {
+  id: string;
+  tenantId: string;
+  jobId: string;
+  fromStatus: string | null;
+  toStatus: string;
+  changedAt: string;
+  changedBy: string | null;
+  note: string | null;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -327,4 +462,11 @@ export interface Database {
   auditLog: AuditLogTable;
   syncOutbox: SyncOutboxTable;
   setting: SettingTable;
+  job: JobTable;
+  jobPart: JobPartTable;
+  jobStatusHistory: JobStatusHistoryTable;
+  serviceCharge: ServiceChargeTable;
+  internalTransfer: InternalTransferTable;
+  internalTransferLine: InternalTransferLineTable;
+  custodyReconciliation: CustodyReconciliationTable;
 }

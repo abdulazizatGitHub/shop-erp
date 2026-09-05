@@ -31,6 +31,8 @@ describe('buildInvoiceLayout (P4-2)', () => {
           unitName: 'Piece',
           unitPricePaisa: 500000,
           lineTotalPaisa: 1000000,
+          lineKind: 'part',
+          businessUnitName: null,
         },
         {
           itemName: 'Copper Pipe 1/4"',
@@ -38,11 +40,16 @@ describe('buildInvoiceLayout (P4-2)', () => {
           unitName: 'Foot',
           unitPricePaisa: 30000,
           lineTotalPaisa: 300000,
+          lineKind: 'part',
+          businessUnitName: null,
         },
       ],
       totalAmountPaisa: 1300000,
       paidAmountPaisa: 500000,
       balanceDuePaisa: 800000,
+      jobDocNo: null,
+      reportedFault: null,
+      technicianName: null,
     };
 
     const layout = buildInvoiceLayout(data);
@@ -80,11 +87,16 @@ describe('buildInvoiceLayout (P4-2)', () => {
           unitName: 'Piece',
           unitPricePaisa: 100000,
           lineTotalPaisa: 100000,
+          lineKind: 'part',
+          businessUnitName: null,
         },
       ],
       totalAmountPaisa: 100000,
       paidAmountPaisa: 100000,
       balanceDuePaisa: 0,
+      jobDocNo: null,
+      reportedFault: null,
+      technicianName: null,
     };
 
     const layout = buildInvoiceLayout(data);
@@ -102,5 +114,100 @@ describe('buildInvoiceLayout (P4-2)', () => {
     ].join('\n');
 
     expect(layout).toBe(expected);
+  });
+
+  it('P6-10: prints job/fault/technician header lines and groups lines by business unit for a job delivery', () => {
+    // 1 part line (Spare Parts unit) + 1 labour line (Repair unit).
+    //   Part:   Rs 800.00/foot x 5 feet = 80,000 paisa x 5000 milli / 1000 = 400,000 paisa.
+    //   Labour: flat Rs 1,200.00 = 120,000 paisa (quantity is always 1000 milli — see job-delivery.repository.ts).
+    //   totalAmountPaisa = 400,000 + 120,000 = 520,000 paisa.
+    const data: InvoiceLayoutData = {
+      docNo: 'INV-0010',
+      saleDate: '2026-09-05',
+      customerName: 'Malik Traders',
+      customerPhone: null,
+      customerAddress: null,
+      lines: [
+        {
+          itemName: 'Copper Pipe 1/4"',
+          quantityMilli: 5000,
+          unitName: 'Foot',
+          unitPricePaisa: 80000,
+          lineTotalPaisa: 400000,
+          lineKind: 'part',
+          businessUnitName: 'Spare Parts',
+        },
+        {
+          itemName: 'AC Gas Charging',
+          quantityMilli: 1000,
+          unitName: '',
+          unitPricePaisa: 120000,
+          lineTotalPaisa: 120000,
+          lineKind: 'labour',
+          businessUnitName: 'Repair',
+        },
+      ],
+      totalAmountPaisa: 520000,
+      paidAmountPaisa: 0,
+      balanceDuePaisa: 520000,
+      jobDocNo: 'JOB-0007',
+      reportedFault: 'Not cooling',
+      technicianName: 'Naeem',
+    };
+
+    const layout = buildInvoiceLayout(data);
+
+    const expected = [
+      'INV-0010',
+      'Customer: Malik Traders',
+      'Date: 2026-09-05',
+      'Job: JOB-0007',
+      'Fault: Not cooling',
+      'Technician: Naeem',
+      '',
+      '-- Spare Parts --',
+      'Copper Pipe 1/4" | 5 Foot | Rs 800 | Rs 4,000',
+      '-- Repair --',
+      'AC Gas Charging | 1 | Rs 1,200 | Rs 1,200',
+      '',
+      'Total: Rs 5,200',
+      'Paid: Rs 0',
+      'Balance Due: Rs 5,200',
+    ].join('\n');
+
+    expect(layout).toBe(expected);
+  });
+
+  it('P6-10: shows "Unassigned" when a job delivery has no technician', () => {
+    const data: InvoiceLayoutData = {
+      docNo: 'INV-0011',
+      saleDate: '2026-09-05',
+      customerName: null,
+      customerPhone: null,
+      customerAddress: null,
+      lines: [
+        {
+          itemName: 'AC Gas Charging',
+          quantityMilli: 1000,
+          unitName: '',
+          unitPricePaisa: 120000,
+          lineTotalPaisa: 120000,
+          lineKind: 'labour',
+          businessUnitName: 'Repair',
+        },
+      ],
+      totalAmountPaisa: 120000,
+      paidAmountPaisa: 120000,
+      balanceDuePaisa: 0,
+      jobDocNo: 'JOB-0008',
+      reportedFault: null,
+      technicianName: null,
+    };
+
+    const layout = buildInvoiceLayout(data);
+
+    expect(layout).toContain('Job: JOB-0008');
+    expect(layout).toContain('Technician: Unassigned');
+    expect(layout).not.toContain('Fault:');
   });
 });

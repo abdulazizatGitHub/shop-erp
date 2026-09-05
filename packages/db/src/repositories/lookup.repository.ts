@@ -26,6 +26,18 @@ export interface UomConversionOption {
   readonly factorMilli: number;
 }
 
+export interface TechnicianOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface ServiceChargeOption {
+  readonly id: string;
+  readonly name: string;
+  readonly businessUnitId: string;
+  readonly retailChargePaisa: number;
+}
+
 /**
  * Plain reference-data reads — no business logic, so these skip the
  * core port/service pattern used for item writes. Not a precedent for
@@ -71,6 +83,50 @@ export async function listCategories(
     .orderBy('name')
     .execute();
   return rows;
+}
+
+/**
+ * Technicians for assignment/delivery pickers. Deliberately reads
+ * party.staff_role, NOT warehouse.warehouse_kind='technician' — a
+ * technician's custody warehouse is only lazily created on their first
+ * parts issue (job-part.repository.ts), so a brand-new technician with
+ * no custody history yet would be wrongly excluded by a warehouse-based
+ * query, even though they must still be assignable to a job at intake.
+ */
+export async function listTechnicians(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<readonly TechnicianOption[]> {
+  const rows = await db
+    .selectFrom('party')
+    .select(['id', 'name'])
+    .where('tenantId', '=', tenantId)
+    .where('partyType', '=', 'staff')
+    .where('staffRole', '=', 'technician')
+    .where('isActive', '=', 1)
+    .where('deletedAt', 'is', null)
+    .orderBy('name')
+    .execute();
+  return rows;
+}
+
+export async function listServiceCharges(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<readonly ServiceChargeOption[]> {
+  const rows = await db
+    .selectFrom('serviceCharge')
+    .select(['id', 'name', 'businessUnitId', 'retailCharge'])
+    .where('tenantId', '=', tenantId)
+    .where('isActive', '=', 1)
+    .orderBy('name')
+    .execute();
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    businessUnitId: r.businessUnitId,
+    retailChargePaisa: r.retailCharge,
+  }));
 }
 
 /** ADR-0013 Type 1 fixed conversions, seeded in bootstrap.ts (P3.5E) — read-only, no UI to manage them yet (Phase 4+). */

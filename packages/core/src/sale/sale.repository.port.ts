@@ -47,7 +47,8 @@ export interface NewSaleResult {
 }
 
 export interface SaleLineRecord {
-  readonly itemId: string;
+  /** null for a labour line on a job delivery invoice — no item involved. */
+  readonly itemId: string | null;
   readonly quantityMilli: number;
   readonly unitPricePaisa: number;
   readonly unitCostPaisa: number | null;

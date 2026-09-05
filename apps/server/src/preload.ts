@@ -1,27 +1,45 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  AssignTechnicianInput,
   CancelSaleInput,
   CashBookReportInput,
   CashBookRowDto,
   CreateCustomerInput,
+  CreateInternalTransferInput,
   CreateItemInput,
+  CreateJobInput,
   CreatePaymentInput,
   CreatePurchaseInput,
   CreateSaleInput,
   CreateSupplierInput,
+  CustodyReconciliationResult,
   CustomerBalanceDto,
   CustomerDto,
   CustomerSearchInput,
   DailySalesReportInput,
   DailySalesReportRowDto,
+  DeliverJobInput,
+  DeliverJobResult,
+  IssuePartsToJobInput,
+  IssuePartsToJobResult,
+  IssuePartsToTechnicianInput,
+  IssuePartsToTechnicianResult,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
+  JobDto,
+  JobIdInput,
+  JobSearchInput,
+  JobStatusTransitionInput,
+  JobSummaryDto,
+  TechnicianCustodyInput,
+  NewInternalTransferResult,
   PaymentDto,
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
   ReceivablesAgingRowDto,
+  RecordCustodyReconciliationInput,
   SaleSearchInput,
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
@@ -32,8 +50,18 @@ import type {
   SupplierSearchInput,
   UnitPlReportDto,
 } from '@shop/contracts';
-import type { SaleRecord } from '@shop/core';
-import type { ReceiptPaperSize, UomConversionOption } from '@shop/db';
+import type {
+  JobPartRecord,
+  JobSplitRecord,
+  SaleRecord,
+  TechnicianCustodyRecord,
+} from '@shop/core';
+import type {
+  ReceiptPaperSize,
+  ServiceChargeOption,
+  TechnicianOption,
+  UomConversionOption,
+} from '@shop/db';
 import { channels } from './ipc/channels.js';
 import type { CreateCustomerResult } from './ipc/handlers/customer.handler.js';
 import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balance-import.handler.js';
@@ -140,6 +168,59 @@ contextBridge.exposeInMainWorld('api', {
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>
       ipcRenderer.invoke(channels.payment.receive, input) as Promise<PaymentDto>,
+  },
+  job: {
+    create: (input: CreateJobInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.create, input) as Promise<JobDto>,
+    assignTechnician: (input: AssignTechnicianInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.assignTechnician, input) as Promise<JobDto>,
+    transitionStatus: (input: JobStatusTransitionInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.transitionStatus, input) as Promise<JobDto>,
+    getById: (input: JobIdInput): Promise<JobDto | null> =>
+      ipcRenderer.invoke(channels.job.getById, input) as Promise<JobDto | null>,
+    list: (input: JobSearchInput): Promise<readonly JobSummaryDto[]> =>
+      ipcRenderer.invoke(channels.job.list, input) as Promise<readonly JobSummaryDto[]>,
+    issueToTechnician: (
+      input: IssuePartsToTechnicianInput,
+    ): Promise<IssuePartsToTechnicianResult> =>
+      ipcRenderer.invoke(
+        channels.job.issueToTechnician,
+        input,
+      ) as Promise<IssuePartsToTechnicianResult>,
+    issueToJob: (input: IssuePartsToJobInput): Promise<IssuePartsToJobResult> =>
+      ipcRenderer.invoke(channels.job.issueToJob, input) as Promise<IssuePartsToJobResult>,
+    listJobParts: (id: string): Promise<readonly JobPartRecord[]> =>
+      ipcRenderer.invoke(channels.job.listJobParts, { id }) as Promise<readonly JobPartRecord[]>,
+    deliver: (input: DeliverJobInput): Promise<DeliverJobResult> =>
+      ipcRenderer.invoke(channels.job.deliver, input) as Promise<DeliverJobResult>,
+    createInternalTransfer: (
+      input: CreateInternalTransferInput,
+    ): Promise<NewInternalTransferResult> =>
+      ipcRenderer.invoke(
+        channels.job.createInternalTransfer,
+        input,
+      ) as Promise<NewInternalTransferResult>,
+    reconcileCustody: (
+      input: RecordCustodyReconciliationInput,
+    ): Promise<CustodyReconciliationResult> =>
+      ipcRenderer.invoke(
+        channels.job.reconcileCustody,
+        input,
+      ) as Promise<CustodyReconciliationResult>,
+    getJobSplit: (id: string): Promise<JobSplitRecord | null> =>
+      ipcRenderer.invoke(channels.job.getJobSplit, { id }) as Promise<JobSplitRecord | null>,
+    getTechnicianCustody: (
+      input: TechnicianCustodyInput,
+    ): Promise<readonly TechnicianCustodyRecord[]> =>
+      ipcRenderer.invoke(channels.job.getTechnicianCustody, input) as Promise<
+        readonly TechnicianCustodyRecord[]
+      >,
+    listTechnicians: (): Promise<readonly TechnicianOption[]> =>
+      ipcRenderer.invoke(channels.job.listTechnicians) as Promise<readonly TechnicianOption[]>,
+    listServiceCharges: (): Promise<readonly ServiceChargeOption[]> =>
+      ipcRenderer.invoke(channels.job.listServiceCharges) as Promise<
+        readonly ServiceChargeOption[]
+      >,
   },
   uom: {
     listConversions: (): Promise<readonly UomConversionOption[]> =>

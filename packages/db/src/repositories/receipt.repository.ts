@@ -18,6 +18,11 @@ export interface ReceiptSaleLine {
   readonly unitName: string;
   readonly unitPricePaisa: number;
   readonly lineTotalPaisa: number;
+  /** 'part' | 'labour' — see sale_line.line_kind (P6-5). */
+  readonly lineKind: string;
+  /** Resolved business_unit.name ("Spare Parts"/"Repair"), or null for a
+   * plain counter sale, whose lines never carry a business_unit_id. */
+  readonly businessUnitName: string | null;
 }
 
 export interface ReceiptSaleData {
@@ -44,20 +49,25 @@ export async function getSaleReceiptData(
   const lineResult = await sql<{
     itemName: string | null;
     quantityMilli: number;
-    unitName: string;
+    unitName: string | null;
     unitPricePaisa: number;
     lineTotalPaisa: number;
+    lineKind: string;
+    businessUnitName: string | null;
   }>`
     SELECT
-      sl.description                        AS itemName,
-      sl.quantity                           AS quantityMilli,
-      COALESCE(u_sale.name, u_stock.name)   AS unitName,
-      sl.unit_price                         AS unitPricePaisa,
-      sl.line_total                         AS lineTotalPaisa
+      sl.description                              AS itemName,
+      sl.quantity                                 AS quantityMilli,
+      COALESCE(u_sale.name, u_stock.name)         AS unitName,
+      sl.unit_price                               AS unitPricePaisa,
+      sl.line_total                               AS lineTotalPaisa,
+      sl.line_kind                                AS lineKind,
+      bu.name                                     AS businessUnitName
     FROM        sale_line sl
-    JOIN        item i ON i.id = sl.item_id
+    LEFT JOIN   item i ON i.id = sl.item_id
     LEFT JOIN   uom u_sale ON u_sale.id = sl.sale_uom_id
-    JOIN        uom u_stock ON u_stock.id = i.stock_uom_id
+    LEFT JOIN   uom u_stock ON u_stock.id = i.stock_uom_id
+    LEFT JOIN   business_unit bu ON bu.id = sl.business_unit_id
     WHERE       sl.sale_id = ${saleId} AND sl.tenant_id = ${tenantId}
     ORDER BY    sl.line_no
   `.execute(db);
@@ -69,9 +79,14 @@ export async function getSaleReceiptData(
     lines: lineResult.rows.map((row) => ({
       itemName: row.itemName ?? '(unknown item)',
       quantityMilli: row.quantityMilli,
-      unitName: row.unitName,
+      // '' for a labour line, which has neither a sale_uom_id nor an item
+      // to fall back to — buildInvoiceLayout/buildReceiptLayout both treat
+      // an empty unit as "omit the unit suffix" (Qty.format).
+      unitName: row.unitName ?? '',
       unitPricePaisa: row.unitPricePaisa,
       lineTotalPaisa: row.lineTotalPaisa,
+      lineKind: row.lineKind,
+      businessUnitName: row.businessUnitName,
     })),
   };
 }

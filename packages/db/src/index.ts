@@ -14,17 +14,26 @@ export { KyselyPartyRepository } from './repositories/party.repository.js';
 export { KyselyPurchaseRepository } from './repositories/purchase.repository.js';
 export { KyselySaleRepository } from './repositories/sale.repository.js';
 export { KyselyPaymentRepository } from './repositories/payment.repository.js';
+export { KyselyJobRepository } from './repositories/job.repository.js';
+export { KyselyJobPartRepository } from './repositories/job-part.repository.js';
+export { KyselyJobDeliveryRepository } from './repositories/job-delivery.repository.js';
+export { KyselyInternalTransferRepository } from './repositories/internal-transfer.repository.js';
+export { KyselyCustodyRepository } from './repositories/custody.repository.js';
 export {
   listBusinessUnits,
   listUoms,
   listCategories,
   listUomConversions,
+  listTechnicians,
+  listServiceCharges,
 } from './repositories/lookup.repository.js';
 export type {
   BusinessUnitOption,
   UomOption,
   CategoryOption,
   UomConversionOption,
+  TechnicianOption,
+  ServiceChargeOption,
 } from './repositories/lookup.repository.js';
 export { KyselyImportRepository } from './repositories/import.repository.js';
 export type { InsertedImportItem } from './repositories/import.repository.js';

@@ -46,4 +46,15 @@ describe('Modal', () => {
     );
     expect(getByRole('alertdialog')).toBeTruthy();
   });
+
+  it('calls onClose when the × button is clicked', () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(
+      <Modal open title="Job JOB-0001" onClose={onClose}>
+        body
+      </Modal>,
+    );
+    getByRole('button', { name: 'Close' }).click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

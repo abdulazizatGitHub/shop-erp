@@ -15,11 +15,16 @@ const KNOWN_INVOICE_DATA: InvoiceData = {
       unitName: 'Piece',
       unitPricePaisa: 500000,
       lineTotalPaisa: 1000000,
+      lineKind: 'part',
+      businessUnitName: null,
     },
   ],
   totalAmountPaisa: 1000000,
   paidAmountPaisa: 500000,
   balanceDuePaisa: 500000,
+  jobDocNo: null,
+  reportedFault: null,
+  technicianName: null,
 };
 
 describe('printInvoiceForSale (P4-2 wiring) — always A4, no page-size parameter', () => {

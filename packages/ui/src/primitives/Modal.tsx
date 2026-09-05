@@ -56,7 +56,29 @@ export function Modal({
         }}
         className={`w-full ${SIZE_CLASSES[size]} rounded-lg bg-surface p-6 shadow-lg outline-none`}
       >
-        <h2 className="mb-3 text-lg font-semibold text-ink">{title}</h2>
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="-m-1 rounded-md p-1 text-ink-muted hover:bg-surface-sunken hover:text-ink focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
         {children}
       </div>
     </div>

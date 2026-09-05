@@ -13,6 +13,8 @@ const KNOWN_SALE_DATA: ReceiptSaleData = {
       unitName: 'Piece',
       unitPricePaisa: 500000,
       lineTotalPaisa: 1000000,
+      lineKind: 'part',
+      businessUnitName: null,
     },
   ],
 };

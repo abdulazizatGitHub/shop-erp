@@ -37,12 +37,15 @@ describe('migrate', () => {
       '0007_uom_conversion.sql',
       '0008_item_alt_uom.sql',
       '0009_sale_line_alt_uom.sql',
+      '0010_job_additions.sql',
+      '0011_sale_line_item_optional.sql',
+      '0012_job_split_v2.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 43 tables and 11 views — the P0-8 baseline, +1 for uom_conversion (0007)', () => {
+  it('applies exactly 44 tables and 11 views — the 43-table baseline (P0-8 + uom_conversion), +1 for job_accessory (0010); 0011 rebuilds sale_line in place (net zero) and 0012 rebuilds v_job_split in place (net zero)', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -51,7 +54,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(43);
+    expect(tables).toHaveLength(44);
     expect(views).toHaveLength(11);
   });
 
@@ -83,6 +86,9 @@ describe('migrate', () => {
       '0007_uom_conversion.sql',
       '0008_item_alt_uom.sql',
       '0009_sale_line_alt_uom.sql',
+      '0010_job_additions.sql',
+      '0011_sale_line_item_optional.sql',
+      '0012_job_split_v2.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -105,6 +111,9 @@ describe('migrate', () => {
       { version: 7, name: '0007_uom_conversion.sql' },
       { version: 8, name: '0008_item_alt_uom.sql' },
       { version: 9, name: '0009_sale_line_alt_uom.sql' },
+      { version: 10, name: '0010_job_additions.sql' },
+      { version: 11, name: '0011_sale_line_item_optional.sql' },
+      { version: 12, name: '0012_job_split_v2.sql' },
     ]);
   });
 
@@ -163,7 +172,7 @@ describe('migrate', () => {
     ).run(ledgerId, tenantId, partyId, new Date().toISOString());
     db.close();
 
-    // Now migrate onward with the full directory — applies 0004-0009.
+    // Now migrate onward with the full directory — applies 0004-0012.
     const result = migrate(dbPath, migrationsDir, backupDir);
     expect(result.applied).toEqual([
       '0004_party_ledger_bill_metadata.sql',
@@ -172,6 +181,9 @@ describe('migrate', () => {
       '0007_uom_conversion.sql',
       '0008_item_alt_uom.sql',
       '0009_sale_line_alt_uom.sql',
+      '0010_job_additions.sql',
+      '0011_sale_line_item_optional.sql',
+      '0012_job_split_v2.sql',
     ]);
 
     db = new Database(dbPath);
