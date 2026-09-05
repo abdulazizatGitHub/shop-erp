@@ -3,28 +3,82 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-01
-**Current phase:** Phase 4.5 — Full UI Redesign
-**Phase status:** ✅ COMPLETE — 2026-09-01. All nine sub-phases
-(P4.5-0 through P4.5-8), purchase PDF printing, and three post-P4.5-8
-UI improvements (import modals everywhere via a shared `ImportModal`
-component, Purchases two-step modal, Settings restore double-gate
-removed) are code-complete, test-verified (**294/294 passing**,
-typecheck clean, lint clean, both workspace builds exit 0), and fully
-confirmed on real hardware — every screen, including Reports (all five
-tabs), Settings, Customers, and purchase PDF printing. One real bug
-was found and fixed mid-session during hardware testing, not deferred:
-Reports initially failed on hardware with "No handler registered for
-report:*" — investigation confirmed the source (`main.ts`,
-`report.handler.ts`) was already correct and the compiled `main.cjs`
-already contained the handler; the cause was a stale Electron main
-process from before the handler existed, resolved by a full app
-restart, not a code change.
-See `docs/phases/PHASE_4_5.md` for the full sub-phase breakdown and
-exit-criteria status.
-**Next milestone:** Phase 5 — Deploy + parallel run (`docs/PHASES.md`).
-Phase 3's still-outstanding real-hardware timing number (unrelated to
-this phase) remains open and unresolved.
+**Last updated:** 2026-09-05
+**Current phase:** Phase 5 — Deploy + parallel run (blocked); Phase 6 —
+Repair Jobs & the Two-Unit Split (code-complete, P6-0 through P6-10 —
+UI not yet visually verified in a running window)
+**Phase status:** Phase 5 remains **IN PROGRESS, BLOCKED on `BUG-PACK-1`**
+(CRITICAL, OPEN — no working packaged installer at any commit; P5-1 not
+started) — unchanged, not investigated this session. **Phase 6 is now
+code-complete**: P6-0 through P6-10 are built and verified — the full
+backend (migrations `0010`/`0011`/`0012`; job intake/assignment; parts
+issue Shop→Technician and Technician→Job; the job delivery invoice with
+per-line payer/business-unit split; internal transfer for unbilled
+consumption; custody reconciliation), the full UI (`JobsPage`,
+`JobCardModal`, `IssuedPartsPanel`, `JobDeliveryModal`,
+`TechnicianCustodyPage`, both with their own Alt+8/Alt+9 nav tabs), the
+Reports "Jobs" tab (job split + technician custody summary), and the
+delivery invoice print template extension (job/fault/technician header,
+lines grouped by business unit). **All four Phase 6 exit criteria (EC-1
+through EC-4) are hand-checked and passed with real pasted query
+output**, not eyeballed — including two new integration tests that run
+a real `deliverJob` end to end into the print pipeline. Test count
+294 → 349 across three sessions, `npm run verify` green throughout
+(every task TDD'd: failing test pasted, then implementation, then
+passing test pasted). **What is NOT yet verified**: the Electron app
+was never launched this session — no one has clicked through the job
+lifecycle in a real running window. See `docs/phases/PHASE_6.md` §8's
+"What is and isn't verified" note; that click-through is this phase's
+one remaining task before its exit criteria checkbox for UI
+confirmation can be ticked.
+**One real, blocking bug found and fixed this session**: `receipt.repository.ts`'s
+`getSaleReceiptData` used an INNER JOIN on `item` — since P6-5 made
+`sale_line.item_id` nullable for labour lines, this silently dropped
+every labour line from any printed receipt or invoice for a job
+delivery (money-correctness-adjacent: the printed document would have
+under-stated the bill). Fixed (`LEFT JOIN`), proven against a real
+database via a new `deliverJob` → `getSaleReceiptData` integration test,
+not just read from the SQL. See BUG-19 below.
+**Two real bugs found and fixed in the prior Phase 6 session** (in
+already-shipped code, caught while building P6-5/P6-6): (1)
+`sale_line.item_id` was `NOT NULL` in the live DDL, silently blocking
+every labour line — fixed via a SQLite table-rebuild migration (`0011`).
+(2) P6-4's `job_issue` stock_movement recorded `business_unit_id` as the
+item's own unit (PARTS) instead of the unit that caused the consumption
+(REPAIR), contradicting `0002_business_units.sql`'s own schema comment —
+fixed, `job-part.repository.test.ts` updated to assert the correct value.
+**Three deliberate UI stubs, approved by the owner before building**:
+`job.update`, `job.returnPart`, `job.addAccessory` do not exist — each
+has a visible "coming soon" affordance and a `// TODO(P6-gap)` comment,
+not a hidden or silently-broken control. See BUG-17 below.
+**One new UI-level gap found and flagged, not fixed**: `JobDeliveryModal`
+can only bill "Customer" or "Walk-in" — there is no client-side lookup
+for a third-party payer (e.g. a manufacturer paying a warranty claim,
+EC-2's own Dawlance scenario), since `customer:search`/`party:search`
+only match `partyType='customer'`/`'supplier'` and Dawlance's fixture
+is `partyType='both'`. See BUG-18 below.
+**Two real reporting gaps found and logged, not fixed**: (1, prior
+session, out of P6-6's scope) `v_unit_direct_margin`/`v_unit_direct_expense`
+do not surface an internal transfer's cost anywhere — confirmed by a
+real test asserting zero rows, not assumed. (2, this session)
+`JobSplitReport.tsx`/`TechnicianCustodySummary.tsx` fan out one IPC call
+per job/technician (N+1) rather than using a batch read, since
+`getJobSplit`/`getTechnicianCustody` were built P6-1-era as single-id
+reads with no date-ranged or bulk variant. Fine at this shop's real
+volume; not the shape a bigger client would want. See
+`docs/phases/PHASE_6.md` §8.
+`BUG-ADR9` (HIGH, logged 2026-09-04) unchanged — every Phase 6 handler
+built across all three sessions matches the same no-`requirePermission()`
+precedent.
+See `docs/phases/PHASE_4_5.md` for the full Phase 4.5 sub-phase breakdown
+and exit-criteria status (unchanged, still complete).
+**Next milestone:** launch the app (`npm run dev --workspace=@shop/server`)
+and click through the full job lifecycle to close Phase 6's one
+remaining verification gap (see above). Separately, and still blocking
+Phase 5 on its own track: resuming the `BUG-PACK-1` investigation
+(`ELECTRON_ENABLE_LOGGING`/`ELECTRON_LOG_FILE`, per `PROGRESS.md`
+Session 17's next-step note). Phase 3's still-outstanding real-hardware
+timing number remains open and unresolved.
 
 ---
 
@@ -140,20 +194,21 @@ this setting.
 
 ## 3. Phase status
 
-| Phase | Name                                    | Status                                                                                                                         | Completed                                                                                                                             |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | Foundation & Environment                | COMPLETE                                                                                                                       | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
-| 1     | Item master + import                    | COMPLETE                                                                                                                       | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
-| 2     | Purchases + suppliers                   | COMPLETE                                                                                                                       | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
-| 2G    | P2-1/P2-2 IPC+UI gap closure            | COMPLETE                                                                                                                       | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
-| 3     | Counter sale + udhaar                   | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                           | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
-| 3.5   | Document numbering + multi-unit selling | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                  | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
-| 4     | Printing + reports                      | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs) | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
-| 4.5   | Full UI Redesign                        | ✅ COMPLETE                                                                                                                    | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
-| 5     | Deploy + parallel run                   | NOT STARTED                                                                                                                    | —                                                                                                                                     |
-| 6     | Repair jobs (two-unit split)            | NOT STARTED                                                                                                                    | —                                                                                                                                     |
-| 7     | Staff, wages, expenses                  | NOT STARTED                                                                                                                    | —                                                                                                                                     |
-| 8     | Bug-fix & hardening                     | NOT STARTED                                                                                                                    | —                                                                                                                                     |
+| Phase | Name                                      | Status                                                                                                                                                     | Completed                                                                                                                             |
+| ----- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Foundation & Environment                  | COMPLETE                                                                                                                                                   | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
+| 1     | Item master + import                      | COMPLETE                                                                                                                                                   | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
+| 2     | Purchases + suppliers                     | COMPLETE                                                                                                                                                   | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
+| 2G    | P2-1/P2-2 IPC+UI gap closure              | COMPLETE                                                                                                                                                   | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
+| 3     | Counter sale + udhaar                     | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                                                       | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
+| 3.5   | Document numbering + multi-unit selling   | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                                              | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
+| 4     | Printing + reports                        | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs)                             | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
+| 4.5   | Full UI Redesign                          | ✅ COMPLETE                                                                                                                                                | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
+| 5     | Deploy + parallel run                     | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                        | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
+| 6     | Repair jobs (two-unit split)              | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                          | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
+| 6.5   | Jobs UI modernisation (modal → full page) | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
+| 7     | Staff, wages, expenses                    | NOT STARTED                                                                                                                                                | —                                                                                                                                     |
+| 8     | Bug-fix & hardening                       | NOT STARTED                                                                                                                                                | —                                                                                                                                     |
 
 ---
 
@@ -921,6 +976,149 @@ Status: UNFIXED — not in PG-D's stated field list; a deliberate
 scope-narrowing this session, not an oversight discovered afterward. See
 `docs/phases/PHASE_2G.md` §5/§8.
 
+### BUG-17: `job.update` / `job.returnPart` / `job.addAccessory` do not exist — deliberate stubs, LOW
+
+Found in: Phase 6, 2026-09-05, while planning P6-8's UI (JobCardModal's
+edit/return/accessory affordances). Owner decision, made before any of
+this UI was built (not discovered afterward): none of these three
+write paths would be built this phase.
+Description: The job card is read-only after creation (no `job.update`
+IPC method exists at all — nothing in the UI attempts to edit a job
+post-creation). `IssuedPartsPanel.tsx`'s "Return unused parts" section
+renders a visible "coming soon" `Alert`, not a hidden or silently
+no-op control (`job.returnPart` does not exist). `JobDetailsView.tsx`'s
+Accessories section is the same pattern (`job.addAccessory` does not
+exist) — the underlying `job_accessory` table exists (migration 0010)
+but has no read or write path anywhere yet.
+Impact: A technician cannot record accessories received with an
+appliance, or return unused parts back to Shop stock through the UI —
+both are real, expected repair-shop workflows. Not a data-correctness
+issue (nothing silently loses or corrupts data); a functionality gap.
+Fix: Build all three in a future session — `job.returnPart` should
+mirror `job_part`'s existing append-only `entry_type='return'` design
+(already modeled in the schema and read by `listJobParts`, just has no
+write path); `job.addAccessory` is a straightforward INSERT into the
+already-existing `job_accessory` table; `job.update` needs a decision
+on which fields are actually editable post-intake before it's built.
+Status: UNFIXED — deliberate, owner-approved scope exclusion, not an
+oversight. See `docs/phases/PHASE_6.md` §8.
+**Update, 2026-09-05, same day, separate follow-up session:** the job
+create flow was split into a 4-field "quick intake" (`JobCreateForm.tsx`)
+plus a fuller job card meant to be filled in afterward. That follow-up
+session's brief asked for brand/model/serial/promised date/estimate
+amount to become editable on the job card — this is exactly `job.update`,
+scoped to five fields. Flagged via `AskUserQuestion` rather than
+building either a silently-non-persisting UI or a new IPC handler in
+violation of that session's explicit "do not touch backend" instruction;
+owner chose to leave them read-only for now. Technician assignment WAS
+made editable in that same session — it already had its own narrow IPC
+method (`job:assignTechnician`), so no backend change was needed for
+that one field.
+
+### BUG-18: `JobDeliveryModal` has no way to bill a third-party payer (e.g. a manufacturer warranty claim) — LOW
+
+Found in: Phase 6, 2026-09-05, while building the delivery UI's
+per-line payer picker.
+Description: A delivery line's payer can be "Customer" (the job's own
+`customerId`, when set) or "Walk-in" (no charge, `payerPartyId=null`).
+There is no way to pick a different party — e.g. Dawlance, EC-2's own
+hand-checked scenario, where a manufacturer pays the labour line and
+the customer pays only the extra pipe. The backend (`deliverJob`)
+fully supports this today (any `payerPartyId` per line); the gap is
+purely that the UI has no lookup to find such a party. Confirmed by
+reading the actual party-search implementations before building around
+them: `customer:search` filters `party.party_type = 'customer'`,
+`party:search` (suppliers) filters `party.party_type = 'supplier'` —
+Dawlance's own test fixture (`job-delivery.repository.test.ts`) is
+`party_type = 'both'`, matched by neither.
+Impact: A staff member cannot actually reproduce EC-2's own scenario
+through the UI today — only via a manually-constructed IPC call (as
+the backend tests do). The disabled option in the payer dropdown
+("Other party (manufacturer/warranty) — coming soon") makes this
+visible rather than silently missing.
+Fix: Add a generic any-party search (matching on name across all
+`party_type` values, or specifically `'both'`/`'supplier'` — needs a
+short design decision, not just a bigger `WHERE` clause, since
+`customer:search`/`party:search`'s existing narrow filters are each
+deliberate for their own screens) and wire it into
+`DeliveryPartLines.tsx`/`DeliveryLabourLines.tsx`'s payer `<Select>`.
+Status: UNFIXED — logged, not built this session. See
+`docs/phases/PHASE_6.md` §8.
+
+### BUG-19: `getSaleReceiptData` silently dropped every labour line from a printed receipt/invoice — FIXED, was HIGH
+
+Found in: Phase 6, 2026-09-05, while building P6-10's print-template
+extension — caught by reading the live query before extending it, not
+discovered by a failing test written for something else.
+Description: `receipt.repository.ts`'s `getSaleReceiptData` joined
+`sale_line` to `item` with `JOIN item i ON i.id = sl.item_id` — an
+INNER JOIN. P6-5 (prior session) made `sale_line.item_id` nullable
+specifically so a job delivery's labour lines (no item involved) could
+exist; every labour line therefore has `item_id IS NULL`, and an INNER
+JOIN on that column excludes the row entirely. The same function's
+`stock_uom_id` join (`JOIN uom u_stock ON u_stock.id = i.stock_uom_id`)
+depended on the same non-null `i`, compounding the issue.
+Impact: Printing a receipt or invoice for ANY job delivery sale that
+included labour (i.e. almost every real repair job) would have shown
+only the part lines and silently omitted the labour charge — the
+printed total would still have been correct (computed server-side from
+`sale.total_amount`, not summed from the printed lines), but the
+customer-facing document itself would have under-stated what they were
+billed for line-by-line. Not yet hit by a real user — this was caught
+before job delivery had any print button wired to it at all — but was
+a real, latent, money-adjacent defect in already-shipped code.
+Fix: Changed both joins to `LEFT JOIN`; `unitName` now `COALESCE`s to
+`''` when neither a sale UoM nor an item's stock UoM resolves (a
+labour line has neither), which `Qty.format` already treats as "omit
+the unit suffix" rather than crashing. Also threads `sl.line_kind` and
+a `LEFT JOIN business_unit` name through, needed for P6-10's grouping
+anyway.
+Status: FIXED — commit pending (uncommitted this session, see
+PROGRESS.md). Verified against a real database, not just a unit test:
+`job-delivery.repository.test.ts`'s new "P6-10" describe block runs an
+actual `deliverJob` (part line + labour line), then calls
+`getSaleReceiptData` directly and asserts both lines are present
+(`toHaveLength(2)`, previously would have been 1). Also re-ran the
+pre-existing `receipt.repository.test.ts`/`invoice.repository.test.ts`
+suites unchanged — both still pass, confirming the fix didn't alter
+behavior for the ordinary counter-sale path (which never has a null
+`item_id` and was never affected).
+
+### DEBT-1: `JobDetailsView` and its sub-components use raw Tailwind colour classes instead of named design tokens — LOW, deliberate, owner-approved
+
+Found in: Phase 6, 2026-09-05, during the `JobDetailsView` visual
+redesign (job header + two-column sidebar layout). Not a bug discovered
+mid-work — the owner's own task brief specified exact raw Tailwind
+classes (`bg-blue-100 text-blue-800`, `text-amber-800`,
+`border-gray-200`, etc.) for the status pills and the whole sidebar/tab
+visual language, and approved building it that way after the tension
+with `packages/ui/src/tokens/colors.ts` was flagged in the plan-review
+step, before any code was written.
+Description: `packages/ui/src/tokens/colors.ts` is documented as the
+single source of truth for colour ("Never use a raw hex in a
+component"); `apps/client/tailwind.config.js` `extend`s Tailwind's
+default palette rather than replacing it, so raw classes like
+`bg-blue-100` compile and render correctly, but they bypass the named
+token system entirely. `JobDetailsView.tsx`, `JobDetailsSidebar.tsx`,
+`JobDetailsTab.tsx`, `IssuedPartsPanel.tsx`, and `JobDeliverTab.tsx` now
+mix this raw palette (status pills, sidebar labels/values, table/form
+styling, the total-due amount) with the app's own token classes
+(`ink`, `surface`, `line`, `brand`) in the same files.
+Impact: A second, uncoordinated colour vocabulary now exists in the
+codebase. If `packages/ui/src/tokens/colors.ts` is ever updated (a
+rebrand, a dark-mode pass, an accessibility contrast fix), these five
+files will not follow — they reference Tailwind's default palette
+directly, not the token that would otherwise propagate the change.
+Fix: Map every raw colour class in these five files to the nearest
+equivalent named token (or add new named tokens for the 8 status
+colours, if the design is meant to keep 8 distinct hues — today's
+token set only has 5 semantic tones: `neutral`/`brand`/`success`/
+`warning`/`danger`, fewer than the 8 statuses this design wants
+visually distinct). Scheduled for Phase 8 (Bug-fix & hardening).
+Status: UNFIXED — deliberate, owner-approved scope exclusion. **Do not
+fix during Phase 6** — explicit owner instruction, same session this
+was introduced.
+
 ### BUG-A: PowerShell print command never received the PDF path — CRITICAL, FIXED
 
 Found in: Phase 4, P4-1d real-hardware printer testing, 2026-08-30.
@@ -1281,6 +1479,113 @@ Approaches attempted this session and their outcomes:
   Status: **OPEN.** Do not attempt P5-1 shop-PC install until this is
   resolved. The `f9faf43` baseline installer is also broken — there is
   no working installer at any commit as of this entry.
+
+### BUG-ADR9: ADR-0009 permission enforcement has never been implemented in any handler — HIGH
+
+Found in: Phase 6, 2026-09-04, while planning P6-8 (IPC handler wiring)
+— the task brief's own "HANDLER PATTERN" section called for a
+`requirePermission()` call before every service call, per ADR-0009
+("Roles and permissions are TypeScript code, not a metadata-driven
+permission engine"). Grepped `apps/server/src` for `permission`
+(case-insensitive) before writing any handler: zero matches. Read
+`sale.handler.ts` in full: no permission check of any kind.
+Description: No permission-enforcement infrastructure exists anywhere
+in this codebase — not a `requirePermission()` helper, not a
+role-to-permission map, nothing. ADR-0009 describes the intended
+_shape_ of permissions (code, not data) but no phase from 1 through 6
+has actually built the enforcement itself. Every existing handler
+(`sale.create`, `purchase.cancel`, `payment.receive`, etc.) runs
+unconditionally for any caller who can reach the IPC channel.
+Impact: A staff member (salesman, technician) can currently perform any
+operation the UI exposes to them, regardless of their actual role —
+cancelling a purchase, adjusting stock, viewing purchase cost, anything
+`docs/DATABASE_RULES.md` §5 designates "sensitive actions always
+require the owner role" for. The renderer's own UI may hide some
+buttons by role, but per that same section, "hiding a button is UX, not
+security" — nothing on the main-process side actually enforces it. Not
+a new hole Phase 6 opens; a pre-existing one Phase 6 was the first
+session to actually notice because its own task brief asked for the
+missing piece by name.
+Fix: build a real permission module (role → permission map in code,
+plus a `requirePermission()` helper called from every handler) in a
+future hardening phase. Owner decision, 2026-09-04: **do not build a
+stub scoped only to `job.*` in Phase 6** — that would leave the most
+sensitive existing operations (create/cancel sale, cancel purchase)
+still completely unchecked while job intake alone gets a check, a worse
+inconsistency than having none anywhere yet. Phase 6's `job.*` handlers
+were built with zero `requirePermission()` calls to match every
+existing handler exactly, pending this fix.
+Status: UNFIXED — logged, not built this session, per explicit owner
+instruction. Candidate phase: Phase 8 (Bug-fix & hardening), or
+whichever phase first introduces real staff/role login (Phase 7 owns
+"Staff, wages, expenses" per `docs/SYSTEM_DESIGN.md` §3's module map —
+plausibly where user/role identity becomes real enough to enforce
+against, though this is an observation, not a decision).
+
+### BUG-P6.5-1: `JobDto` does not include the delivery invoice doc number — LOW
+
+Found in: Phase 6.5, 2026-09-05, while building `JobDetailPage`'s
+delivered-job state.
+Description: `JobDto` (packages/contracts/src/job/job.ts) exposes
+`saleId` (a UUID) but has no `invoiceDocNo`/similar field. Once a job is
+delivered, the only human-readable doc number (`INV-NNNN`) available to
+the client is the one returned inline by `DeliverJobResult` at the
+moment of delivery — reopening a job delivered in an earlier session has
+no way to show it.
+Impact: The delivered job detail page shows the raw `saleId` UUID
+instead of the `INV-NNNN` invoice number for any job not delivered in
+the current sitting. Cosmetic only — printing the invoice still works
+(`ipc.invoice.printSaleInvoice(saleId)`), so the shop never loses the
+ability to reprint, it just cannot see the doc number without printing.
+Fix: add an `invoiceDocNo` field to `JobDto` (join `sale.doc_no` in
+`job.repository.ts`'s `getJobById`) in a future backend session.
+Status: UNFIXED — cosmetic, waiting for a backend session that touches
+`JobDto`/`job.repository.ts`.
+
+### BUG-P6.5-2: `IssuedPartsPanel.tsx` is now unreferenced — LOW, cleanup only
+
+Found in: Phase 6.5, 2026-09-05. The P6.5 brief's file list marked this
+component "KEEP UNCHANGED" but the new `JobPartsSection.tsx` needed a
+borderless, single-row-form layout that doesn't match this component's
+existing bordered-table styling, so `JobPartsSection` was written fresh
+(with issuing logic split into `JobIssuePartForm.tsx`) rather than
+reusing it. Nothing else imports `IssuedPartsPanel.tsx` any more (its
+only caller, `JobStage2Content.tsx`, was deleted this phase).
+Impact: None functionally — dead code only.
+Fix: delete `IssuedPartsPanel.tsx` in a future cleanup phase, once
+confirmed there's no reason to keep it as reference.
+Status: FIXED — 2026-09-05, dead-code cleanup session. Confirmed zero
+importers via `grep -rl "IssuedPartsPanel" apps/client/src`, deleted the
+file, `npm run verify` reconfirmed 350/350.
+
+### DEBT-2: `job:issueToTechnician` is fully wired but has zero client call sites — LOW
+
+Found in: Phase 6/6.5 dead-code audit, 2026-09-05. The IPC channel,
+`job.handler.ts` (or the relevant handler) registration, and the
+`ipc.job.issueToTechnician` type in `electron-api.d.ts` all exist and
+are internally consistent, but `grep -rn "\.issueToTechnician("
+apps/client/src` returns zero hits — no UI anywhere calls it.
+Impact: None currently (dead but harmless) — but it represents either a
+missing UI entry point (issuing a part straight to a technician's
+custody, independent of a job) or a channel that should never have been
+kept past its original design intent.
+Fix: either build a UI entry point for it, or remove the channel/
+handler/type together in a dedicated backend-touching session.
+Status: UNFIXED — decision deferred. Not removed this session (backend/
+IPC-surface change, out of scope for a renderer-only cleanup pass).
+
+### DEBT-3: `job:createInternalTransfer` is fully wired but has zero client call sites — LOW
+
+Found in: Phase 6/6.5 dead-code audit, 2026-09-05. Same shape as DEBT-2:
+channel, handler, and `ipc.job.createInternalTransfer` type all exist
+and match, but `grep -rn "\.createInternalTransfer("
+apps/client/src` returns zero hits.
+Impact: The internal-transfer flow (unbilled internal consumption —
+ADR-0005) has no UI entry point yet, so this path is currently
+unreachable from the app despite being fully built server-side.
+Fix: either build a UI for internal transfers, or remove the channel/
+handler/type together in a dedicated backend-touching session.
+Status: UNFIXED — decision deferred, same reasoning as DEBT-2.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
