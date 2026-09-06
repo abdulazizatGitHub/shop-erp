@@ -61,7 +61,56 @@ export type {
   CustomerRecord,
   CustomerSearchQuery,
   CustomerBalance,
+  StaffRole,
+  NewStaffInput,
+  NewStaffResult,
+  StaffRecord,
 } from './party/party.repository.port.js';
+
+export type { AttendanceStatus } from '@shop/contracts';
+export { computeDayWage } from './payroll/wage.service.js';
+export { computeCommission } from './payroll/commission.service.js';
+export type {
+  RecordCommissionInput,
+  CommissionRepositoryPort,
+} from './payroll/commission.repository.port.js';
+export { saveAttendanceBatch } from './payroll/attendance.service.js';
+export type { AttendanceInputRow } from './payroll/attendance.service.js';
+export type {
+  BusinessUnitCode,
+  SaveAttendanceBatchRow,
+  SaveAttendanceBatchInput,
+  AttendanceRecord,
+  AttendanceRepositoryPort,
+} from './payroll/attendance.repository.port.js';
+
+export { createExpense, listExpenses, listCategories } from './expense/expense.service.js';
+export type {
+  ExpenseMethod,
+  NewExpenseInput,
+  ExpenseRecord,
+  ListExpensesRepoInput,
+  ExpenseCategoryRecord,
+  ExpenseRepositoryPort,
+} from './expense/expense.repository.port.js';
+
+export { openSession, closeSession, getTodaySession } from './expense/cash-session.service.js';
+export { SessionAlreadyOpenError } from './expense/cash-session.repository.port.js';
+export type {
+  CashSessionStatus,
+  CashSessionRecord,
+  OpenSessionRepoInput,
+  CloseSessionRepoInput,
+  CashSessionRepositoryPort,
+} from './expense/cash-session.repository.port.js';
+
+export { recordAdvance, listAdvances } from './payroll/advance.service.js';
+export type {
+  RecordAdvanceRepoInput,
+  AdvanceRecord,
+  ListAdvancesRepoInput,
+  AdvanceRepositoryPort,
+} from './payroll/advance.repository.port.js';
 
 export type {
   PurchasePaymentMode,

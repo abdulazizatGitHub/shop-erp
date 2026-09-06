@@ -42,11 +42,28 @@ import type {
   SaleResult,
   SaleSearchInput,
   SaleSummaryDto,
+  AdvanceDto,
+  AttendanceRecordDto,
+  CashSessionDto,
+  CloseSessionInput,
+  CreateExpenseInput,
+  ExpenseCategoryDto,
+  ExpenseDto,
+  GetMonthAttendanceInput,
+  ListAdvancesInput,
+  ListExpensesInput,
+  OpenSessionInput,
+  RecordAdvanceInput,
+  SaveAttendanceInput,
+  StaffCreateInput,
+  StaffDto,
   StockValuationReportDto,
   SupplierBalanceDto,
   SupplierDto,
   SupplierSearchInput,
   UnitPlReportDto,
+  WageMonthInput,
+  WageMonthRowDto,
 } from '@shop/contracts';
 
 export interface ImportResult {
@@ -117,6 +134,13 @@ export interface TechnicianCustodyRecord {
   readonly qtyHeldMilli: number;
   readonly lastMovement: string | null;
   readonly warehouseId: string;
+}
+
+/** Mirrors @shop/db's BusinessUnitOption. */
+export interface BusinessUnitOption {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
 }
 
 /** Mirrors @shop/db's TechnicianOption. */
@@ -199,6 +223,27 @@ export interface ElectronApi {
     readonly search: (input: SupplierSearchInput) => Promise<readonly SupplierDto[]>;
     readonly get: (id: string) => Promise<SupplierDto | null>;
     readonly balance: (id: string) => Promise<SupplierBalanceDto>;
+  };
+  readonly staff: {
+    readonly create: (input: StaffCreateInput) => Promise<{ id: string; partyCode: string }>;
+    readonly listStaff: () => Promise<readonly StaffDto[]>;
+    readonly saveAttendance: (input: SaveAttendanceInput) => Promise<void>;
+    readonly getMonthAttendance: (
+      input: GetMonthAttendanceInput,
+    ) => Promise<readonly AttendanceRecordDto[]>;
+    readonly recordAdvance: (input: RecordAdvanceInput) => Promise<AdvanceDto>;
+    readonly listAdvances: (input: ListAdvancesInput) => Promise<readonly AdvanceDto[]>;
+  };
+  readonly expense: {
+    readonly create: (input: CreateExpenseInput) => Promise<ExpenseDto>;
+    readonly list: (input: ListExpensesInput) => Promise<readonly ExpenseDto[]>;
+    readonly listCategories: () => Promise<readonly ExpenseCategoryDto[]>;
+    readonly listBusinessUnits: () => Promise<readonly BusinessUnitOption[]>;
+  };
+  readonly cashSession: {
+    readonly open: (input: OpenSessionInput) => Promise<CashSessionDto>;
+    readonly close: (input: CloseSessionInput) => Promise<CashSessionDto>;
+    readonly today: () => Promise<CashSessionDto | null>;
   };
   readonly purchase: {
     readonly create: (input: CreatePurchaseInput) => Promise<{
@@ -285,6 +330,7 @@ export interface ElectronApi {
     readonly receivables: () => Promise<readonly ReceivablesAgingRowDto[]>;
     readonly cashBook: (input: CashBookReportInput) => Promise<readonly CashBookRowDto[]>;
     readonly unitPl: () => Promise<UnitPlReportDto>;
+    readonly wageMonth: (input: WageMonthInput) => Promise<readonly WageMonthRowDto[]>;
   };
 }
 

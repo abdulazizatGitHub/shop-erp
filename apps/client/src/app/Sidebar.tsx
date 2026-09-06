@@ -56,9 +56,11 @@ export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Ele
             >
               <NavIcon tab={item.key} />
               <span className="flex-1 text-left">{item.label}</span>
-              <span className={`text-xs ${active ? 'text-white/70' : 'text-ink-faint'}`}>
-                Alt+{item.shortcutDigit}
-              </span>
+              {item.shortcutDigit && (
+                <span className={`text-xs ${active ? 'text-white/70' : 'text-ink-faint'}`}>
+                  Alt+{item.shortcutDigit}
+                </span>
+              )}
             </button>
           );
         })}

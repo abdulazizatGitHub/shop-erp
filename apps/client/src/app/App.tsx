@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react';
 import { ItemsPage } from '../pages/items/ItemsPage.js';
 import JobsPage from '../pages/jobs/JobsPage.js';
 import TechnicianCustodyPage from '../pages/jobs/TechnicianCustodyPage.js';
+import { AttendancePage } from '../pages/attendance/AttendancePage.js';
+import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
+import { ExpensesPage } from '../pages/expenses/ExpensesPage.js';
 import { CustomersPage } from '../pages/parties/CustomersPage.js';
 import { SuppliersPage } from '../pages/parties/SuppliersPage.js';
 import { PurchasePage } from '../pages/purchases/PurchasePage.js';
 import { ReportsPage } from '../pages/reports/ReportsPage.js';
 import { SalePage } from '../pages/sales/SalePage.js';
 import { SettingsPage } from '../pages/settings/SettingsPage.js';
+import { StaffPage } from '../pages/staff/StaffPage.js';
 import { NAV_ITEMS } from './navigation.js';
 import type { Tab } from './navigation.js';
 import { Sidebar } from './Sidebar.js';
@@ -43,6 +47,10 @@ export function App(): React.JSX.Element {
         {tab === 'reports' && <ReportsPage />}
         {tab === 'customers' && <CustomersPage />}
         {tab === 'settings' && <SettingsPage />}
+        {tab === 'staff' && <StaffPage />}
+        {tab === 'expenses' && <ExpensesPage />}
+        {tab === 'dashboard' && <DashboardPage />}
+        {tab === 'attendance' && <AttendancePage />}
       </main>
     </div>
   );

@@ -41,6 +41,1141 @@
 
 ---
 
+## [2026-09-06] Session 37 — Bug fix: BUG-21 (Add Expense business-unit guard)
+
+**Goal:** Fix BUG-21 only — no other changes. The Add Expense form's
+Business-Unit-required validation never actually fired against real
+data because the `<select>` always defaulted to a non-blank first
+business unit.
+
+**Done:**
+
+- `apps/client/src/pages/expenses/AddExpenseModal.tsx` — added a
+  blank, disabled placeholder option (`<option value="" disabled>Select
+unit...</option>`) as the first option in the Business Unit
+  `<select>`; changed `emptyForm()`'s initial state and the open-modal
+  reset effect so `businessUnitId` starts as `''` instead of
+  `businessUnits[0]?.id ?? ''`. No other logic changed — the
+  pre-existing length-check validation and its `Alert`-banner error
+  display were already correct and needed no changes.
+- Confirmed `CreateExpenseInput.businessUnitId`
+  (`packages/contracts/src/expense/expense.ts`) is `z.string().uuid()`,
+  which also rejects an empty string as a backend backstop — the
+  frontend check now catches it first, so this was a read-only
+  confirmation, not a change.
+- `apps/client/src/pages/expenses/ExpensesPage.test.tsx` — corrected
+  the P7-9 test for this exact guard, which previously mocked
+  `listBusinessUnits` to `[]` (the blind spot that let this bug ship
+  unnoticed). It now seeds the real PARTS/REPAIR/SHARED units and
+  asserts the select's value is `''` on open, in addition to the
+  existing blocked-submission assertion.
+
+**Verified:**
+
+- `npm run verify`: **416/416 tests passed**, typecheck and lint clean,
+  exit code 0.
+- Real click-through in a rebuilt, running Electron window (Playwright
+  `_electron`-driven, same technique as the prior visual-verification
+  session): opened Add Expense — select shows "Select unit..." as the
+  selected placeholder (`select.value === ''`, first option disabled).
+  Filled amount only and clicked Save — a visible red `Alert` banner
+  ("Select which unit this cost belongs to") appeared and no IPC call
+  was made (row count unchanged). Selected "Repair" and clicked
+  Save — expense saved successfully as `EXP-0005` with UNIT column
+  showing `REPAIR`, confirming the correct `business_unit_id` was sent.
+
+**Not done / deferred:** nothing — BUG-21 is now fully fixed and
+verified end-to-end.
+
+**Bugs found:** none new.
+
+**Decisions taken:** none.
+
+**Blocked on:** nothing.
+
+**Next session should:** proceed with whatever the owner decides for
+Phase 8 or the still-uncommitted Phase 6/7 work — no Phase 7 blockers
+remain.
+
+---
+
+## [2026-09-06] Session 36 — Phase 7: Visual verification session (real Electron window click-through)
+
+**Goal:** No new features, no new code unless a bug was found. Walk
+through all 7 Phase 7 user-facing workflows in a real, running,
+built Electron window (not component tests) and document the results.
+
+**Done:**
+
+- Confirmed pre-flight: `git log --oneline -5` (HEAD at `283c403`, the
+  pre-Phase-7 commit — all Phase 7 work across 9 prior sessions remains
+  uncommitted) and `npm run verify` (416/416 tests green).
+- Rebuilt the app (`npm run build --workspace=@shop/server`) and
+  launched it as a real Electron process using Playwright's `_electron`
+  driver (`playwright-core`, installed `--no-save`), since no
+  project-specific run skill existed for this app yet. Discovered and
+  worked around an ambient `ELECTRON_RUN_AS_NODE=1` env var that
+  otherwise makes `electron.exe` behave as plain Node.
+- Drove the app through real user interactions (clicks, keyboard,
+  `<select>` changes via the native property setter + dispatched
+  `change` event) across all 7 required workflows, using the existing
+  dev database (`data/shop-dev.db`) with Phase 7 data layered on top.
+- Queried `party_ledger` directly (via `ELECTRON_RUN_AS_NODE=1
+electron.exe script.mjs`, since better-sqlite3 was Electron-ABI-
+  compiled for the app run) to confirm the commission posting in
+  Workflow 6.
+- Restored `better-sqlite3` to the system-Node ABI afterward
+  (`npm install better-sqlite3 --no-save`) so `npm run verify` passes
+  again under plain Node.
+- Deleted the temporary `.verify-scripts/` driver and workflow scripts
+  (session-scoped test infrastructure, never committed).
+
+**Verified (real output, per CLAUDE.md §6, all 7 workflows):**
+
+1. **Staff creation** — Naeem/Bilal/Chowkidar created; codes
+   STF-0001/0002/0003; derived unit text "Repair unit" / "Spare Parts
+   unit" / "Shared" all correct.
+2. **Attendance** — full month marked (Naeem 20P/2H/2A, Bilal 22P/2A,
+   Chowkidar 24P) exactly per spec; cell colours correct; Save button
+   enabled after first change and disabled after save; statuses
+   persisted correctly across a full app restart (confirmed via a
+   fresh launch showing already-populated cells and a disabled Save
+   button).
+3. **Peshgi** — Rs 3,000 advance for Naeem, notes "Eid advance"; PMT
+   doc number, Rs-formatted MoneyDisplay, and Naeem attribution all
+   correct.
+4. **Expenses** — 3 expenses entered exactly per spec (Electricity
+   Rs 4,500/Shared/Till; Bike Fuel Rs 800/Repair/Till; Courier Rs 200/
+   Spare Parts/Owner), all rendering correctly. Submitting with **no**
+   explicit Business Unit selection was **not blocked** — a real bug,
+   see BUG-21 below.
+5. **Cash session** — opened Rs 5,000 float, widget showed "Open"
+   state correctly; closed with Rs 47,350 counted; expected-cash and
+   variance hand-calculated independently and matched the widget
+   exactly, with correct amber "Over by" colouring for a positive
+   variance.
+6. **Job delivery + commission** — delivered a job (Rs 1,200 labour
+   line, technician Naeem at 10% commission); direct `party_ledger`
+   query returned `amount = -12000, entry_type = 'commission',
+source_type = 'job'` — exact match to spec.
+7. **Wage report** — hand-calculated Gross/Advances/Commission/Net-Due
+   for all 3 staff _before_ reading the screen; every value matched
+   exactly: Naeem Rs 12,600 / 3,000 / 120 / 9,720; Bilal Rs 11,000 / 0
+   / 0 / 11,000; Chowkidar Rs 9,600 / 0 / 0 / 9,600. Empty-state
+   message ("No attendance records for this month.") confirmed by
+   switching to a month with no data.
+
+- Final `npm run verify`: 416/416 tests green, lint and typecheck
+  clean, exit code 0.
+
+**Not done / deferred:**
+
+- BUG-21 was found and documented but **not fixed**, per this
+  session's explicit rule (document, don't fix, unless CRITICAL and a
+  trivial one-line change). A targeted fix session is recommended.
+- All Phase 7 work (and this verification session) remains
+  uncommitted — HEAD is still at `283c403`. Committing was not
+  requested this session.
+
+**Bugs found:** BUG-21 (see PROJECT.md) — Add Expense form's
+Business-Unit-required guard never actually fires against real data,
+because the `<select>` always defaults to a non-blank first business
+unit rather than a blank placeholder. MEDIUM, UNFIXED.
+
+**Decisions taken:** none
+
+**Blocked on:** nothing — Phase 7 is functionally sound; BUG-21 is the
+only open item.
+
+**Next session should:** either (a) run a short, targeted fix session
+for BUG-21 (add a blank placeholder option to the Business Unit
+`<select>` in `AddExpenseModal.tsx` and change the initial state from
+`businessUnits[0]?.id` to `''`), or (b) proceed to Phase 8 with BUG-21
+tracked as a known issue — owner's call. Either way, the uncommitted
+state of all Phase 6/7 work should be addressed (a commit or an
+explicit decision to keep working uncommitted) before much more work
+piles up on top of it.
+
+**Checklist:**
+
+- [x] All verification checks passed (416/416 tests, real UI
+      click-through with real data, real `party_ledger` query)
+- [x] No unresolved bugs introduced by this session (BUG-21 pre-existed
+      in already-shipped P7-4 code; this session found and documented it,
+      did not introduce it)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (Phase 7 visually verified with
+      one known, non-blocking issue)
+- [x] Any new bugs documented in PROJECT.md (BUG-21)
+- [x] Test suite passing — 416/416, `npm run verify` exit code 0
+
+---
+
+## [2026-09-06] Session 35 — Phase 7: P7-8 through P7-11 (all remaining UI, Phase 7 CODE-COMPLETE)
+
+**Goal:** Build the four remaining Phase 7 UI tasks per
+`docs/phases/PHASE_7.md`'s task table — no new IPC channels, no new
+migrations, no repository/service changes, backend already complete.
+Close out Phase 7 as CODE-COMPLETE.
+
+**Done:**
+
+- Read all 6 required files before writing code. Key finding: **P7-9
+  (Expenses) and P7-10 (Cash session widget) needed zero production
+  code changes** — both were already fully built in P7-4/P7-5 and
+  already matched every EC-P7-9/EC-P7-10 criterion. Added confirming
+  render tests for both instead of rebuilding anything.
+- **P7-8 (Attendance page)** — new `apps/client/src/pages/attendance/AttendancePage.tsx`,
+  a new top-level tab (not a third section on `StaffPage.tsx`, which
+  already covers roster + advances — an interactive month grid with
+  cycling cells and dirty-state tracking earns its own screen, same
+  reasoning Dashboard/Expenses got their own tabs). Month/year picker;
+  a plain HTML table (no existing `packages/ui` component fits an
+  interactive per-cell-clickable grid) with one row per staff member,
+  one column per day; each cell cycles
+  `blank → present → half_day → absent → leave → holiday → blank` on
+  click or Space; Enter triggers Save; "Save changes" is disabled until
+  a cell differs from its last-loaded value, tracked via a `savedGrid`/
+  `grid` pair of `staffId → date → status` maps. **Arrow-key cell
+  navigation was deliberately not built** — it would need a 2D ref grid
+  and manual `.focus()` calls; native Tab order between `<button>`
+  cells already covers keyboard traversal without that complexity, so
+  this is a documented scope cut, not an oversight.
+- **P7-9 (Expenses)** — verification only. Added `ExpensesPage.test.tsx`:
+  renders the exact 3 EC-P7-4 expenses and asserts every column
+  (category, `Rs 4,500`/`Rs 800`/`Rs 200`, `SHARED`/`REPAIR`/`PARTS`,
+  `Till`/`Owner`); a second test confirms the Add Expense form blocks
+  submission with no business unit selected and shows the exact error
+  text; a third confirms all three unit options are listed.
+- **P7-10 (Cash session widget)** — verification only. Added
+  `CashSessionWidget.test.tsx`: renders against all three
+  `cashSession:today()` shapes (`null`; `status:'open'`;
+  `status:'closed'` with `difference` `0`/`>0`/`<0`) and confirms
+  "Not started"/"Open Session", the opening float + "Close Session",
+  and "Balanced"/"Over by"/"Short by" render correctly in each case.
+- **P7-11 (Wages tab)** — new `apps/client/src/pages/reports/WageMonthReport.tsx`,
+  wired into `ReportsPage.tsx` as a 7th tab (`Tabs`/`TAB_ITEMS`/
+  `TAB_TITLES`/`Card` — the exact existing pattern, no new
+  page-composition idiom). Month/year picker calling
+  `report:wageMonth`; one row per staff member with all 11 columns from
+  the brief; every money column via `MoneyDisplay`; empty state "No
+  attendance records for this month." Added `WageMonthReport.test.tsx`
+  rendering the exact EC-P7-7 Staff A/Staff B data and asserting every
+  Rs-formatted value (`Rs 13,800`/`3,000`/`240`/`11,040` and
+  `Rs 20,800`/`0`/`480`/`21,280`).
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 77 passed (77)` /
+  `Tests 416 passed (416)` (402 baseline + 4 `AttendancePage.test.tsx`
+  - 3 `ExpensesPage.test.tsx` + 5 `CashSessionWidget.test.tsx` + 2
+    `WageMonthReport.test.tsx` = 402 + 14 = 416). Test count strictly
+    increasing at every checkpoint this session, matching the phase-wide
+    progression 350→356→373→377→382→388→398→402→406→416.
+- EC-P7-8/EC-P7-9/EC-P7-10/EC-P7-11 all satisfied via real component-render
+  tests (mocked `ipc`, `@testing-library/react`, `JobsPage.test.tsx`'s
+  established precedent) — not "it builds" or visual inspection.
+
+**Not done / deferred:**
+
+- **The Electron app itself was never launched this session** (no
+  `npm run dev`, no packaged build) — the same honest gap Phase 6
+  carried at its own code-complete point. See
+  `docs/phases/PHASE_7.md`'s "What is and isn't verified" note for the
+  exact click-through sequence the next session should run before this
+  phase is treated as fully closed in the real, running app.
+- Phase 8 items already logged in `docs/phases/PHASE_7.md` §8
+  (overhead allocation reporting, `service_charge` commission columns,
+  leave/holiday policy revisit) — untouched, correctly out of scope.
+
+**Bugs found:** none this session. BUG-20 (logged in P7-3) remains
+open, LOW, documentation-only.
+
+**Decisions taken:** one — Attendance as a new top-level tab rather
+than a StaffPage section (reasoned above, the brief explicitly left
+this as "your call").
+
+**Blocked on:** nothing. Phase 7 is CODE-COMPLETE; the only remaining
+work before calling it fully closed is the real-hardware/running-window
+click-through listed above.
+
+**Next session should:** either begin Phase 8 (bug-fix & hardening —
+`docs/PHASES.md`) or, first, run `npm run dev --workspace=@shop/server`
+and click through all of Phase 7's screens for real, per
+`docs/phases/PHASE_7.md`'s closing note — owner's call which comes
+first.
+
+**Checklist (full Phase 7 close):**
+
+- [x] All verification checks passed — every backend task (P7-0–P7-7)
+      verified against a real SQLite database with hand-calculated
+      paisa values; every UI task (P7-8–P7-11) verified via
+      component-render tests
+- [x] No unresolved bugs introduced this phase (BUG-20 is
+      documentation-only, logged, not blocking)
+- [x] PROJECT.md updated — Phase 7 marked CODE-COMPLETE
+- [x] PROGRESS.md updated with this session's entry
+- [x] Next phase prerequisites are met — Phase 8 (bug-fix & hardening)
+      can begin whenever the owner chooses; nothing in Phase 7 blocks it
+- [x] Any new bugs documented in PROJECT.md — BUG-20 (carried from P7-3)
+- [x] Test suite passing (416/416)
+
+---
+
+## [2026-09-06] Session 34 — Phase 7: P7-7 (wage report, read-only)
+
+**Goal:** Build P7-7 per `docs/phases/PHASE_7.md`'s task table — a
+read-only monthly wage report summing attendance/advances/commission
+per staff member, no UI (that's P7-11).
+
+**Done:**
+
+- Read all 6 required files before writing code. All three DDLs
+  (`attendance`, `party_ledger`, `party`) matched the brief's
+  assumptions exactly, no discrepancies.
+- **Deviated from the brief's Steps B/D** (a
+  `wage-report.repository.port.ts` + `wage-report.service.ts`):
+  `report.repository.ts` (R1–R5, this codebase's daily-sales/cash-book/
+  unit-P&L reports) is the real, established precedent for every
+  report — plain exported `(db, tenantId, ...) => Promise<...>`
+  functions, called directly from `report.handler.ts`, with **no
+  `ReportRepositoryPort` anywhere in this codebase**. Matched that
+  convention instead of introducing the one port/service layer no other
+  report has — `getWageMonthReport(db, tenantId, year, month)` lives
+  directly in a new `wage-report.repository.ts`, same shape as
+  `getDailySalesReport`.
+- No SQLite `FILTER` clause precedent exists anywhere in this
+  codebase (confirmed by grep) — used
+  `SUM(CASE WHEN status = 'x' THEN 1 ELSE 0 END)` instead, matching
+  `0012_job_split_v2.sql`'s `v_job_split` view's exact idiom for the
+  same kind of conditional aggregation, per the brief's own fallback
+  instruction.
+- `getWageMonthReport`: one raw SQL query, `party` joined to
+  `attendance` (filtered to the requested year/month), with two
+  correlated scalar subqueries against `party_ledger` (advance sum,
+  ABS(commission sum)) computed per staff row — a plain LEFT JOIN to
+  `party_ledger` would have multiplied the attendance aggregation once
+  per matching ledger row, so subqueries were the correct choice here,
+  not an accidental complexity. `net_paisa` computed in the same SELECT,
+  never re-derived in TypeScript.
+- Contracts: `WageMonthRowDto` added to the existing
+  `packages/contracts/src/report/report.ts` (the one file every report
+  DTO already lives in), matching that file's exact `Xxx` (DB layer,
+  no suffix) / `XxxDto` (Zod, `Dto` suffix) naming pairing — not the
+  bare `WageMonthRow` name the brief used for the contracts type.
+- Wired `report:wageMonth` into the existing `report.handler.ts`/
+  `preload.ts`/`electron-api.d.ts`/`channels.ts` — no new handler file,
+  since every other report already lives in these same four files.
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 73 passed (73)` /
+  `Tests 402 passed (402)` (398 baseline + 4 new
+  `wage-report.repository.test.ts`) — matches the required ≥402 exactly,
+  passed on the first run with no fixes needed.
+- The 4 tests: the exact EC-P7-7 Staff A/Staff B scenario (including
+  Staff B's `commissionBp=0` on their `party` row but a real
+  `party_ledger` commission row still present — proving the report
+  reads `party_ledger`, not `party.commission_bp`); staff with zero
+  attendance rows this month correctly absent from the result (not
+  returned with all-zero fields); a zero-advances/zero-commission case;
+  and a prior-month advance confirmed NOT to bleed into the current
+  month's `advancesPaisa`/`netPaisa`.
+- **EC-P7-7** — ran a real manual script (temporary, deleted after use,
+  not committed) seeding the exact same Staff A/Staff B scenario against
+  a real SQLite file and calling `getWageMonthReport` directly. Pasted
+  output: Staff A `{grossPaisa: 1380000, advancesPaisa: 300000,
+commissionPaisa: 24000, netPaisa: 1104000}`; Staff B
+  `{grossPaisa: 2080000, advancesPaisa: 0, commissionPaisa: 48000,
+netPaisa: 2128000}` — matching the hand-calc exactly, both rows.
+
+**Not done / deferred:**
+
+- P7-8 through P7-11 — next session. P7-11 (Wages tab on Reports page)
+  is the UI consumer of this session's `report:wageMonth` channel.
+
+**Bugs found:** none this session.
+
+**Decisions taken:** one — collapsing Steps B/D into a single plain
+function, reasoned above from `report.repository.ts`'s real precedent
+(the brief explicitly left the exact approach for aggregation open:
+"your choice based on what Kysely makes clean" for the query strategy,
+and the port/service question wasn't flagged as fixed either). All
+other choices are mechanical.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-8 (UI: Attendance page) per
+`docs/phases/PHASE_7.md`'s task table — the first Phase 7 UI screen
+apart from what P7-0/P7-3/P7-4/P7-5 already built on the Staff/Expenses/
+Dashboard pages.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (402/402)
+
+---
+
+## [2026-09-06] Session 33 — Phase 7: P7-6 (commission on labour)
+
+**Goal:** Build P7-6 per `docs/phases/PHASE_7.md`'s task table —
+commission on labour, posted automatically after job delivery, in its
+own transaction, never rolling back the delivery on failure.
+
+**Done:**
+
+- Read all 7 required files before writing code. `deliverJob()`
+  confirmed to have zero commission logic and to return only
+  `{id, docNo, totalAmountPaisa}` — no `jobId`/technician id anywhere in
+  the result, so the handler fetches the job separately
+  (`KyselyJobRepository.getJob(jobId)` → `JobRecord.assignedTo`) after
+  delivery. `sale_line.line_total`/`business_unit_id`/`line_kind`
+  confirmed exactly (labour lines always `lineKind: 'labour'`,
+  `businessUnitId: repairUnit.id`, per `job-delivery.repository.ts`'s
+  own insert code). **No `getStaffById` existed** on
+  `KyselyPartyRepository` — added it, following `getSupplierById`'s
+  exact existing pattern (only `listStaff`/`createStaff` existed for
+  staff before this session).
+- **`packages/core/src/payroll/commission.service.ts`** — pure
+  `computeCommission(labourTotalPaisa, commissionBp)`, the exact
+  formula from PHASE_7.md §5 Conflict 3. 5 unit tests including the
+  `commissionBp=0` guard and the sub-paisa-truncates-to-zero edge case.
+- **`packages/core/src/payroll/commission.repository.port.ts`** — a
+  **new port, not an extension of `AdvanceRepositoryPort`**: reasoned
+  that commission is grouped with attendance/wages/advances under the
+  `payroll` module (`docs/SYSTEM_DESIGN.md` §3) but has a different
+  trigger point (post-delivery, never user-initiated) and no "list"
+  requirement, so a separate interface avoided conflating two write
+  paths. `RecordCommissionInput`/`CommissionRepositoryPort`, no
+  `tenantId` parameter (same precedent as every port this phase).
+- **`packages/db/src/repositories/commission.repository.ts`** —
+  `KyselyCommissionRepository.recordCommission`: guards
+  `commissionPaisa <= 0` and throws before opening any transaction (a
+  double-guard — the handler already checks this too); inserts
+  `party_ledger` (`entry_type='commission'`, `amount` **negative** —
+  shop owes the technician, the mirror image of an advance's positive
+  sign) + `audit_log` + `sync_outbox`, modeled directly on
+  `advance.repository.ts`'s exact INSERT shape. A second exported
+  function, `getLabourTotalPaisa(db, tenantId, saleId)`, resolves
+  REPAIR's id by `business_unit.code` (never hardcoded, same convention
+  as `attendance.service.ts`'s `deriveBusinessUnitCode`) and sums
+  `sale_line.line_total` filtered to that unit + `line_kind='labour'` —
+  read-only, called from the handler _before_ `recordCommission`'s own
+  transaction opens, per the brief's explicit instruction.
+- **Extended `apps/server/src/ipc/handlers/job-delivery.handler.ts`** —
+  after `deliverJob()`'s own DB connection closes, a separate
+  `recordCommissionIfEligible()` opens its own connection: fetches the
+  job's assigned technician, skips if none or `commissionBp <= 0`,
+  computes `labourTotalPaisa`, skips if 0, computes commission, skips if
+  0, then records it. The whole call is wrapped in try/catch at the
+  `channels.job.deliver` handler's top level — any failure is logged via
+  `console.error` and the delivery's own DTO is still returned
+  unchanged, exactly as specified (a commission failure must never fail
+  or roll back an already-committed delivery).
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 72 passed (72)` /
+  `Tests 398 passed (398)` (393 after Step A + 5 new
+  `commission.repository.test.ts`) — exactly matches the required ≥398.
+- The 5 repository tests: correct `party_ledger` row on a pre-computed
+  12000-paisa commission; `commissionPaisa=0` throws and inserts
+  nothing; a full real delivery (via `deliverJob`) proving a PARTS-unit
+  sale_line does NOT contribute to the labour SUM (120000 REPAIR-only,
+  not 120800 if the 800-paisa PARTS line were wrongly included — both
+  numbers written in the test comment); the exact EC-P7-6 scenario
+  (Rs 1,200 labour, 10% → 12000 paisa) plus a second technician with
+  `commissionBp=0` producing zero rows; and a commission-failure
+  isolation test — `recordCommission` with a non-existent technician id
+  (FK violation) throws, while the already-delivered `sale` row is
+  confirmed still present via direct query.
+- **EC-P7-6** — ran a real manual script (temporary, deleted after use,
+  not committed) delivering one real job (Rs 1,200 labour,
+  `commissionBp=1000`) through `deliverJob`/`getLabourTotalPaisa`/
+  `computeCommission`/`recordCommission` in sequence, exactly mirroring
+  what the handler now does. Pasted output:
+  `labour_total_paisa: 120000`, `commission_paisa: 12000`,
+  `party_ledger row: {amount: -12000, entry_type: 'commission',
+source_type: 'job', source_id: <job.id>}` — matching EC-P7-6's wording
+  exactly.
+
+**Not done / deferred:**
+
+- P7-7 through P7-11 — next session.
+
+**Bugs found:** none this session.
+
+**Decisions taken:** one new decision — the new-port-vs-extend-advance-port
+call for Step B (reasoned above, not owner-directed — the brief
+explicitly left it as "your call"). All other choices (getStaffById
+addition, REPAIR-by-code resolution, separate-connection-after-delivery
+commission recording) are mechanical applications of precedent already
+established earlier this phase.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-7 (wage report) per
+`docs/phases/PHASE_7.md`'s task table — attendance, advances, and
+commission all now exist for the report to read and sum.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (398/398)
+
+---
+
+## [2026-09-06] Session 32 — Phase 7: P7-5 (cash session open/close)
+
+**Goal:** Build P7-5 per `docs/phases/PHASE_7.md`'s task table — cash
+session open/close with the `expected_cash`/`difference` formula
+computed and stored at close time.
+
+**Done:**
+
+- Read all 7 required files before writing code. `cash_session`'s live
+  DDL matched the planning session's list exactly, plus one previously
+  unmentioned `notes TEXT` column (left NULL — no field asks for it).
+  `sale.total_amount`/`sale_date`, `purchase.total_amount`/
+  `purchase_date` confirmed (not `total_paisa`); both need
+  `status = 'confirmed'` filtering, matching `v_unit_revenue`'s exact
+  convention, so a cancelled sale/purchase never counts toward expected
+  cash. No existing `cash_session` view/computation exists anywhere.
+  `purchase.repository.ts`'s `cancelPurchase` confirmed as the real
+  precedent for a genuine `UPDATE` on an existing domain row (fetch,
+  validate state, `updateTable`, `audit_log`) — modeled `closeSession`
+  on it. `CashSessionTable` did not exist in `kysely-schema.ts` — added it.
+- **Stopped and asked before Step G**, rather than guessing: PHASE_7.md's
+  GAP-7 assumed an existing dashboard/home page to put the widget on.
+  There isn't one — `sales` is the app's default tab via
+  `useState<Tab>('sales')`, and `SalePage.tsx` is 580 lines, already over
+  the file-size convention, and the most business-critical/well-tested
+  screen in the app. Presented three options; owner chose a new minimal
+  `DashboardPage.tsx`/`dashboard` tab (not touching SalePage, not
+  piggybacking on StaffPage) — `sales` stays the default tab, Dashboard
+  is reached like any other tab.
+- **`packages/contracts/src/cash-session/cash-session.ts`** —
+  `OpenSessionInput`, `CloseSessionInput`, `CashSessionDto` (status
+  derived from `closedAt`, never a stored column).
+- **`packages/core/src/expense/cash-session.repository.port.ts`** —
+  colocated with `expense.repository.port.ts` per the brief's own
+  instruction. `SessionAlreadyOpenError` modeled directly on
+  `DbBusyError` (`packages/db/src/retry.ts`) — same shape, same
+  "clean, serializable Error crossing the IPC boundary" reasoning.
+  Methods return a core-level `CashSessionRecord`, not the Zod DTO
+  directly — same pattern as `AdvanceRepositoryPort`/
+  `ExpenseRepositoryPort` (P7-3/P7-4), kept consistent rather than
+  switching shapes for this one module. No `tenantId` parameter, same
+  precedent as every port this phase.
+- **`packages/db/src/repositories/cash-session.repository.ts`** —
+  `openSession` catches the raw `SQLITE_CONSTRAINT*` error (better-sqlite3's
+  `.code` property, same detection technique `retry.ts`'s
+  `isSqliteBusyError` uses for `SQLITE_BUSY`) and re-throws
+  `SessionAlreadyOpenError`. `closeSession` computes `expected_cash` via
+  5 separate `COALESCE(SUM(...), 0)` raw-SQL scalar queries inside the
+  transaction (sale/payment-in for cash-in, purchase/expense/payment-out
+  for cash-out — exact formula and column names confirmed in this
+  session's read-first findings), then a real `UPDATE` on the existing
+  row (cash_session is NOT append-only, PHASE_7.md §5 Correction 2 —
+  documented explicitly in the file so a future reader doesn't "fix"
+  this into an insert).
+- **A real, necessary fix to shared middleware**:
+  `apps/server/src/ipc/middleware/with-error.ts`'s `toIpcError()` had no
+  case for `SessionAlreadyOpenError` — it would have fallen through to a
+  generic `INTERNAL_ERROR`, silently failing the brief's explicit
+  requirement that this cross the boundary as `{code:
+'SESSION_ALREADY_OPEN', ...}`. Added the case, matching `DbBusyError`'s
+  exact shape; added a test to `with-error.test.ts` alongside the
+  existing `DbBusyError`/`ZodError` cases.
+- **`apps/server/src/ipc/handlers/cash-session.handler.ts`** —
+  `cashSession:open`/`close`/`today`, wired into `main.ts`/`preload.ts`/
+  `electron-api.d.ts`/`channels.ts`. `cashSession:today` resolves the
+  date server-side (`new Date().toISOString().slice(0,10)`) — the
+  renderer never sends a date for this call, per the brief.
+- **UI** — new `apps/client/src/pages/dashboard/` (`DashboardPage.tsx`,
+  `CashSessionWidget.tsx`). Three visual states exactly as specified
+  (not started / open / closed), the closed state's variance row using
+  `Alert`'s existing `danger|warning|success` variants (a clean 1:1 map
+  to short/over/balanced — no new color logic needed). Wired a new
+  `dashboard` tab into `navigation.ts`/`App.tsx`/`NavIcon.tsx`/
+  `Sidebar.tsx` — no shortcut digit (none free, same as Expenses in P7-4).
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 70 passed (70)` /
+  `Tests 388 passed (388)` (382 baseline + 5 new
+  `cash-session.repository.test.ts` + 1 new `with-error.test.ts`) —
+  exceeds the required ≥387.
+- The 5 repository tests: open inserts correctly; a second same-date
+  open throws `SessionAlreadyOpenError` and leaves exactly 1 row;
+  `getSessionByDate` null/found cases; and the EC-P7-5 critical test —
+  opening_cash=500000 + one cash sale (4,000,000) − one cash expense
+  (80,000) → `expected_cash=4,420,000`, `counted_cash=4,500,000` →
+  `difference=+80,000`, all hand-calculated in the test comment before
+  asserting, then queried directly from `cash_session`.
+- **EC-P7-5** — ran a real manual script (temporary, deleted after use,
+  not committed) against a real SQLite file. Pasted output: opened
+  session `opening_cash=500000`; second open threw
+  `SessionAlreadyOpenError`; after seeding one Rs 42,350 cash sale,
+  closed with `counted_cash=4,735,000` → `expected_cash=4,735,000`,
+  `difference=0`. All four numeric columns (`opening_cash`,
+  `expected_cash`, `counted_cash`, `difference`) queried directly from
+  `cash_session` and pasted.
+
+**Not done / deferred:**
+
+- P7-6 through P7-11 — next session.
+
+**Bugs found:** none this session (the `with-error.ts` gap was found
+and fixed before any handler shipped depending on it — not logged as a
+bug since nothing was ever built on the wrong assumption).
+
+**Decisions taken:** one new decision this session — the Dashboard page
+location (owner choice, recorded above and in
+`docs/phases/PHASE_7.md` §8c). All other implementation choices (error
+class shape, port record-vs-DTO return type, no-tenantId-parameter) are
+mechanical applications of precedent already established in P7-1/P7-3/P7-4.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-6 (commission on labour) per
+`docs/phases/PHASE_7.md`'s task table.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (388/388)
+
+---
+
+## [2026-09-06] Session 31 — Phase 7: P7-4 (expense entry)
+
+**Goal:** Build P7-4 per `docs/phases/PHASE_7.md`'s task table — expense
+entry backend (single-row write with doc_no) and UI, satisfying
+EC-P7-4's `v_unit_direct_expense`/`v_overhead_pool` split.
+
+**Done:**
+
+- Read all 7 required files/greps before writing code. Real findings
+  against the brief's draft schema:
+  - `expense` has **no `notes` column** — the live column is
+    `description`. Kept `notes` as the contracts/DTO field name
+    (matches every other DTO in this codebase) and mapped it to
+    `description` in `expense.repository.ts`, same convention as
+    `party.wage_rate` <-> `wageRatePaisa`.
+  - `document_sequence.doc_type`'s own comment already lists `expense`
+    as intended, but no seed row/prefix exists anywhere — used `EXP`,
+    created lazily on first use (same pattern as PMT/STF).
+  - `category_id` and `method` confirmed exactly as the brief expected;
+    `business_unit_id` confirmed nullable (0002_business_units.sql).
+  - Read both views' full SQL before writing test fixtures: both
+    `v_unit_direct_expense` and `v_overhead_pool` `GROUP BY
+expense_date` — used the same `expense_date` for all three EC-P7-4
+    fixture rows so each unit/allocation_method still produces exactly
+    one row, without that grouping fragmenting the assertions.
+  - `advance.repository.ts` (P7-3) confirmed as the closest existing
+    shape (single-row insert + doc_no + audit_log + sync_outbox, no
+    line-array loop) — modeled `expense.repository.ts` on it directly.
+  - `ExpenseTable`/`ExpenseCategoryTable` did not exist in
+    `kysely-schema.ts` — added both, matching the live DDL columns
+    (including `description`, not `notes`).
+- **`packages/contracts/src/expense/expense.ts`** —
+  `CreateExpenseInput` (businessUnitId required in Zod even though
+  nullable in the DB — Correction A), `ExpenseDto`, `ExpenseCategoryDto`,
+  `ListExpensesInput`.
+- **`packages/core/src/expense/expense.repository.port.ts`** —
+  colocated in the pre-existing `packages/core/src/expense/` folder
+  (had a placeholder `.gitkeep` from before this phase) — the brief got
+  the location right this time, matching every other domain's own
+  port-plus-service folder. No `tenantId` parameter on any method, same
+  precedent as P7-1/P7-3.
+- **`packages/core/src/expense/expense.service.ts`** — thin
+  `createExpense`/`listExpenses`/`listCategories` wrappers,
+  `job.service.ts`'s plain-function pattern.
+- **`packages/db/src/repositories/expense.repository.ts`** —
+  `KyselyExpenseRepository.createExpense`: one transaction (`EXP-NNNN`
+  doc_no, expense insert, audit_log, sync_outbox), then a follow-up
+  SELECT inside the same transaction joining `expenseCategory`/
+  `businessUnit` to build the DTO — same "insert, then read back with
+  joins" shape `advance.repository.ts`'s `recordAdvance` uses.
+  `listExpenses` filters `expense_date BETWEEN from AND to`.
+  `listCategories` reads `expense_category` ordered by `sort_order`.
+- **`apps/server/src/ipc/handlers/expense.handler.ts`** —
+  `expense:create`/`expense:list`/`expense:listCategories`, wired into
+  `main.ts`/`preload.ts`/`electron-api.d.ts`/`channels.ts`. Also added
+  a 4th channel, **`expense:listBusinessUnits`**, not in the original
+  brief: `lookup.repository.ts`'s existing `listBusinessUnits()` (which
+  feeds `item:lookups`) filters out SHARED — correct for items, wrong
+  for the expense form, which must offer all three units per DC-3.
+  Extended it with an `includeOverhead` parameter (default `false`,
+  preserving `item:lookups`' exact existing behaviour) instead of
+  writing a duplicate query, and exposed the `true` case as its own
+  expense-scoped channel.
+- **UI** — `apps/client/src/pages/expenses/` (`ExpensesPage.tsx`,
+  `AddExpenseModal.tsx`, `ExpenseListTable.tsx`), following
+  `PurchasePage.tsx`'s list+form shell (simplified — no line-cart, since
+  an expense is one row) and the `RecordAdvanceModal.tsx`/
+  `RecordPaymentModal.tsx` form pattern. Business unit selector requires
+  a selection before submit (DC-3), labelled "Which unit does this cost
+  belong to?" per the brief. Method select shows "From till"/"Owner's
+  pocket" labels for `cash`/`owner_personal`. Vehicle is always shown
+  (not gated to Bike Fuel/Petrol) — simpler, and harmless to leave blank
+  on any other category; documented in a code comment rather than left
+  unexplained.
+  - **A real gap found while wiring the nav item**: `navigation.ts`'s
+    `NAV_ITEMS` already had Alt+0 through Alt+9 all taken (Staff, P7-0,
+    took the last one). Made `NavItem.shortcutDigit` optional —
+    Expenses gets no keyboard shortcut rather than stealing one or
+    inventing an unprompted multi-key scheme; `Sidebar.tsx` now only
+    renders the "Alt+N" badge when a shortcut exists.
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 69 passed (69)` /
+  `Tests 382 passed (382)` (377 baseline + 5 new
+  `expense.repository.test.ts` tests) — matches the required ≥382
+  exactly.
+- The 5 repository tests: correct row/DTO on create (Rs 4,500 -> 450000
+  paisa); `method='owner_personal'` accepted and stored; date-range
+  filtering; and the two EC-P7-4 view tests — `v_unit_direct_expense`
+  returns exactly `[{PARTS: 20000}, {REPAIR: 80000}]` with no SHARED
+  row, `v_overhead_pool` returns exactly one row
+  (`shared_revenue`/`450000`) for the Electricity/SHARED expense.
+- **EC-P7-4** — ran a real manual script (temporary, deleted after use,
+  not committed) against a real SQLite file with the exact 3-expense
+  scenario. Pasted output: `v_unit_direct_expense`:
+  `[{unit_code: 'PARTS', expense_paisa: 20000}, {unit_code: 'REPAIR',
+expense_paisa: 80000}]` (no SHARED row). `v_overhead_pool`:
+  `[{allocation_method: 'shared_revenue', parts_share_bp: null,
+overhead_paisa: 450000}]`. Both match EC-P7-4's exact wording.
+
+**Not done / deferred:**
+
+- P7-5 through P7-11 — next session.
+
+**Bugs found:** none this session.
+
+**Decisions taken:** none new — the `notes`<->`description` mapping,
+`includeOverhead` extension, and optional-shortcut change are all
+mechanical consequences of reading the live code/existing UI state, not
+new design decisions.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-5 (cash session open/close) per
+`docs/phases/PHASE_7.md`'s task table.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (382/382)
+
+---
+
+## [2026-09-06] Session 30 — Phase 7: P7-3 (advances / peshgi)
+
+**Goal:** Build P7-3 per `docs/phases/PHASE_7.md`'s task table — advance/
+peshgi backend (party_ledger + payment write path) and UI on the Staff
+page.
+
+**Done:**
+
+- Read all six required files/greps before writing code, per this
+  session's explicit instruction, and found two real discrepancies
+  against the P7-3 brief's own draft schema:
+  - `payment` has no `payment_mode` column — the real column is
+    `method`. Amount column is `amount` (paisa, always positive), not
+    `amount_paisa`. `direction TEXT NOT NULL` (`'in'|'out'`) does exist,
+    confirmed before using it.
+  - `party_ledger.entry_type`'s own schema comment lists `staff_advance`,
+    not `advance` — PHASE_7.md §5 GAP-4's approved text and this
+    session's explicit instruction both say `'advance'`; no `CHECK`
+    constraint enforces either value (confirmed by grep), so this is a
+    documentation-only discrepancy, not a functional one. Logged as
+    **BUG-20** (LOW) in `PROJECT.md` rather than silently resolved
+    either way.
+  - Confirmed `payment_out`/PMT's `document_sequence` seeding: migration
+    `0006`'s data migration only backfills tenants that already had a
+    `payment_in` row _at migration time_ — on every fresh test database
+    in this repo, `document_sequence` is empty when `0006` runs, so it
+    inserts zero rows for either doc_type. Both are actually created
+    lazily on first use, by each repository's own insert-if-missing
+    function (`payment.repository.ts`'s `nextPaymentDocNo` for RCP,
+    this session's `advance.repository.ts`'s `nextAdvanceDocNo` for
+    PMT) — no manual seed step was needed.
+  - Confirmed no dedicated `party-ledger.repository.ts` exists;
+    `party_ledger` INSERTs happen inline inside whichever repository
+    owns the transaction (`payment.repository.ts`'s `createPayment`
+    does this directly) — followed that same inline pattern rather than
+    inventing a new shared repository.
+- **`packages/contracts/src/advance/advance.ts`** — `RecordAdvanceInput`,
+  `AdvanceDto`, `ListAdvancesInput`. No `tenantId` field, matching P7-1's
+  established reasoning (every write handler takes it from server-side
+  deps, never the renderer).
+- **`packages/core/src/payroll/advance.repository.port.ts`** — colocated
+  with `attendance.repository.port.ts`, not a new `packages/core/src/ports/`
+  folder (same convention, restated again this session). Port methods
+  take no `tenantId` parameter — every existing repository in this
+  codebase takes it once at construction, never per call; deviated from
+  the brief's draft (which had `tenantId` on every method input) for the
+  same reason flagged and praised in P7-1.
+- **`packages/core/src/payroll/advance.service.ts`** — thin
+  `recordAdvance(repo, input)` / `listAdvances(repo, input)`, no
+  `tenantId` parameter, `job.service.ts`'s plain-function pattern.
+- **`packages/db/src/repositories/advance.repository.ts`** —
+  `KyselyAdvanceRepository.recordAdvance`: one transaction, `payment`
+  row (`direction='out'`, `method='cash'`, doc `PMT-NNNN`) inserted
+  first, then `party_ledger` (`entry_type='advance'`, `amount=+ve`,
+  `source_type='advance'`, `source_id=`the payment row's id — same
+  payment-first-then-ledger ordering `payment.repository.ts`'s
+  `createPayment` already uses), then one `audit_log` + one
+  `sync_outbox` row. `listAdvances` joins `partyLedger` → `payment` (via
+  `sourceId`) → `party` (via `partyId`) to recover `docNo`/`staffName`,
+  filtered by a `'YYYY-MM-'` `LIKE` prefix on `entry_date` — the same
+  simplification `attendance.repository.ts`'s `getMonthAttendance`
+  already uses instead of a raw `strftime()` fragment.
+- **`apps/server/src/ipc/handlers/advance.handler.ts`** —
+  `staff:recordAdvance`/`staff:listAdvances`, wired into `main.ts`,
+  `preload.ts`, `electron-api.d.ts`, `apps/server/src/ipc/channels.ts`.
+- **UI** — `apps/client/src/pages/staff/RecordAdvanceModal.tsx` (staff
+  select, date, Rs amount via `Money.fromRupees` — same structural
+  pattern as `RecordPaymentModal.tsx`) and `AdvancesSection.tsx` (staff +
+  month/year picker, advances table with `MoneyDisplay`, a running
+  total), both added to `StaffPage.tsx` below the existing staff list —
+  no new route, per the brief's instruction that this lives on the Staff
+  page. `AdvancesSection` fetches its own staff list independently
+  rather than lifting shared state out of `StaffListView` for two call
+  sites — a small, deliberate duplication over a premature abstraction.
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 68 passed (68)` /
+  `Tests 377 passed (377)` (373 baseline + 4 new
+  `advance.repository.test.ts` tests).
+- The 4 repository tests cover exactly what P7-3 asked for: a Rs 2,500
+  advance's `party_ledger`/`payment` rows and `v_party_balance` queried
+  directly; two same-month advances (Rs 1,000 + Rs 500) summing to
+  exactly 150000 paisa via `listAdvances`; month-filtering (one advance
+  each in 2026-08/2026-09, each month returns exactly its own row); and
+  a `notes = null` advance completing without error.
+- **EC-P7-3** — ran a real manual script (temporary, deleted after use,
+  not committed) against a real SQLite file: advanced Rs 2,500 to one
+  staff member, then queried all three tables directly. Pasted output:
+  `party_ledger`: `amount: 250000, entry_type: 'advance', party_id:
+<staffId>`. `payment`: `amount: 250000, method: 'cash', doc_no:
+'PMT-0001', direction: 'out'`. `v_party_balance`:
+  `balance_paisa: 250000`. All three match EC-P7-3's exact wording.
+
+**Not done / deferred:**
+
+- P7-4 through P7-11 — next session.
+
+**Bugs found:** BUG-20 (LOW, documentation-only — see `PROJECT.md`).
+
+**Decisions taken:** none new — the port-shape/no-tenantId-parameter/
+inline-party_ledger-insert choices above all follow existing codebase
+precedent already established (and approved) in P7-1.
+
+**Blocked on:** nothing. BUG-20 needs an owner decision on whether to
+touch the `0001_init.sql` comment, but doesn't block any Phase 7 work.
+
+**Next session should:** start P7-4 (expense entry) per
+`docs/phases/PHASE_7.md`'s task table.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session (BUG-20 logged, LOW,
+      documentation-only, not introduced by this session's code)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (BUG-20)
+- [x] Test suite passing (377/377)
+
+---
+
+## [2026-09-06] Session 29 — Phase 7: P7-1/P7-2 (attendance entry backend + wage multiplier)
+
+**Goal:** Build P7-1 (attendance entry backend, no UI) per
+`docs/phases/PHASE_7.md`'s task table — repository, service, IPC — with
+the wage multiplier (P7-2) as its Step A pure-function dependency.
+
+**Done:**
+
+- Read the actual live DDL for `attendance` before writing anything —
+  confirmed `staff_id` (not `party_id`), `wage_earned INTEGER NOT NULL
+DEFAULT 0`, `attendance_date TEXT`, `UNIQUE(tenant_id, staff_id,
+attendance_date)` (0001_init.sql), and `business_unit_id` added later
+  (0003_shared_overhead.sql) — all matching the prior session's audit.
+- **`packages/core/src/payroll/wage.service.ts`** — pure function
+  `computeDayWage(status, wageRatePaisa)`, zero DB imports, the exact
+  multiplier table from PHASE_7.md §5. 6 unit tests, including the odd-rate
+  truncation case (`floor(60001/2) = 30000`, written in the test comment).
+- **`packages/core/src/payroll/attendance.repository.port.ts`** —
+  colocated in `payroll/`, not a new `packages/core/src/ports/` folder:
+  every existing port in this codebase (`job.repository.port.ts`,
+  `party.repository.port.ts`) lives next to its domain's service file,
+  so this follows that convention instead of introducing a new one.
+  Carries `businessUnitCode` ('PARTS'\|'REPAIR'\|'SHARED'), not a
+  pre-resolved `businessUnitId` — investigated how Phase 6 actually
+  handles this (grepped `job-delivery.service.ts`: zero hits;
+  `job.repository.ts`/`internal-transfer.repository.ts`: both resolve
+  `business_unit.code -> id` via a `selectFrom('businessUnit')` query
+  _inside their own transaction_) and followed that real precedent
+  instead of the two hypothetical options the kickoff brief offered
+  (service holding a `db` handle, or composition-root-injected ids) —
+  keeps `attendance.service.ts` genuinely pure. All port methods are
+  `Promise`-returning (`saveBatch`, `getMonthAttendance`), matching every
+  other port's async signature — the kickoff brief's draft had them
+  synchronous/`void`, which would have been the only sync port in the
+  codebase.
+- **`packages/core/src/payroll/attendance.service.ts`** — plain exported
+  async functions (`job.service.ts`'s pattern, not a class):
+  `deriveBusinessUnitCode` (technician→REPAIR, salesman→PARTS,
+  helper/null→SHARED) and `saveAttendanceBatch(repo, rows)`, which calls
+  `computeDayWage` and `deriveBusinessUnitCode` per row then makes one
+  `repo.saveBatch` call. 5 unit tests with a hand-rolled mock repo (no DB).
+- **`packages/db/src/kysely-schema.ts`** — `AttendanceTable` added,
+  registered on `Database`.
+- **`packages/db/src/repositories/attendance.repository.ts`** —
+  `KyselyAttendanceRepository`. `saveBatch`: one transaction, resolves
+  all three business-unit codes once per batch via a single
+  `selectFrom('businessUnit')` query (not one lookup per row), then
+  upserts each row via Kysely's `.onConflict((oc) =>
+oc.columns(['tenantId','staffId','attendanceDate']).doUpdateSet(...))`
+  — the exact idiom already used by `setting.repository.ts`'s
+  `(tenantId, key)` upsert (checked first per the brief's instruction;
+  no raw `INSERT OR REPLACE` used, and confirmed by grep that no table
+  has a FK to `attendance.id`, so keeping the original row's id on
+  conflict is safe either way). One `audit_log` row per batch
+  (`record_id` = the batch's date — `audit_log.record_id` carries no FK,
+  so this is a deliberate, meaningful choice for a save with no single
+  parent document id). `getMonthAttendance` filters with
+  `attendance_date LIKE 'YYYY-MM-%'` rather than a raw `strftime()`
+  fragment — simpler and sufficient for a plain ISO-date TEXT column,
+  a deviation from the brief's suggested SQL, noted here rather than
+  silently made.
+- **`apps/server/src/ipc/handlers/attendance.handler.ts`** —
+  `staff:saveAttendance` / `staff:getMonthAttendance`, following
+  `staff.handler.ts`'s established shape. Wired into `main.ts`
+  (the actual registration point — there is no `registry.ts` in this
+  codebase, the brief's reference to one didn't match the real file),
+  `preload.ts`, `apps/client/src/types/electron-api.d.ts`, and
+  `apps/server/src/ipc/channels.ts` (also not
+  `packages/contracts/src/channels.ts` as the brief said — channels
+  live server-side, `packages/contracts` only holds Zod schemas/DTOs).
+  **Deliberate deviation from the brief's literal Zod schema**: neither
+  `SaveAttendanceInput` nor `GetMonthAttendanceInput` accepts a
+  client-supplied `tenantId` — every other write handler in this
+  codebase (`staff.handler.ts`, `job-delivery.handler.ts`, ...) takes
+  `tenantId` from server-side handler deps, never from the untrusted
+  renderer (CLAUDE.md §3.5), so adding one new handler that accepts it
+  from the client would be a real, unnecessary trust-boundary
+  regression — not built.
+- New contracts: `packages/contracts/src/attendance/attendance.ts` —
+  `AttendanceStatus` (`z.enum`, matching `JobStatus`'s existing pattern,
+  not a TS `enum` per CODING_STANDARDS §1), `SaveAttendanceRowInput`,
+  `SaveAttendanceInput`, `GetMonthAttendanceInput`, `AttendanceRecordDto`.
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 67 passed (67)` /
+  `Tests 373 passed (373)` (356 baseline + 6 `wage.service.test.ts` + 5
+  `attendance.service.test.ts` + 6 `attendance.repository.test.ts`).
+- `attendance.repository.test.ts`'s 6 tests cover exactly EC-P7-1/EC-P7-2
+  from PHASE_7.md §4: a 3-staff/1-day batch save with correct per-row
+  values; the upsert guard (same staff+date saved twice, `absent`
+  replaces `present`, row count stays 1); `business_unit_id` confirmed
+  by joining to `business_unit.code` (never by asserting a raw UUID);
+  the exact 5-status wage table at Rs 600/day; `getMonthAttendance`
+  month-filtering; and the EC-P7-2 reconciliation itself — 22 `present`
+  - 3 `half_day` + 5 `absent` at `wageRatePaisa = 60000`,
+    `SUM(wage_earned)` asserted to equal exactly `1,410,000` paisa (hand-
+    calc in the test comment: `(22 + 3×0.5) × 60000 = 23.5 × 60000 =
+1,410,000`).
+- Beyond the automated suite, ran a real manual script (temporary,
+  deleted after use, not committed) creating 3 staff (technician/
+  salesman/helper) and saving attendance for all 3 across 26 days each
+  (78 rows total) against a real SQLite file — matching EC-P7-1's exact
+  "3 staff × 26 days" wording. Pasted output: `COUNT(*) = 78`; a 9-row
+  spot-check (3 staff × 3 dates) showing correct `wage_earned` and
+  `business_unit.code` per row (Naeem→REPAIR/60000, Rashid→PARTS/50000,
+  Kamran→SHARED/40000, with the `half_day` date correctly halved); then
+  re-saved one already-saved (staff, date) as `absent` and confirmed by
+  direct query — `count=1, status='absent', wage_earned=0` — proving the
+  duplicate-date guard replaces rather than appends, on a real database,
+  not just in the unit test.
+
+**Not done / deferred:**
+
+- P7-3 through P7-11 — next session, per PHASE_7.md's task table.
+
+**Bugs found:** none this session.
+
+**Decisions taken:** none new — all implementation-pattern choices above
+(port method shape, business-unit-code-vs-id boundary, upsert idiom,
+month-filter SQL, no client-supplied tenantId) were derived from existing
+codebase precedent, not new design decisions requiring owner sign-off;
+each is stated with its reasoning above and in the code's own comments.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-3 (advances/peshgi) per
+`docs/phases/PHASE_7.md`'s task table — attendance and wage computation
+now both exist for P7-7's wage report to eventually read.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (373/373)
+
+---
+
+## [2026-09-06] Session 28 — Phase 7 planning + P7-0 (schema audit, expense_category seed, staff creation)
+
+**Goal:** Plan Phase 7 (Staff, Wages, Expenses) from the live schema, get
+owner sign-off on every design conflict/gap, then implement P7-0.
+
+**Done:**
+
+- Full schema audit of `attendance`/`expense`/`expense_category`/
+  `cash_session`/`party` against the live migrations (0001-0012), not the
+  kickoff brief's assumptions. Found the brief's own DC-2/DC-5 design
+  constraints contradicted live column comments (`attendance.wage_earned`
+  says "computed at entry"; `cash_session.difference`/`expected_cash` say
+  "computed at close") — flagged, owner resolved both in favour of the
+  live schema (Corrections 1/2 in `docs/phases/PHASE_7.md` §5).
+- A first audit pass wrongly concluded `expense.business_unit_id` and
+  `expense_category.allocation_method`/`parts_share_bp` were missing —
+  a second full grep across all 12 migrations found both already added
+  in `0002`/`0003`, plus `attendance.business_unit_id` (also unmentioned
+  in the kickoff brief). Caught and corrected before building anything
+  (Corrections A/B/C, `docs/phases/PHASE_7.md` §5) — this is the second
+  time this project's session-start audits have needed a self-correction
+  after missing an `ALTER TABLE` in a later migration file; worth a
+  standing habit of grepping all migrations, never just the `CREATE
+TABLE`, before declaring a column missing.
+- `docs/phases/PHASE_7.md` written and approved verbatim — the binding
+  spec for all of Phase 7 (P7-0 through P7-11), including every design
+  decision, hand-calculated exit criteria, and what's explicitly
+  deferred (overhead allocation reporting, `service_charge` commission
+  columns).
+- **P7-0 implemented and verified:**
+  - Schema re-audit re-run and pasted — confirmed no new migration
+    needed; two grep hits outside Phase 7's scope (`party_ledger` bill
+    metadata from 0004, `party.payment_terms` from 0005) flagged as
+    substring-match noise, not new gaps.
+  - `packages/db/src/bootstrap.ts`: `seedExpenseCategories()` — global
+    `COUNT(*) = 0` gate (not the per-name pattern the other seed
+    functions use, per PHASE_7.md's explicit instruction), seeds the 6
+    starting categories (Electricity/Rent → `shared_revenue`; Bike
+    Fuel/Courier/Petrol/Miscellaneous → `direct`), never touches
+    existing rows. `SeedResult` gained `expenseCategoriesInserted`.
+  - `packages/contracts/src/party/staff.ts` (new): `StaffCreateInput`,
+    `StaffDto`. `packages/core/src/party/party.repository.port.ts`
+    widened with `StaffRole`/`NewStaffInput`/`NewStaffResult`/
+    `StaffRecord` and `createStaff`/`listStaff` on `PartyRepositoryPort`.
+  - `packages/db/src/kysely-schema.ts`: `PartyTable` gained `wageRate`/
+    `commissionBp` (camelCase, `CamelCasePlugin` maps to the existing
+    `wage_rate`/`commission_bp` columns — no migration).
+  - `packages/db/src/repositories/party.repository.ts`: `createStaff`
+    (one transaction: `party` insert with `party_type='staff'`,
+    `STF-NNNN` via a new `document_sequence` row seeded on first use,
+    `audit_log`, `sync_outbox`; wrapped in `withRetry` per BUG-15) and
+    `listStaff` (party_type='staff', deleted_at IS NULL, ordered by
+    name). `business_unit_id` deliberately left NULL on `party` —
+    Correction C puts that derivation on `attendance`, not here.
+  - New IPC surface: `staff:create`/`staff:listStaff` — channels,
+    `staff.handler.ts`, wired into `main.ts`, `preload.ts`,
+    `electron-api.d.ts`.
+  - New UI: `apps/client/src/pages/staff/` (`StaffPage.tsx`,
+    `AddStaffModal.tsx`, `StaffListView.tsx`), same list+modal pattern as
+    `SuppliersPage`/`CustomersPage`. Added a `staff` nav tab — Alt+1..9
+    were all already taken by existing tabs, so used `0` (Alt+0) as the
+    next free single-character shortcut on the same `event.key`-matching
+    scheme; not something PHASE_7.md explicitly asked for, but P7-1
+    (attendance) has nothing to point staff at otherwise. The role
+    selector shows the PHASE_7.md Correction C derived-unit text
+    ("→ Repair unit" / "→ Spare Parts unit" / "→ Shared") as read-only
+    display next to the Role field — never an input.
+
+**Verified:**
+
+- `npm run verify` — raw output: `Test Files 64 passed (64)` /
+  `Tests 356 passed (356)` (350 baseline + 6 new: 2 in
+  `bootstrap.test.ts` for the expense_category seed, 4 in
+  `party.repository.test.ts` for `createStaff`/`listStaff`).
+- Manual query (temporary script, deleted after use, not committed):
+  created 3 staff — Naeem/technician/60000 paisa/1000bp,
+  Rashid/salesman/50000 paisa/0bp, Kamran/helper/40000 paisa/0bp — then
+  `SELECT ... FROM party WHERE party_type = 'staff' ORDER BY
+party_code` against the real SQLite file. Pasted result: 3 rows,
+  codes `STF-0001`/`STF-0002`/`STF-0003` in sequence, all fields
+  matching exactly what was inserted, `party_type = 'staff'` on all
+  three.
+- `bootstrap.test.ts`'s idempotency test: seeding twice inserts 6 rows
+  the first time, 0 the second — pasted, not assumed.
+
+**Not done / deferred:**
+
+- P7-1 through P7-11 — next session, one at a time per PHASE_7.md's task
+  table.
+
+**Bugs found:** none this session (the two schema-audit corrections were
+found and fixed before any code was written, in the planning
+conversation — not logged as bugs since nothing was ever built on the
+wrong assumption).
+
+**Decisions taken:** none new (all decisions were made in the planning
+conversation and are recorded in `docs/phases/PHASE_7.md` §5).
+
+**Blocked on:** nothing.
+
+**Next session should:** start P7-1 (attendance entry backend) per
+`docs/phases/PHASE_7.md`'s task table — at least one staff row now
+exists via P7-0's UI, so attendance has something to attach to.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (staff creation exists before
+      attendance needs it)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (356/356)
+
+---
+
 ## [2026-09-05] Session 27 — Phase 6/6.5 post-completion dead-code cleanup
 
 **Goal:** Audit and remove dead code left behind by the multiple Jobs

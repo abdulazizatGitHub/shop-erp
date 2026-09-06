@@ -86,5 +86,36 @@ export function NavIcon({ tab }: { readonly tab: Tab }): React.JSX.Element {
           <path d="M9 8V6a3 3 0 0 1 6 0v2" />
         </svg>
       );
+    case 'staff':
+      return (
+        <svg {...SHARED_PROPS} aria-hidden="true">
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" />
+        </svg>
+      );
+    case 'expenses':
+      return (
+        <svg {...SHARED_PROPS} aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 2.5-1h.3a2.2 2.2 0 0 1 0 4.4h-.6a2.2 2.2 0 0 0 0 4.4h.3a2.5 2.5 0 0 0 2.5-1" />
+        </svg>
+      );
+    case 'dashboard':
+      return (
+        <svg {...SHARED_PROPS} aria-hidden="true">
+          <rect x="3" y="3" width="8" height="8" rx="1" />
+          <rect x="13" y="3" width="8" height="5" rx="1" />
+          <rect x="13" y="10" width="8" height="11" rx="1" />
+          <rect x="3" y="13" width="8" height="8" rx="1" />
+        </svg>
+      );
+    case 'attendance':
+      return (
+        <svg {...SHARED_PROPS} aria-hidden="true">
+          <rect x="3" y="4" width="18" height="17" rx="1" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <path d="M7 13l2.5 2.5L15 10" />
+        </svg>
+      );
   }
 }

@@ -151,8 +151,10 @@ export interface PartyTable {
   customerType: string | null;
   priceLevelId: string | null;
   creditLimit: number | null;
-  // staff-specific — added P6-8. See 0001_init.sql's party table.
+  // staff-specific — added P6-8/Phase 7. See 0001_init.sql's party table.
   staffRole: string | null;
+  wageRate: number | null;
+  commissionBp: number | null;
   notes: string | null;
   isActive: number;
   createdAt: string;
@@ -440,6 +442,79 @@ export interface JobStatusHistoryTable {
   note: string | null;
 }
 
+/** See 0001_init.sql's cash_session table. Phase 7. Not append-only — the close path updates the same row (PHASE_7.md §5 Correction 2). */
+export interface CashSessionTable {
+  id: string;
+  tenantId: string;
+  sessionDate: string;
+  openedAt: string;
+  closedAt: string | null;
+  openingCash: number;
+  expectedCash: number | null;
+  countedCash: number | null;
+  difference: number | null;
+  openedBy: string | null;
+  closedBy: string | null;
+  notes: string | null;
+}
+
+/** See 0001_init.sql's expense_category table + 0003_shared_overhead.sql's ALTER. Phase 7. */
+export interface ExpenseCategoryTable {
+  id: string;
+  tenantId: string;
+  name: string;
+  kind: string;
+  isBillable: number;
+  isOwnerDrawing: number;
+  sortOrder: number;
+  deletedAt: string | null;
+  allocationMethod: string;
+  partsShareBp: number | null;
+}
+
+/**
+ * See 0001_init.sql's expense table + 0002_business_units.sql's ALTER.
+ * Phase 7. Note: the live DDL's free-text column is `description`, not
+ * `notes` — the contracts-layer DTO/input still use `notes`, mapped in
+ * expense.repository.ts, same convention as party.wage_rate <-> wageRatePaisa.
+ */
+export interface ExpenseTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  categoryId: string;
+  expenseDate: string;
+  amount: number;
+  paidTo: string | null;
+  partyId: string | null;
+  method: string;
+  referenceNo: string | null;
+  jobId: string | null;
+  saleId: string | null;
+  vehicle: string | null;
+  description: string | null;
+  receiptPath: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  businessUnitId: string | null;
+}
+
+/** See 0001_init.sql's attendance table + 0003_shared_overhead.sql's ALTER. Phase 7. */
+export interface AttendanceTable {
+  id: string;
+  tenantId: string;
+  staffId: string;
+  attendanceDate: string;
+  status: string;
+  hoursWorked: number | null;
+  overtimeHours: number | null;
+  wageEarned: number;
+  note: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  businessUnitId: string | null;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -469,4 +544,8 @@ export interface Database {
   internalTransfer: InternalTransferTable;
   internalTransferLine: InternalTransferLineTable;
   custodyReconciliation: CustodyReconciliationTable;
+  attendance: AttendanceTable;
+  expenseCategory: ExpenseCategoryTable;
+  expense: ExpenseTable;
+  cashSession: CashSessionTable;
 }

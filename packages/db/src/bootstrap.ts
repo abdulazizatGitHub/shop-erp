@@ -7,6 +7,7 @@ export interface SeedResult {
   readonly priceLevelsInserted: number;
   readonly uomsInserted: number;
   readonly warehousesInserted: number;
+  readonly expenseCategoriesInserted: number;
 }
 
 interface BusinessUnitSeed {
@@ -27,6 +28,26 @@ const BUSINESS_UNITS: readonly BusinessUnitSeed[] = [
 
 const DEFAULT_PRICE_LEVEL_NAME = 'Retail';
 const DEFAULT_WAREHOUSE_NAME = 'Shop';
+
+interface ExpenseCategorySeed {
+  readonly name: string;
+  readonly kind: 'fixed' | 'variable';
+  readonly allocationMethod: 'direct' | 'shared_revenue';
+}
+
+// PHASE_7.md §5 Correction B — starting categories only, seeded once. No
+// parts_share_bp is set on any row (Q10, allocation percentages, stays
+// OPEN in PROJECT.md) — shared_revenue categories flow into
+// v_overhead_pool ungrouped by a fixed split until that question is
+// answered.
+const EXPENSE_CATEGORIES: readonly ExpenseCategorySeed[] = [
+  { name: 'Electricity', kind: 'fixed', allocationMethod: 'shared_revenue' },
+  { name: 'Rent', kind: 'fixed', allocationMethod: 'shared_revenue' },
+  { name: 'Bike Fuel', kind: 'variable', allocationMethod: 'direct' },
+  { name: 'Courier', kind: 'variable', allocationMethod: 'direct' },
+  { name: 'Petrol', kind: 'variable', allocationMethod: 'direct' },
+  { name: 'Miscellaneous', kind: 'variable', allocationMethod: 'direct' },
+];
 
 // P1-0's minimum set, per the owner's explicit instruction. More can be
 // added later through normal CRUD — this is only the bootstrap floor.
@@ -166,6 +187,30 @@ function seedUomConversions(db: Database.Database, tenantId: string): number {
   return inserted;
 }
 
+// Global gate (COUNT(*) = 0), not the per-name existence check the other
+// seed* functions use above — PHASE_7.md §5/Correction B specifies this
+// exact shape: seed the 6 starting categories only on a genuinely empty
+// table, and never touch existing category rows otherwise (an owner may
+// already have renamed/added categories by the time this runs).
+function seedExpenseCategories(db: Database.Database, tenantId: string): number {
+  const { count } = db
+    .prepare(`SELECT COUNT(*) AS count FROM expense_category WHERE tenant_id = ?`)
+    .get(tenantId) as { count: number };
+  if (count > 0) return 0;
+
+  let inserted = 0;
+  EXPENSE_CATEGORIES.forEach((cat, index) => {
+    db.prepare(
+      `INSERT INTO expense_category
+         (id, tenant_id, name, kind, is_billable, is_owner_drawing, sort_order,
+          allocation_method, parts_share_bp, deleted_at)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?, NULL, NULL)`,
+    ).run(newId(), tenantId, cat.name, cat.kind, index, cat.allocationMethod);
+    inserted += 1;
+  });
+  return inserted;
+}
+
 function seedWarehouse(db: Database.Database, tenantId: string): number {
   const existing = db
     .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND name = ?`)
@@ -194,6 +239,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     priceLevelsInserted: 0,
     uomsInserted: 0,
     warehousesInserted: 0,
+    expenseCategoriesInserted: 0,
   };
 
   const runSeed = db.transaction(() => {
@@ -207,12 +253,14 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     // shape unchanged from before P3.5E).
     seedUomConversions(db, tenantId);
     const warehousesInserted = seedWarehouse(db, tenantId);
+    const expenseCategoriesInserted = seedExpenseCategories(db, tenantId);
     result = {
       tenantInserted,
       businessUnitsInserted,
       priceLevelsInserted,
       uomsInserted,
       warehousesInserted,
+      expenseCategoriesInserted,
     };
   });
   runSeed();

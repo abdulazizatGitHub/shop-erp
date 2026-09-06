@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('seed', () => {
-  it('inserts the tenant, three business units, one price level, ten uoms, one warehouse', () => {
+  it('inserts the tenant, three business units, one price level, ten uoms, one warehouse, six expense categories', () => {
     const db = new Database(dbPath);
     const result = seed(db, TENANT_ID);
     db.close();
@@ -34,6 +34,7 @@ describe('seed', () => {
       priceLevelsInserted: 1,
       uomsInserted: 10,
       warehousesInserted: 1,
+      expenseCategoriesInserted: 6,
     });
   });
 
@@ -49,6 +50,7 @@ describe('seed', () => {
       priceLevelsInserted: 0,
       uomsInserted: 0,
       warehousesInserted: 0,
+      expenseCategoriesInserted: 0,
     });
   });
 
@@ -112,6 +114,92 @@ describe('seed', () => {
       'Milliliter',
       'Piece',
     ]);
+  });
+});
+
+describe('seed — expense_category (PHASE_7.md §5, Correction B)', () => {
+  it('seeds exactly the 6 starting categories with the right kind/allocation_method', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const rows = db
+      .prepare(
+        `SELECT name, kind, allocation_method, parts_share_bp, is_billable, is_owner_drawing
+         FROM expense_category WHERE tenant_id = ? ORDER BY sort_order`,
+      )
+      .all(TENANT_ID);
+    db.close();
+
+    expect(rows).toEqual([
+      {
+        name: 'Electricity',
+        kind: 'fixed',
+        allocation_method: 'shared_revenue',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+      {
+        name: 'Rent',
+        kind: 'fixed',
+        allocation_method: 'shared_revenue',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+      {
+        name: 'Bike Fuel',
+        kind: 'variable',
+        allocation_method: 'direct',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+      {
+        name: 'Courier',
+        kind: 'variable',
+        allocation_method: 'direct',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+      {
+        name: 'Petrol',
+        kind: 'variable',
+        allocation_method: 'direct',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+      {
+        name: 'Miscellaneous',
+        kind: 'variable',
+        allocation_method: 'direct',
+        parts_share_bp: null,
+        is_billable: 0,
+        is_owner_drawing: 0,
+      },
+    ]);
+  });
+
+  it('does not touch existing expense_category rows — global COUNT gate, not per-name', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID); // migrations already applied; seed the baseline first
+    db.prepare(
+      `DELETE FROM expense_category WHERE tenant_id = ?`, // reset to genuinely empty
+    ).run(TENANT_ID);
+    db.prepare(
+      `INSERT INTO expense_category (id, tenant_id, name, kind, is_billable, is_owner_drawing, sort_order)
+       VALUES ('owner-added-id', ?, 'Owner Custom Category', 'variable', 0, 0, 0)`,
+    ).run(TENANT_ID);
+
+    const result = seed(db, TENANT_ID);
+    const rows = db
+      .prepare(`SELECT name FROM expense_category WHERE tenant_id = ?`)
+      .all(TENANT_ID) as Array<{ name: string }>;
+    db.close();
+
+    expect(result.expenseCategoriesInserted).toBe(0);
+    expect(rows).toEqual([{ name: 'Owner Custom Category' }]);
   });
 });
 

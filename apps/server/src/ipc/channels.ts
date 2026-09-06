@@ -29,6 +29,25 @@ export const channels = {
     get: 'customer:get',
     balance: 'customer:balance',
   },
+  staff: {
+    create: 'staff:create',
+    listStaff: 'staff:listStaff',
+    saveAttendance: 'staff:saveAttendance',
+    getMonthAttendance: 'staff:getMonthAttendance',
+    recordAdvance: 'staff:recordAdvance',
+    listAdvances: 'staff:listAdvances',
+  },
+  expense: {
+    create: 'expense:create',
+    list: 'expense:list',
+    listCategories: 'expense:listCategories',
+    listBusinessUnits: 'expense:listBusinessUnits',
+  },
+  cashSession: {
+    open: 'cashSession:open',
+    close: 'cashSession:close',
+    today: 'cashSession:today',
+  },
   purchase: {
     create: 'purchase:create',
     cancel: 'purchase:cancel',
@@ -60,6 +79,7 @@ export const channels = {
     stockValuation: 'report:stockValuation',
     cashBook: 'report:cashBook',
     unitPl: 'report:unitPl',
+    wageMonth: 'report:wageMonth',
   },
   importData: {
     dryRun: 'import:dryRun',

@@ -43,18 +43,26 @@ export interface ServiceChargeOption {
  * core port/service pattern used for item writes. Not a precedent for
  * skipping it on anything that has an actual rule attached.
  */
+/**
+ * includeOverhead=false (default) preserves the existing item:lookups
+ * behaviour (items only ever belong to PARTS/REPAIR). Phase 7's expense
+ * form needs all three units, including SHARED — pass true there rather
+ * than duplicating this query.
+ */
 export async function listBusinessUnits(
   db: Kysely<Database>,
   tenantId: string,
+  includeOverhead = false,
 ): Promise<readonly BusinessUnitOption[]> {
-  const rows = await db
+  let query = db
     .selectFrom('businessUnit')
     .select(['id', 'code', 'name'])
     .where('tenantId', '=', tenantId)
-    .where('isActive', '=', 1)
-    .where('isOverhead', '=', 0)
-    .orderBy('sortOrder')
-    .execute();
+    .where('isActive', '=', 1);
+  if (!includeOverhead) {
+    query = query.where('isOverhead', '=', 0);
+  }
+  const rows = await query.orderBy('sortOrder').execute();
   return rows;
 }
 

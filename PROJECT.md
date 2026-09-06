@@ -3,10 +3,39 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
 **Current phase:** Phase 5 — Deploy + parallel run (blocked); Phase 6 —
 Repair Jobs & the Two-Unit Split (code-complete, P6-0 through P6-10 —
-UI not yet visually verified in a running window)
+UI not yet visually verified in a running window); **Phase 7 — Staff,
+Wages, and Expenses is now CODE-COMPLETE** (P7-0 through P7-11 all
+done: schema re-audit, `expense_category` seed, staff party creation +
+UI, attendance entry backend + UI with wage computation and
+business-unit derivation, advances/peshgi backend + UI, expense entry
+backend + UI, cash session open/close + dashboard widget, commission on
+labour posted after job delivery, read-only monthly wage report + UI —
+see `docs/phases/PHASE_7.md`). **Phase 7 has now been VISUALLY VERIFIED
+WITH KNOWN ISSUES** in a real, running, built Electron window (Playwright
+`_electron`-driven click-through, 2026-09-06) — all 7 user-facing
+workflows (staff creation, full-month attendance grid incl. persistence
+across app restart, peshgi/advance recording, expense entry, cash
+session open/close incl. hand-verified expected-cash/variance math, job
+delivery with commission posting confirmed by direct `party_ledger`
+query, and the monthly wage report with every Gross/Advances/
+Commission/Net-Due figure hand-calculated in advance and matched
+exactly against the screen) were exercised end-to-end against real data
+and passed. The app's first Dashboard page
+(`apps/client/src/pages/dashboard/`) was added in P7-5, since no home/
+dashboard page existed anywhere in the codebase before — `sales`
+remains the default tab. **BUG-21** (Add Expense form's
+Business-Unit-required guard never actually fired against real data
+because the select always defaulted to a non-blank unit — MEDIUM) was
+found during this click-through and has since been **FIXED** in a
+targeted follow-up session, 2026-09-06 — see Known Bugs for the fix
+detail and verification. BUG-20
+(`party_ledger.entry_type` schema comment vs. actual value,
+documentation-only) remains open, LOW. **All Phase 7 work
+(P7-0–P7-11 plus this verification session) is still uncommitted** —
+HEAD remains at `283c403`, the pre-Phase-7 commit.
 **Phase status:** Phase 5 remains **IN PROGRESS, BLOCKED on `BUG-PACK-1`**
 (CRITICAL, OPEN — no working packaged installer at any commit; P5-1 not
 started) — unchanged, not investigated this session. **Phase 6 is now
@@ -207,7 +236,7 @@ this setting.
 | 5     | Deploy + parallel run                     | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                        | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
 | 6     | Repair jobs (two-unit split)              | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                          | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
 | 6.5   | Jobs UI modernisation (modal → full page) | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
-| 7     | Staff, wages, expenses                    | NOT STARTED                                                                                                                                                | —                                                                                                                                     |
+| 7     | Staff, wages, expenses                    | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                         | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
 | 8     | Bug-fix & hardening                       | NOT STARTED                                                                                                                                                | —                                                                                                                                     |
 
 ---
@@ -1586,6 +1615,82 @@ unreachable from the app despite being fully built server-side.
 Fix: either build a UI for internal transfers, or remove the channel/
 handler/type together in a dedicated backend-touching session.
 Status: UNFIXED — decision deferred, same reasoning as DEBT-2.
+
+### BUG-20: `party_ledger` schema comment lists `staff_advance`, Phase 7 code writes `advance` — LOW, documentation-only
+
+Found in: Phase 7, 2026-09-06, while building P7-3 (advances/peshgi).
+Description: `0001_init.sql`'s `party_ledger.entry_type` column comment
+enumerates `staff_advance` as the intended value for a staff advance row.
+`docs/phases/PHASE_7.md` §5 GAP-4 (approved by the owner) and this
+session's implementation both use `entry_type = 'advance'` instead.
+Impact: None functionally — confirmed by grep that zero `CHECK`
+constraints exist anywhere in this schema; `entry_type` is enforced in
+application code only, so no INSERT is rejected either way. Purely a
+documentation/comment vs. actual-value mismatch. A future reader running
+`SELECT DISTINCT entry_type FROM party_ledger` will see `advance`, not
+the `staff_advance` the schema comment promises.
+Fix: either update the `0001_init.sql` comment in a docs-only follow-up
+(migrations are never edited after being applied, but a comment-only
+change to an applied migration file is sometimes done for documentation
+accuracy — confirm with the owner first) or accept `advance` as the
+now-correct value and leave the stale comment as historical noise.
+Status: UNFIXED — flagged, not blocking, owner to decide which side wins.
+
+### BUG-21: Add Expense form's "Business Unit required" validation never actually fires — MEDIUM — FIXED
+
+Found in: Phase 7 visual verification session, 2026-09-06, Workflow 4
+(expenses), while deliberately submitting the form with no Business Unit
+selected to confirm the guard the spec calls for.
+Description: `AddExpenseModal.tsx`'s initial form state sets
+`businessUnitId: businessUnits[0]?.id ?? ''`. Since `businessUnits`
+(PARTS/REPAIR/SHARED) is always non-empty in real usage, the select is
+never actually blank — it always defaults to the first business unit
+(PARTS) the moment the modal opens. The existing check
+(`if (form.businessUnitId.length === 0) { setError('Select which unit
+this cost belongs to') }`) can therefore never fire against real data;
+it only fires in the artificial "zero units loaded" scenario. Confirmed
+by direct click-through: submitting with no explicit selection silently
+saved a 4th expense row (Electricity, Rs 100, PARTS, Till) with no
+validation error shown.
+Impact: A user can save an expense to the wrong business unit purely by
+not touching the dropdown, with no warning — this directly risks
+blurring the Spare Parts / Repair separation that is "the primary
+reason this software exists" (CLAUDE.md §1). Not CRITICAL because the
+unit can still be corrected via a reversing entry and no money/stock
+figure is silently wrong (the amount and category are still correct) —
+but MEDIUM because the wrong-unit risk is realistic and the guard was
+specified precisely to prevent it.
+Also note: this exact gap was invisible to the existing P7-9 component
+test (`ExpensesPage.test.tsx`) because that test mocks
+`listBusinessUnits` to resolve `[]`, which is not representative of
+real runtime data (`businessUnits[0]?.id` really is `''` when the list
+is empty, so the test's assertion passes without exercising the real
+bug). A future test for this guard should seed `listBusinessUnits`
+with the real PARTS/REPAIR/SHARED units and confirm the placeholder
+option, not an empty array.
+Fix: added a real blank/placeholder `<option value="" disabled>Select
+unit...</option>` to the Business Unit `<select>` in
+`AddExpenseModal.tsx`, and changed the initial form state and the
+open-modal reset effect to `businessUnitId: ''` (removed the
+`businessUnits[0]?.id ?? ''` default entirely). The pre-existing
+length-check validation (`if (form.businessUnitId.length === 0) {
+setError(...) }`) now fires as originally intended with no other logic
+changes. `CreateExpenseInput.businessUnitId` (`z.string().uuid()`,
+`packages/contracts/src/expense/expense.ts`) was confirmed to also
+reject an empty string as a defense-in-depth backstop, though the
+frontend check now catches it first with a visible red `Alert` banner
+(same pattern used for the pre-existing category/amount checks).
+`ExpensesPage.test.tsx`'s P7-9 test for this guard was also corrected
+to seed `listBusinessUnits` with the real PARTS/REPAIR/SHARED units
+(previously `[]`, the exact blind spot this bug exploited) and to
+assert the select's value is `''` on open.
+Status: FIXED, 2026-09-06. Verified via `npm run verify` (416/416,
+lint/typecheck clean) and a real click-through in a built, running
+Electron window: the placeholder shows on open, submitting without
+selecting a unit shows the visible error and is blocked, and selecting
+a unit and submitting creates the expense with the correct
+`business_unit_id` (confirmed EXP-0005 saved as REPAIR after selecting
+Repair).
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 

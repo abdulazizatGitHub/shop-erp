@@ -83,6 +83,33 @@ export interface CustomerBalance {
   readonly balancePaisa: number;
 }
 
+/** 'technician' | 'salesman' | 'helper' — PHASE_7.md §5 GAP-9. */
+export type StaffRole = 'technician' | 'salesman' | 'helper';
+
+export interface NewStaffInput {
+  readonly name: string;
+  readonly phone: string;
+  readonly staffRole: StaffRole;
+  readonly wageRatePaisa: number;
+  readonly commissionBp: number;
+}
+
+export interface NewStaffResult {
+  readonly id: string;
+  readonly partyCode: string;
+}
+
+export interface StaffRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly phone: string | null;
+  readonly staffRole: StaffRole;
+  readonly wageRatePaisa: number;
+  readonly commissionBp: number;
+  readonly partyCode: string;
+  readonly createdAt: string;
+}
+
 export interface PartyRepositoryPort {
   /**
    * Inserts the party row with party_type = 'supplier'. Generates
@@ -106,4 +133,18 @@ export interface PartyRepositoryPort {
   searchCustomers(query: CustomerSearchQuery): Promise<readonly CustomerRecord[]>;
   /** Reads v_party_balance — never re-implements the SUM in TypeScript. */
   getCustomerBalance(customerId: string): Promise<CustomerBalance>;
+
+  /**
+   * Inserts the party row with party_type = 'staff'. Generates partyCode
+   * via document_sequence (doc_type = 'staff', prefix STF) when no code
+   * is supplied — this port never accepts an explicit code, unlike
+   * supplier/customer, since nothing needs to import staff in bulk yet.
+   * business_unit_id is NOT set here (PHASE_7.md Correction C — that
+   * column belongs to `attendance`, derived at save time, not `party`).
+   */
+  createStaff(input: NewStaffInput): Promise<NewStaffResult>;
+  /** party_type = 'staff', deleted_at IS NULL, ordered by name. */
+  listStaff(): Promise<readonly StaffRecord[]>;
+  /** One staff member by id, or null if not found / not party_type='staff'. */
+  getStaffById(id: string): Promise<StaffRecord | null>;
 }

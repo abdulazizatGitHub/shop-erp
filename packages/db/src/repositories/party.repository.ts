@@ -6,9 +6,13 @@ import type {
   CustomerSearchQuery,
   NewCustomerInput,
   NewCustomerResult,
+  NewStaffInput,
+  NewStaffResult,
   NewSupplierInput,
   NewSupplierResult,
   PartyRepositoryPort,
+  StaffRecord,
+  StaffRole,
   SupplierBalance,
   SupplierRecord,
   SupplierSearchQuery,
@@ -23,6 +27,21 @@ const SUPPLIER_PARTY_TYPE = 'supplier';
 const CUSTOMER_CODE_DOC_TYPE = 'customer';
 const CUSTOMER_CODE_PREFIX = 'CUS';
 const CUSTOMER_PARTY_TYPE = 'customer';
+
+const STAFF_CODE_DOC_TYPE = 'staff';
+const STAFF_CODE_PREFIX = 'STF';
+const STAFF_PARTY_TYPE = 'staff';
+
+const STAFF_COLUMNS = [
+  'party.id',
+  'party.partyCode',
+  'party.name',
+  'party.phone',
+  'party.staffRole',
+  'party.wageRate',
+  'party.commissionBp',
+  'party.createdAt',
+] as const;
 
 const CUSTOMER_COLUMNS = [
   'party.id',
@@ -293,6 +312,144 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
     }
     return { customerId, balancePaisa: row.balancePaisa };
   }
+
+  private async nextStaffCode(trx: Kysely<Database>): Promise<string> {
+    const existing = await trx
+      .selectFrom('documentSequence')
+      .select('nextNumber')
+      .where('tenantId', '=', this.tenantId)
+      .where('docType', '=', STAFF_CODE_DOC_TYPE)
+      .where('deviceCode', '=', this.deviceCode)
+      .executeTakeFirst();
+
+    const nextNumber = existing?.nextNumber ?? 1;
+
+    if (existing) {
+      await trx
+        .updateTable('documentSequence')
+        .set({ nextNumber: nextNumber + 1 })
+        .where('tenantId', '=', this.tenantId)
+        .where('docType', '=', STAFF_CODE_DOC_TYPE)
+        .where('deviceCode', '=', this.deviceCode)
+        .execute();
+    } else {
+      await trx
+        .insertInto('documentSequence')
+        .values({
+          tenantId: this.tenantId,
+          docType: STAFF_CODE_DOC_TYPE,
+          prefix: STAFF_CODE_PREFIX,
+          deviceCode: this.deviceCode,
+          nextNumber: 2,
+        })
+        .execute();
+    }
+
+    return formatDisplayDocNumber(STAFF_CODE_PREFIX, nextNumber);
+  }
+
+  /**
+   * Write path — wrapped in withRetry per PROJECT.md BUG-15, same as
+   * createCustomer. business_unit_id is left NULL on the party row —
+   * PHASE_7.md Correction C derives and stores a unit on `attendance`,
+   * not on `party`, at attendance-save time.
+   */
+  async createStaff(input: NewStaffInput): Promise<NewStaffResult> {
+    return withRetry(() =>
+      this.db.transaction().execute(async (trx) => {
+        const partyCode = await this.nextStaffCode(trx);
+        const id = newId();
+        const now = new Date().toISOString();
+
+        await trx
+          .insertInto('party')
+          .values({
+            id,
+            tenantId: this.tenantId,
+            partyCode,
+            partyType: STAFF_PARTY_TYPE,
+            name: input.name,
+            shopName: null,
+            phone: input.phone,
+            cityArea: null,
+            paymentTerms: null,
+            customerType: null,
+            priceLevelId: null,
+            creditLimit: null,
+            staffRole: input.staffRole,
+            wageRate: input.wageRatePaisa,
+            commissionBp: input.commissionBp,
+            notes: null,
+            isActive: 1,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          })
+          .execute();
+
+        await trx
+          .insertInto('auditLog')
+          .values({
+            id: newId(),
+            tenantId: this.tenantId,
+            tableName: 'party',
+            recordId: id,
+            action: 'insert',
+            changedFields: null,
+            oldValues: null,
+            userId: null,
+            deviceCode: this.deviceCode,
+            createdAt: now,
+          })
+          .execute();
+
+        await trx
+          .insertInto('syncOutbox')
+          .values({
+            id: newId(),
+            tenantId: this.tenantId,
+            tableName: 'party',
+            recordId: id,
+            operation: 'insert',
+            payload: null,
+            createdAt: now,
+            syncedAt: null,
+            syncAttempts: 0,
+            lastError: null,
+          })
+          .execute();
+
+        return { id, partyCode };
+      }),
+    );
+  }
+
+  async getStaffById(id: string): Promise<StaffRecord | null> {
+    const row = await this.db
+      .selectFrom('party')
+      .select(STAFF_COLUMNS)
+      .where('party.id', '=', id)
+      .where('party.tenantId', '=', this.tenantId)
+      .where('party.partyType', '=', STAFF_PARTY_TYPE)
+      .where('party.deletedAt', 'is', null)
+      .executeTakeFirst();
+
+    if (!row) return null;
+    return toStaffRecord(row);
+  }
+
+  async listStaff(): Promise<readonly StaffRecord[]> {
+    const rows = await this.db
+      .selectFrom('party')
+      .select(STAFF_COLUMNS)
+      .where('party.tenantId', '=', this.tenantId)
+      .where('party.partyType', '=', STAFF_PARTY_TYPE)
+      .where('party.deletedAt', 'is', null)
+      .orderBy('party.name')
+      .execute();
+
+    return rows.map(toStaffRecord);
+  }
 }
 
 function toCustomerRecord(row: {
@@ -316,6 +473,28 @@ function toCustomerRecord(row: {
     priceLevelId: row.priceLevelId,
     creditLimitPaisa: row.creditLimit,
     notes: row.notes,
+  };
+}
+
+function toStaffRecord(row: {
+  id: string;
+  partyCode: string;
+  name: string;
+  phone: string | null;
+  staffRole: string | null;
+  wageRate: number | null;
+  commissionBp: number | null;
+  createdAt: string;
+}): StaffRecord {
+  return {
+    id: row.id,
+    partyCode: row.partyCode,
+    name: row.name,
+    phone: row.phone,
+    staffRole: row.staffRole as StaffRole,
+    wageRatePaisa: row.wageRate ?? 0,
+    commissionBp: row.commissionBp ?? 0,
+    createdAt: row.createdAt,
   };
 }
 

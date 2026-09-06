@@ -44,11 +44,28 @@ import type {
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
+  AdvanceDto,
+  AttendanceRecordDto,
+  CashSessionDto,
+  CloseSessionInput,
+  CreateExpenseInput,
+  ExpenseCategoryDto,
+  ExpenseDto,
+  GetMonthAttendanceInput,
+  ListAdvancesInput,
+  ListExpensesInput,
+  OpenSessionInput,
+  RecordAdvanceInput,
+  SaveAttendanceInput,
+  StaffCreateInput,
+  StaffDto,
   StockValuationReportDto,
   SupplierBalanceDto,
   SupplierDto,
   SupplierSearchInput,
   UnitPlReportDto,
+  WageMonthInput,
+  WageMonthRowDto,
 } from '@shop/contracts';
 import type {
   JobPartRecord,
@@ -57,6 +74,7 @@ import type {
   TechnicianCustodyRecord,
 } from '@shop/core';
 import type {
+  BusinessUnitOption,
   ReceiptPaperSize,
   ServiceChargeOption,
   TechnicianOption,
@@ -68,6 +86,7 @@ import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balanc
 import type { ImportResult } from './ipc/handlers/import.handler.js';
 import type { CreatePurchaseResult } from './ipc/handlers/purchase.handler.js';
 import type { CreateSupplierResult } from './ipc/handlers/supplier.handler.js';
+import type { CreateStaffResult } from './ipc/handlers/staff.handler.js';
 import type { SupplierBalanceImportResult } from './ipc/handlers/supplier-balance-import.handler.js';
 import type { BackupNowResult, RestoreResult } from './ipc/handlers/backup.handler.js';
 import type { CreateSaleAndPrintResult } from './printing/create-sale-and-print.js';
@@ -117,6 +136,42 @@ contextBridge.exposeInMainWorld('api', {
     balance: (id: string): Promise<SupplierBalanceDto> =>
       ipcRenderer.invoke(channels.party.balance, { id }) as Promise<SupplierBalanceDto>,
   },
+  staff: {
+    create: (input: StaffCreateInput): Promise<CreateStaffResult> =>
+      ipcRenderer.invoke(channels.staff.create, input) as Promise<CreateStaffResult>,
+    listStaff: (): Promise<readonly StaffDto[]> =>
+      ipcRenderer.invoke(channels.staff.listStaff) as Promise<readonly StaffDto[]>,
+    saveAttendance: (input: SaveAttendanceInput): Promise<void> =>
+      ipcRenderer.invoke(channels.staff.saveAttendance, input) as Promise<void>,
+    getMonthAttendance: (input: GetMonthAttendanceInput): Promise<readonly AttendanceRecordDto[]> =>
+      ipcRenderer.invoke(channels.staff.getMonthAttendance, input) as Promise<
+        readonly AttendanceRecordDto[]
+      >,
+    recordAdvance: (input: RecordAdvanceInput): Promise<AdvanceDto> =>
+      ipcRenderer.invoke(channels.staff.recordAdvance, input) as Promise<AdvanceDto>,
+    listAdvances: (input: ListAdvancesInput): Promise<readonly AdvanceDto[]> =>
+      ipcRenderer.invoke(channels.staff.listAdvances, input) as Promise<readonly AdvanceDto[]>,
+  },
+  expense: {
+    create: (input: CreateExpenseInput): Promise<ExpenseDto> =>
+      ipcRenderer.invoke(channels.expense.create, input) as Promise<ExpenseDto>,
+    list: (input: ListExpensesInput): Promise<readonly ExpenseDto[]> =>
+      ipcRenderer.invoke(channels.expense.list, input) as Promise<readonly ExpenseDto[]>,
+    listCategories: (): Promise<readonly ExpenseCategoryDto[]> =>
+      ipcRenderer.invoke(channels.expense.listCategories) as Promise<readonly ExpenseCategoryDto[]>,
+    listBusinessUnits: (): Promise<readonly BusinessUnitOption[]> =>
+      ipcRenderer.invoke(channels.expense.listBusinessUnits) as Promise<
+        readonly BusinessUnitOption[]
+      >,
+  },
+  cashSession: {
+    open: (input: OpenSessionInput): Promise<CashSessionDto> =>
+      ipcRenderer.invoke(channels.cashSession.open, input) as Promise<CashSessionDto>,
+    close: (input: CloseSessionInput): Promise<CashSessionDto> =>
+      ipcRenderer.invoke(channels.cashSession.close, input) as Promise<CashSessionDto>,
+    today: (): Promise<CashSessionDto | null> =>
+      ipcRenderer.invoke(channels.cashSession.today) as Promise<CashSessionDto | null>,
+  },
   purchase: {
     create: (input: CreatePurchaseInput): Promise<CreatePurchaseResult> =>
       ipcRenderer.invoke(channels.purchase.create, input) as Promise<CreatePurchaseResult>,
@@ -164,6 +219,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.report.cashBook, input) as Promise<readonly CashBookRowDto[]>,
     unitPl: (): Promise<UnitPlReportDto> =>
       ipcRenderer.invoke(channels.report.unitPl) as Promise<UnitPlReportDto>,
+    wageMonth: (input: WageMonthInput): Promise<readonly WageMonthRowDto[]> =>
+      ipcRenderer.invoke(channels.report.wageMonth, input) as Promise<readonly WageMonthRowDto[]>,
   },
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>

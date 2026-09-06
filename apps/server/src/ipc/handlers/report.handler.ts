@@ -2,9 +2,11 @@ import { ipcMain } from 'electron';
 import {
   CashBookReportInput,
   DailySalesReportInput,
+  WageMonthInput,
   type CashBookRowDto,
   type DailySalesReportRowDto,
   type ReceivablesAgingRowDto,
+  type WageMonthRowDto,
 } from '@shop/contracts';
 import {
   createKyselyDb,
@@ -13,6 +15,7 @@ import {
   getReceivablesAgingReport,
   getStockValuationReport,
   getUnitPlReport,
+  getWageMonthReport,
   openDatabase,
   type StockValuationReport,
   type UnitPlReport,
@@ -97,6 +100,19 @@ export function registerReportHandlers(deps: ReportHandlerDeps): void {
       const db = openDatabase(deps.dbPath);
       try {
         return await getUnitPlReport(createKyselyDb(db), deps.tenantId, ALL_TIME_FROM, todayIso());
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.report.wageMonth,
+    withError(async (_event, raw: unknown): Promise<readonly WageMonthRowDto[]> => {
+      const input = WageMonthInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getWageMonthReport(createKyselyDb(db), deps.tenantId, input.year, input.month);
       } finally {
         db.close();
       }

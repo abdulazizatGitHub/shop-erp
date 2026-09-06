@@ -598,3 +598,131 @@ describe('KyselyPartyRepository — customer', () => {
     expect(customerBalance.balancePaisa).toBe(250000);
   });
 });
+
+describe('KyselyPartyRepository.createStaff / listStaff (PHASE_7.md §5 GAP-9)', () => {
+  it('auto-generates a staff code, format STF-0001, and stores staff-specific columns', async () => {
+    // Rs 600/day -> 60000 paisa; 10% -> 1000 basis points.
+    const result = await repo.createStaff({
+      name: 'Naeem',
+      phone: '03001112222',
+      staffRole: 'technician',
+      wageRatePaisa: 60000,
+      commissionBp: 1000,
+    });
+
+    expect(result.partyCode).toBe('STF-0001');
+
+    const row = rawDb.prepare(`SELECT * FROM party WHERE id = ?`).get(result.id) as Record<
+      string,
+      unknown
+    >;
+    expect(row['party_type']).toBe('staff');
+    expect(row['name']).toBe('Naeem');
+    expect(row['phone']).toBe('03001112222');
+    expect(row['staff_role']).toBe('technician');
+    expect(row['wage_rate']).toBe(60000);
+    expect(row['commission_bp']).toBe(1000);
+    expect(row['party_code']).toBe('STF-0001');
+    expect(row['is_active']).toBe(1);
+    // Correction C — business_unit_id lives on attendance, not party.
+    expect(row['business_unit_id']).toBeNull();
+  });
+
+  it('increments the staff sequence independently of supplier/customer sequences', async () => {
+    await repo.createSupplier({
+      partyCode: null,
+      name: 'Supplier A',
+      shopName: null,
+      phone: '0300',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+    const first = await repo.createStaff({
+      name: 'Staff One',
+      phone: '0301',
+      staffRole: 'salesman',
+      wageRatePaisa: 50000,
+      commissionBp: 0,
+    });
+    const second = await repo.createStaff({
+      name: 'Staff Two',
+      phone: '0302',
+      staffRole: 'helper',
+      wageRatePaisa: 40000,
+      commissionBp: 0,
+    });
+
+    expect(first.partyCode).toBe('STF-0001');
+    expect(second.partyCode).toBe('STF-0002');
+  });
+
+  it('writes one audit_log row and one sync_outbox row per staff created', async () => {
+    const result = await repo.createStaff({
+      name: 'Audit Check',
+      phone: '0303',
+      staffRole: 'technician',
+      wageRatePaisa: 70000,
+      commissionBp: 500,
+    });
+
+    const auditRows = rawDb
+      .prepare(`SELECT * FROM audit_log WHERE record_id = ? AND table_name = 'party'`)
+      .all(result.id);
+    const outboxRows = rawDb
+      .prepare(`SELECT * FROM sync_outbox WHERE record_id = ? AND table_name = 'party'`)
+      .all(result.id);
+    expect(auditRows).toHaveLength(1);
+    expect(outboxRows).toHaveLength(1);
+  });
+
+  it('listStaff returns exactly the 3 created staff rows, ordered by name, with correct values', async () => {
+    await repo.createStaff({
+      name: 'Charlie Technician',
+      phone: '0300',
+      staffRole: 'technician',
+      wageRatePaisa: 60000,
+      commissionBp: 1000,
+    });
+    await repo.createStaff({
+      name: 'Alice Salesman',
+      phone: '0301',
+      staffRole: 'salesman',
+      wageRatePaisa: 50000,
+      commissionBp: 0,
+    });
+    await repo.createStaff({
+      name: 'Bob Helper',
+      phone: '0302',
+      staffRole: 'helper',
+      wageRatePaisa: 40000,
+      commissionBp: 0,
+    });
+    // A non-staff party must never appear in listStaff.
+    await repo.createSupplier({
+      partyCode: null,
+      name: 'Zed Supplier',
+      shopName: null,
+      phone: '0304',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    const staff = await repo.listStaff();
+
+    expect(staff).toHaveLength(3);
+    expect(staff.map((s) => s.name)).toEqual([
+      'Alice Salesman',
+      'Bob Helper',
+      'Charlie Technician',
+    ]);
+    expect(staff[0]).toMatchObject({
+      name: 'Alice Salesman',
+      staffRole: 'salesman',
+      wageRatePaisa: 50000,
+      commissionBp: 0,
+      partyCode: 'STF-0002',
+    });
+  });
+});

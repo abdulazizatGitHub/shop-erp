@@ -6,8 +6,10 @@ import { JobsReport } from './JobsReport.js';
 import { ReceivablesAgingReport } from './ReceivablesAgingReport.js';
 import { StockValuationReport } from './StockValuationReport.js';
 import { UnitPlReport } from './UnitPlReport.js';
+import { WageMonthReport } from './WageMonthReport.js';
 
-type ReportTab = 'dailySales' | 'stockValuation' | 'receivables' | 'cashBook' | 'unitPl' | 'jobs';
+type ReportTab =
+  'dailySales' | 'stockValuation' | 'receivables' | 'cashBook' | 'unitPl' | 'jobs' | 'wages';
 
 const TAB_ITEMS = [
   { key: 'dailySales', label: 'Daily Sales' },
@@ -16,6 +18,7 @@ const TAB_ITEMS = [
   { key: 'cashBook', label: 'Cash Book' },
   { key: 'unitPl', label: 'Unit P&L' },
   { key: 'jobs', label: 'Jobs' },
+  { key: 'wages', label: 'Wages' },
 ] as const;
 
 const TAB_TITLES: Record<ReportTab, string> = {
@@ -25,6 +28,7 @@ const TAB_TITLES: Record<ReportTab, string> = {
   cashBook: 'Cash Book',
   unitPl: 'Unit P&L',
   jobs: 'Jobs',
+  wages: 'Wages',
 };
 
 export function ReportsPage(): React.JSX.Element {
@@ -41,6 +45,7 @@ export function ReportsPage(): React.JSX.Element {
         {tab === 'cashBook' && <CashBookReport />}
         {tab === 'unitPl' && <UnitPlReport />}
         {tab === 'jobs' && <JobsReport />}
+        {tab === 'wages' && <WageMonthReport />}
       </Card>
     </div>
   );

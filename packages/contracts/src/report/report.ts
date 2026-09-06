@@ -92,3 +92,31 @@ export const UnitPlReportDto = z.object({
   disclaimer: z.string(),
 });
 export type UnitPlReportDto = z.infer<typeof UnitPlReportDto>;
+
+export const WageMonthInput = z.object({
+  year: z.number().int().min(2024).max(2099),
+  month: z.number().int().min(1).max(12),
+});
+export type WageMonthInput = z.infer<typeof WageMonthInput>;
+
+/**
+ * Mirrors WageMonthRow (packages/db/src/repositories/wage-report.repository.ts)
+ * exactly. One row per staff member with at least one attendance record
+ * in the requested month — staff with zero attendance rows that month
+ * are simply absent from the array, not returned with all-zero fields.
+ */
+export const WageMonthRowDto = z.object({
+  staffId: z.string().uuid(),
+  staffName: z.string(),
+  staffRole: z.string(),
+  fullDays: z.number().int(),
+  halfDays: z.number().int(),
+  absentDays: z.number().int(),
+  leaveDays: z.number().int(),
+  holidayDays: z.number().int(),
+  grossPaisa: z.number().int(),
+  advancesPaisa: z.number().int(),
+  commissionPaisa: z.number().int(),
+  netPaisa: z.number().int(),
+});
+export type WageMonthRowDto = z.infer<typeof WageMonthRowDto>;

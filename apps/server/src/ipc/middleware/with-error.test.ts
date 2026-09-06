@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { SessionAlreadyOpenError } from '@shop/core';
 import { DbBusyError } from '@shop/db';
 import { toIpcError, withError } from './with-error.js';
 import { setRestoreInProgress } from './restore-state.js';
@@ -28,6 +29,15 @@ describe('toIpcError', () => {
     expect(ipcError.code).toBe('VALIDATION_ERROR');
     expect(typeof ipcError.message).toBe('string');
     expect(ipcError.details).toBeDefined();
+  });
+
+  it('wraps a SessionAlreadyOpenError into { code: SESSION_ALREADY_OPEN, message } (PHASE_7.md P7-5)', () => {
+    const error = new SessionAlreadyOpenError('2026-08-15');
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('SESSION_ALREADY_OPEN');
+    expect(ipcError.message).toContain('2026-08-15');
   });
 
   it('wraps an unknown Error into { code: INTERNAL_ERROR, message }, never a raw stack trace', () => {
