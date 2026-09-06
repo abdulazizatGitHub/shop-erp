@@ -41,6 +41,86 @@
 
 ---
 
+## [2026-09-06] Session 38 — Targeted bug-fix: dashboard nav order + cash-session investigation
+
+**Goal:** Fix exactly two reported bugs, in order, each verified before
+moving to the next. No new features, no Phase 8 work.
+
+**Done:**
+
+- Pre-flight: `git log --oneline -5` confirmed `96c916a` at HEAD;
+  `npm run verify` initially showed 205/416 failing due to
+  better-sqlite3 being Electron-ABI-compiled from a prior session —
+  restored via `npm install better-sqlite3 --no-save`, then 416/416
+  passed cleanly.
+- **Fix 1 (BUG-DASH-1)** — read `navigation.ts` and pasted the current
+  order before changing anything: Sales(Alt+1) through
+  Attendance(no shortcut), with Dashboard at position 12 of 13 (no
+  shortcut). Corrected the bug report's premise that Dashboard was
+  `Alt+0` — it was Staff, confirmed by reading the file. Moved the
+  `dashboard` entry in `NAV_ITEMS` to the front, position 1, with no
+  shortcut-digit changes (Dashboard had none before either). Left
+  `App.tsx`'s default tab as `'sales'`, since only sidebar position was
+  reported wrong.
+- **Fix 2 (BUG-CASH-1/CASH-2)** — read `closeSession()` in full, pasted
+  the exact SQL, and traced all six formula terms (table/column/date-
+  filter/cash-filter/add-or-subtract/sign-match) against the required
+  spec. All six signs matched; no error found. Confirmed
+  `payment.amount` is always stored positive regardless of `direction`
+  (ruling out double-negation). Added a regression test to
+  `cash-session.repository.test.ts` using the bug report's exact
+  numbers (opening_cash=500,000, one cash sale of 4,235,000, no other
+  activity) — hand-calc expected_cash = 4,735,000 paisa; the test
+  passes against the live code with that exact value, not the reported
+  negative. Per CLAUDE.md's "stop and report" rule, this was escalated
+  to the user rather than fabricating a sign flip; the user chose to
+  keep the regression test and mark the bug not-reproduced rather than
+  force a change.
+
+**Verified:**
+
+- Fix 1: `npm run verify` — 416/416, lint/typecheck clean. Real
+  screenshot of the running Electron window's sidebar confirmed
+  Dashboard first, then Sales(Alt+1) through Attendance in the exact
+  requested order.
+- Fix 2: new regression test run in isolation
+  (`npx vitest run packages/db/src/repositories/cash-session.repository.test.ts`)
+  — 6/6 passed, including the new BUG-CASH-1 repro assertion
+  (`expectedCashPaisa === 4_735_000`). Full `npm run verify` after both
+  fixes: **417/417** tests, lint/typecheck clean, exit code 0.
+
+**Not done / deferred:**
+
+- BUG-CASH-1/CASH-2 were not fixed because they could not be
+  reproduced against the current, live `closeSession()` code — see
+  PROJECT.md for the full trace and a note on what to capture if the
+  symptom recurs (exact real transactions for the session date, plus
+  float/counted values).
+
+**Bugs found:** none new. BUG-DASH-1 fixed. BUG-CASH-1/CASH-2
+investigated, not reproduced — code found correct as written.
+
+**Decisions taken:** User confirmed (via question) to keep the new
+regression test and document BUG-CASH-1/CASH-2 as not-reproduced
+rather than force an unverified sign change.
+
+**Blocked on:** nothing for Fix 1. BUG-CASH-1/CASH-2 blocked on
+reproducing the actual real-data scenario, if the symptom recurs.
+
+**Next session should:** if the negative-Expected-cash symptom is seen
+again in the running app, capture the exact session date's full
+transaction set (all sales/purchases/expenses/payments/advances) plus
+the float and counted values entered, so it can be reproduced
+deterministically instead of from a hand-picked example.
+
+**Checklist:** No CLAUDE.md §7 checklist needed — targeted bug-fix
+session, not a phase close, per this session's own instructions.
+
+**Commit:** `e57f0a7` — `fix(p7): dashboard nav order; investigate
+cash-session expected_cash`.
+
+---
+
 ## [2026-09-06] Session 37 — Bug fix: BUG-21 (Add Expense business-unit guard)
 
 **Goal:** Fix BUG-21 only — no other changes. The Add Expense form's

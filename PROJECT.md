@@ -1692,6 +1692,77 @@ a unit and submitting creates the expense with the correct
 `business_unit_id` (confirmed EXP-0005 saved as REPAIR after selecting
 Repair).
 
+### BUG-DASH-1: Dashboard positioned second-to-last in sidebar navigation — LOW — FIXED
+
+Found in: targeted bug-fix session, 2026-09-06. The owner reported
+Dashboard should be the first thing they see on opening the app, but
+`NAV_ITEMS` in `apps/client/src/app/navigation.ts` had it at position
+12 of 13 (second-to-last, just before Attendance).
+Impact: Cosmetic/UX only — no data or money correctness affected. The
+owner had to click past every other tab to reach the home screen.
+Fix: moved the `{ key: 'dashboard', label: 'Dashboard' }` entry to the
+front of the `NAV_ITEMS` array. No shortcut-digit reassignment was
+needed or made: Dashboard had no `Alt+N` shortcut before this move
+either (confirmed by reading the file first — the bug report's
+premise that Dashboard was previously `Alt+0` was incorrect; Staff is
+`Alt+0`), so Sales keeps `Alt+1` and Staff keeps `Alt+0` undisturbed.
+`App.tsx`'s default tab (`useState<Tab>('sales')`) was intentionally
+left unchanged — only sidebar _position_ was reported wrong, not the
+default screen on launch.
+Status: FIXED, commit `e57f0a7`. Verified via `npm run verify`
+(416/416 at the time, lint/typecheck clean) and a real screenshot of
+the running Electron window's sidebar showing Dashboard first, then
+Sales through Attendance in the exact requested order.
+
+### BUG-CASH-1 / BUG-CASH-2: expected_cash sign error — NOT REPRODUCED
+
+Found in: targeted bug-fix session, 2026-09-06. Reported symptom: cash
+session close screen showing a negative Expected value (e.g.
+`-Rs 3,400`) with a resulting nonsensical large "Over by" variance,
+allegedly from a sign error in one or more terms of `closeSession()`'s
+expected_cash formula (`packages/db/src/repositories/cash-session.repository.ts`).
+Investigation: read `closeSession()` in full and traced all six terms
+of the formula against the required spec (`opening_cash + cash_sales +
+cash_payments_in - cash_purchases - cash_expenses -
+cash_payments_out/advances`) — table, amount column, date column, cash
+filter, add/subtract direction, and sign match were checked for each
+term. All six match the required formula exactly; no sign error was
+found. Also confirmed `payment.amount` is always stored positive
+regardless of `direction` (comment in `advance.repository.ts`), ruling
+out a double-negation risk from a signed amount column.
+Reproduction attempt: added a new test to
+`cash-session.repository.test.ts` using the bug report's own exact
+numbers (opening_cash = 500,000 paisa, one cash sale of 4,235,000
+paisa, no expenses/purchases/payments). Hand-calc: expected_cash =
+500,000 + 4,235,000 = 4,735,000 paisa (Rs 47,350). The test **passes**
+against the current, live code — `expectedCashPaisa` comes out to
+exactly 4,735,000, positive and correct, not negative. The
+pre-existing closeSession test (sale + expense scenario) also already
+passed before this session touched anything.
+Impact: None currently identified — the formula as written in the
+live code is correct for every scenario tested. If the owner
+originally observed a negative Expected value in the running app, the
+cause is not in this formula as currently coded; it may be
+(a) something that has already been fixed since the observation was
+made, (b) a different code path (e.g. a stale/cached UI value, a
+different session, or a units mismatch somewhere in the IPC/UI layer
+rather than the repository), or (c) specific real data not covered by
+the two scenarios tested here (e.g. involving purchases, multiple
+sessions, or a session spanning a date boundary).
+Fix: none made — per CLAUDE.md §6 ("it looks correct" is not enough,
+but neither is "fixing" something that traces and tests both confirm
+is not broken) and Golden Rule 5 ("if you find something unexpected,
+stop and report, do not improvise"), no sign was changed. Forcing a
+sign flip here would have broken the two now-passing tests and
+introduced the very bug being chased.
+Status: NOT REPRODUCED, 2026-09-06, commit `e57f0a7` (adds the
+regression test only, no production code change). If this recurs, the
+next session should capture the exact real-data scenario (all
+sales/purchases/expenses/payments/advances recorded for that specific
+session date, plus the exact float and counted values entered) so it
+can be reproduced deterministically rather than from a hand-picked
+example.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]
