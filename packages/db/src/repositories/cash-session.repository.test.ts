@@ -164,6 +164,25 @@ describe('KyselyCashSessionRepository.closeSession (EC-P7-5)', () => {
     expect(row.difference).toBe(80_000);
     expect(row.closed_at).not.toBeNull();
   });
+
+  it('BUG-CASH-1 repro: expected_cash with only opening cash + one cash sale, no other activity', async () => {
+    const date = '2026-08-16';
+    const opened = await repo.openSession({ date, openingCashPaisa: 500_000 });
+
+    seedCashSale(date, 4_235_000); // Rs 42,350 cash sale, no expenses/purchases/payments
+
+    // Hand-calc (BUG-CASH-1's exact reported scenario):
+    //   cash_in  = opening_cash + cash_sales = 500,000 + 4,235,000 = 4,735,000
+    //   cash_out = 0 (no purchases, expenses, or payments this date)
+    //   expected_cash = 4,735,000 - 0 = 4,735,000 paisa (Rs 47,350)
+    const result = await repo.closeSession({
+      sessionId: opened.id,
+      countedCashPaisa: 4_735_000,
+    });
+
+    expect(result.expectedCashPaisa).toBe(4_735_000);
+    expect(result.differencePaisa).toBe(0);
+  });
 });
 
 describe('KyselyCashSessionRepository.getSessionByDate', () => {

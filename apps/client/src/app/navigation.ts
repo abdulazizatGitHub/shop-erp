@@ -28,6 +28,12 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
+  // BUG-DASH-1 fix: Dashboard moved to the top of the sidebar — it's
+  // the first thing the owner should see on opening the app. No
+  // shortcut digit assigned (it had none before this move either),
+  // so this doesn't disturb the existing Alt+1..Alt+0 assignments
+  // below.
+  { key: 'dashboard', label: 'Dashboard' },
   { key: 'sales', label: 'Sales', shortcutDigit: '1' },
   { key: 'items', label: 'Items', shortcutDigit: '2' },
   { key: 'suppliers', label: 'Suppliers', shortcutDigit: '3' },
@@ -44,10 +50,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // to link "no staff yet" from, and Staff otherwise has no way to reach.
   { key: 'staff', label: 'Staff', shortcutDigit: '0' },
   { key: 'expenses', label: 'Expenses' },
-  // P7-5 — no existing dashboard/home page in this codebase; kept
-  // 'sales' as the default tab (useState<Tab>('sales') in App.tsx,
-  // unchanged) rather than disrupt current muscle memory — Dashboard
-  // is reached like any other tab, not auto-selected on launch.
-  { key: 'dashboard', label: 'Dashboard' },
   { key: 'attendance', label: 'Attendance' },
 ];
