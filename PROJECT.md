@@ -3,8 +3,14 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-06
-**Current phase:** Phase 5 — Deploy + parallel run (blocked); Phase 6 —
+**Last updated:** 2026-09-07
+**Current phase:** Phase 8 — Bug-fix & hardening (P8-0 through P8-7 all
+DONE — P8-1/BUG-ADR9 explicitly deferred by owner decision, everything
+else fixed and verified, including a real running-window click-through
+for P8-2/P8-3 via Playwright's `_electron` — see
+`docs/phases/PHASE_8.md` §7. `npm run verify` 422/422, HEAD still at
+`a0877d8` pending commit). Phase 5 — Deploy + parallel
+run (blocked); Phase 6 —
 Repair Jobs & the Two-Unit Split (code-complete, P6-0 through P6-10 —
 UI not yet visually verified in a running window); **Phase 7 — Staff,
 Wages, and Expenses is now CODE-COMPLETE** (P7-0 through P7-11 all
@@ -237,7 +243,7 @@ this setting.
 | 6     | Repair jobs (two-unit split)              | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                          | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
 | 6.5   | Jobs UI modernisation (modal → full page) | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
 | 7     | Staff, wages, expenses                    | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                         | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
-| 8     | Bug-fix & hardening                       | NOT STARTED                                                                                                                                                | —                                                                                                                                     |
+| 8     | Bug-fix & hardening                       | ✅ P8-0–P8-7 all DONE — P8-1/BUG-ADR9 deferred by owner decision, everything else fixed and click-through-verified in a running window                     | P8-0–P8-7 (2026-09-07). 422/422 tests. See `docs/phases/PHASE_8.md`                                                                   |
 
 ---
 
@@ -594,6 +600,22 @@ returned 42. Dev and packaged take genuinely different code paths
 (`loadURL` vs `loadFile`, different `resolveDbPath`/`resolveMigrationsDir`
 branches); both were verified independently, not inferred from each other.
 Status: RESOLVED.
+**Note, Phase 8, 2026-09-07 (this agent's sandbox only):** `npm run
+rebuild:electron` succeeded on the first attempt this session (single
+"Building modules: better-sqlite3" line, no duplication) and the app
+launched cleanly and functioned correctly end-to-end under Playwright's
+`_electron` driver, real DB reads/writes included — no recurrence of the
+"window never opens" symptom this bug describes. One residual oddity
+worth recording: `require('better-sqlite3')` alone still succeeds under
+both plain Node and Electron's Node regardless of which ABI the binary
+was built for — the actual ABI check only fires inside `new Database()`,
+confirmed by a direct repro (`node -e "require(...)"` printed nothing
+wrong; `new Database(...)` then threw the expected `NODE_MODULE_VERSION`
+mismatch). So `require()` succeeding is still not itself proof of a
+correct rebuild in this sandbox — `new Database(...)` (or an actual app
+launch) is the real test, exactly as this bug's own investigation already
+concluded. Not re-opening this bug; recorded as a data point for whoever
+next hits the "window won't open" symptom in this environment.
 
 ### BUG-8: `apps/server`'s `package` script packaged stale/absent `dist/`, never building first — MEDIUM
 
@@ -894,6 +916,15 @@ Status: UNFIXED — documentation-only; does not block Phase 2, whose code
 follows the no-update reading throughout. Should be corrected before
 Phase 3 builds sale cancellation, so the next session doesn't have to
 re-derive this resolution or, worse, land on the opposite one.
+**Update, Phase 8 (P8-7), 2026-09-07:** fixed. `docs/DATABASE_RULES.md`
+§3's bullet 2 replaced with the corrected description exactly as
+`docs/phases/PHASE_8.md` specified: a reversing row shares
+`source_type`/`source_id` with the original, the original is never
+touched, and `reversed_by_id` exists in the schema but is never written
+by any application code path. Status: FIXED — 2026-09-07. Verified:
+`grep -n "reversed_by_id" docs/DATABASE_RULES.md` — the only hit is the
+explanatory sentence, not an instruction to write it. `npm run verify`
+422/422 (docs-only change).
 
 ### BUG-15: No concurrent-write handling anywhere — two IPC calls racing a write to the same row fail fast with a raw SQLITE_BUSY, not a graceful retry — HIGH
 
@@ -1073,6 +1104,48 @@ deliberate for their own screens) and wire it into
 `DeliveryPartLines.tsx`/`DeliveryLabourLines.tsx`'s payer `<Select>`.
 Status: UNFIXED — logged, not built this session. See
 `docs/phases/PHASE_6.md` §8.
+**Update, Phase 8 (P8-2), 2026-09-07:** built. Owner chose Option A — a
+new, separate `party:searchAny` IPC channel (`customer:search`/
+`party:search` untouched), backed by
+`KyselyPartyRepository.searchAnyParty` (`packages/db/src/repositories/
+party.repository.ts`), which searches `party_type IN ('customer',
+'supplier', 'both')` (staff excluded — never a billing payer). New Zod
+contracts `PartySearchAnyInput`/`PartyAnyDto`
+(`packages/contracts/src/party/party-any.ts`).
+`DeliveryPartLines.tsx`/`DeliveryLabourLines.tsx` gained a shared
+`OtherPartyPicker` component (name search via the existing
+`SearchSelect` component, reused from `apps/client/src/pages/sales/`
+rather than duplicated) replacing the disabled "coming soon" option;
+`JobDeliveryDrawer.tsx`'s `resolvePayer`/`handleDeliver` updated to
+resolve and validate the picked party. `deliverJob`'s Zod schema already
+accepted any UUID for `payerPartyId` — confirmed by reading, no backend
+delivery-logic change needed. Verified: 3 new repository tests in
+`party.repository.test.ts` (`searchAnyParty` finds a `party_type='both'`
+fixture shaped exactly like Dawlance's own test fixture, finds both
+customer- and supplier-type parties, excludes staff) — all pass against a
+real SQLite DB. `npm run verify` 422/422, typecheck/lint clean.
+**UI click-through, same session, 2026-09-07:** built the app
+(`npm run build --workspace=@shop/server`), rebuilt `better-sqlite3` for
+Electron's ABI (`npm run rebuild:electron`), and drove a real running
+Electron window with Playwright's `_electron` (`playwright-core`,
+installed `--no-save`, same technique as Session 36). Created a new job
+(JOB-0004) through the actual UI, opened its delivery drawer, added an
+"AC Installation" labour line, set its payer to "Other party…", searched
+"Test Supplier" (a real `party_type='supplier'` fixture already in the
+dev DB) in the new `OtherPartyPicker`, picked it, and delivered — the UI
+showed "Job delivered — invoice INV-0014." Queried the real database
+directly afterward (via `ELECTRON_RUN_AS_NODE=1 electron.exe
+script.mjs`, since the DB file was Electron-ABI-compiled for the run):
+`SELECT payer_party_id FROM sale_line WHERE sale_id = '<JOB-0004's
+sale_id>'` returned `01a05377-d010-70d6-996b-86f178398ad6` — the exact
+id of the "Test Supplier" party picked on screen. This is exactly
+PHASE_8.md's own literal exit criterion ("set a labour line's payer to a
+supplier-type party... query `sale_line.payer_party_id` directly").
+Restored `better-sqlite3` to the system-Node ABI afterward
+(`npm install better-sqlite3 --no-save`); `npm run verify` reconfirmed
+422/422 clean. Temporary driver script and screenshots deleted, never
+committed (same pattern as Session 36).
+Status: **FIXED — 2026-09-07.**
 
 ### BUG-19: `getSaleReceiptData` silently dropped every labour line from a printed receipt/invoice — FIXED, was HIGH
 
@@ -1550,6 +1623,12 @@ whichever phase first introduces real staff/role login (Phase 7 owns
 "Staff, wages, expenses" per `docs/SYSTEM_DESIGN.md` §3's module map —
 plausibly where user/role identity becomes real enough to enforce
 against, though this is an observation, not a decision).
+**Update, Phase 8, 2026-09-07:** revisited as P8-1, the first item in
+Phase 8's work queue. Owner explicitly chose Option B (defer entirely)
+over Option A (a minimal `currentRole` singleton placeholder) — see
+`docs/phases/PHASE_8.md` §5. No code written for this item. Still
+UNFIXED, still HIGH, still blocking real permission enforcement on a
+future identity/session phase.
 
 ### BUG-P6.5-1: `JobDto` does not include the delivery invoice doc number — LOW
 
@@ -1570,6 +1649,34 @@ Fix: add an `invoiceDocNo` field to `JobDto` (join `sale.doc_no` in
 `job.repository.ts`'s `getJobById`) in a future backend session.
 Status: UNFIXED — cosmetic, waiting for a backend session that touches
 `JobDto`/`job.repository.ts`.
+**Update, Phase 8 (P8-3), 2026-09-07:** built. `JobRecord`
+(`packages/core/src/job/job.repository.port.ts`) and `JobDto`
+(`packages/contracts/src/job/job.ts`) both gained `invoiceDocNo: string |
+null`. `job.repository.ts`'s `getJob` (the method is actually named
+`getJob`, not `getJobById` as this bug's fix note assumed — confirmed by
+reading, not assuming) now does a `LEFT JOIN sale ON sale.id =
+job.saleId` and selects `sale.docNo AS invoiceDocNo`. The other three
+call sites that build a `JobRecord` (`createJob`, `updateJobStatus`,
+`assignTechnician`) go through a new `resolveInvoiceDocNo` helper so
+`invoiceDocNo` stays correct even if one of those runs against an
+already-delivered job, not just the common case. `JobDetailPage.tsx`'s
+delivered-job banner now falls back to `job.invoiceDocNo` instead of the
+raw `job.saleId` UUID when `deliveredNotice` (the just-delivered
+in-memory result) isn't available. Verified: two new hand-checked
+repository tests in `job.repository.test.ts` — one inserts a real `sale`
+row with `doc_no='INV-A-000042'`, points `job.sale_id` at it, and asserts
+`getJob(...).invoiceDocNo === 'INV-A-000042'` exactly; the other asserts
+`invoiceDocNo` is null for an undelivered job. `npm run verify` 422/422,
+typecheck/lint clean.
+**UI click-through, same session, 2026-09-07:** same real running-window
+pass as BUG-18/P8-2 above. Opened `JOB-0001` — delivered in an earlier
+session (2026-09-06), so this is a genuine "reopen a job delivered in an
+earlier sitting" case, not one just delivered in the current process. The
+header rendered "Job delivered — invoice INV-0012." — the real doc number
+from `sale.doc_no`, not the raw `saleId` UUID this bug describes, and
+without printing anything. This is exactly PHASE_8.md's own literal exit
+criterion.
+Status: **FIXED — 2026-09-07.**
 
 ### BUG-P6.5-2: `IssuedPartsPanel.tsx` is now unreferenced — LOW, cleanup only
 
@@ -1602,6 +1709,25 @@ Fix: either build a UI entry point for it, or remove the channel/
 handler/type together in a dedicated backend-touching session.
 Status: UNFIXED — decision deferred. Not removed this session (backend/
 IPC-surface change, out of scope for a renderer-only cleanup pass).
+**Update, Phase 8 (P8-5), 2026-09-07:** removed. Owner chose Option A —
+deletion, not a new UI (maintenance, no feature-work approval needed).
+Removed: `channels.job.issueToTechnician`
+(`apps/server/src/ipc/channels.ts`), the `ipcMain.handle` registration
+for it (`apps/server/src/ipc/handlers/job-issue.handler.ts`), the
+`api.job.issueToTechnician` preload wrapper (`apps/server/src/
+preload.ts`), and the `ElectronApi.job.issueToTechnician` type
+(`apps/client/src/types/electron-api.d.ts`). Deliberately kept: the
+underlying `issuePartsToTechnician` core service function
+(`packages/core/src/job/job-issue.service.ts`),
+`IssuePartsToTechnicianInput`/`Result` Zod contracts, and the repository
+method — all still directly exercised by
+`job-part.repository.test.ts`/`custody.repository.test.ts`, which are
+unaffected by this change. Status: FIXED (removed) — 2026-09-07. Verified:
+`grep -rn "issueToTechnician" apps/ --include=*.ts --include=*.tsx` —
+zero hits (a stale `apps/server/dist/` build artifact from a prior
+`electron-vite build` still contains the old string; that's compiled
+output, not source, and not part of this verification). `npm run verify`
+422/422, typecheck/lint clean.
 
 ### DEBT-3: `job:createInternalTransfer` is fully wired but has zero client call sites — LOW
 
@@ -1615,6 +1741,22 @@ unreachable from the app despite being fully built server-side.
 Fix: either build a UI for internal transfers, or remove the channel/
 handler/type together in a dedicated backend-touching session.
 Status: UNFIXED — decision deferred, same reasoning as DEBT-2.
+**Update, Phase 8 (P8-6), 2026-09-07:** removed. Owner chose Option A,
+same reasoning as DEBT-2. Removed:
+`channels.job.createInternalTransfer`, the entire
+`apps/server/src/ipc/handlers/internal-transfer.handler.ts` file (its
+only content was this one channel's registration — nothing left to
+register once it was gone), its `registerInternalTransferHandlers`
+import/call in `apps/server/src/main.ts`, the `api.job.createInternalTransfer`
+preload wrapper, and the `ElectronApi.job.createInternalTransfer` type.
+Deliberately kept: the underlying `createInternalTransfer` core service
+function, `CreateInternalTransferInput`/`NewInternalTransferResult` Zod
+contracts, and the repository — all still directly exercised by
+`internal-transfer.repository.test.ts`. Status: FIXED (removed) —
+2026-09-07. Verified:
+`grep -rn "createInternalTransfer" apps/ --include=*.ts --include=*.tsx`
+— zero hits (same `apps/server/dist/` stale-build caveat as DEBT-2).
+`npm run verify` 422/422, typecheck/lint clean.
 
 ### BUG-20: `party_ledger` schema comment lists `staff_advance`, Phase 7 code writes `advance` — LOW, documentation-only
 
@@ -1635,6 +1777,16 @@ change to an applied migration file is sometimes done for documentation
 accuracy — confirm with the owner first) or accept `advance` as the
 now-correct value and leave the stale comment as historical noise.
 Status: UNFIXED — flagged, not blocking, owner to decide which side wins.
+**Update, Phase 8 (P8-4), 2026-09-07:** resolved. Owner chose Option B —
+`0001_init.sql` left untouched (never edit an applied migration, even for
+a comment-only change, without a stronger reason). Added a new "Enum-like
+columns are canonical in application code" subsection to
+`docs/DATABASE_RULES.md` §3, naming this exact `entry_type`/
+`staff_advance`/`advance` mismatch as the example and telling future
+readers to trust application code/Zod schemas over migration comments.
+Status: RESOLVED (docs) — 2026-09-07. Verified:
+`grep -n "canonical in application code" docs/DATABASE_RULES.md` — one
+hit. `npm run verify` 422/422 (docs-only change).
 
 ### BUG-21: Add Expense form's "Business Unit required" validation never actually fires — MEDIUM — FIXED
 

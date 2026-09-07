@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
 import {
   CreateSupplierInput,
+  PartySearchAnyInput,
   SupplierIdInput,
   SupplierSearchInput,
+  type PartyAnyDto,
   type SupplierBalanceDto,
   type SupplierDto,
 } from '@shop/contracts';
@@ -44,6 +46,20 @@ export function registerSupplierHandlers(deps: SupplierHandlerDeps): void {
       try {
         const repo = new KyselyPartyRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
         return await repo.searchSuppliers(input);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.party.searchAny,
+    withError(async (_event, raw: unknown): Promise<readonly PartyAnyDto[]> => {
+      const input = PartySearchAnyInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyPartyRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
+        return await repo.searchAnyParty(input);
       } finally {
         db.close();
       }

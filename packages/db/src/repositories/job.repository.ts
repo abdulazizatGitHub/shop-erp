@@ -45,7 +45,11 @@ const JOB_RECORD_COLUMNS = [
 
 type JobRow = Pick<JobTable, (typeof JOB_RECORD_COLUMNS)[number]>;
 
-function toJobRecord(row: JobRow, derivedStatus: JobStatus): JobRecord {
+function toJobRecord(
+  row: JobRow,
+  derivedStatus: JobStatus,
+  invoiceDocNo: string | null,
+): JobRecord {
   return {
     id: row.id,
     docNo: row.docNo,
@@ -69,6 +73,7 @@ function toJobRecord(row: JobRow, derivedStatus: JobStatus): JobRecord {
     revenueType: row.revenueType,
     labourChargePaisa: row.labourCharge,
     saleId: row.saleId,
+    invoiceDocNo,
   };
 }
 
@@ -140,18 +145,61 @@ export class KyselyJobRepository implements JobRepositoryPort {
     return (latest?.toStatus ?? fallbackStatus) as JobStatus;
   }
 
+  /**
+   * P8-2 (BUG-P6.5-1): sale.doc_no for row.saleId, or null if the job
+   * hasn't been delivered (saleId is null) yet.
+   */
+  private async resolveInvoiceDocNo(
+    qb: Kysely<Database>,
+    saleId: string | null,
+  ): Promise<string | null> {
+    if (!saleId) return null;
+    const sale = await qb
+      .selectFrom('sale')
+      .select('docNo')
+      .where('id', '=', saleId)
+      .where('tenantId', '=', this.tenantId)
+      .executeTakeFirst();
+    return sale?.docNo ?? null;
+  }
+
   async getJob(id: string): Promise<JobRecord | null> {
     const row = await this.db
       .selectFrom('job')
-      .select(JOB_RECORD_COLUMNS)
-      .where('id', '=', id)
-      .where('tenantId', '=', this.tenantId)
+      .leftJoin('sale', 'sale.id', 'job.saleId')
+      .select([
+        'job.id',
+        'job.docNo',
+        'job.customerId',
+        'job.customerNameAdhoc',
+        'job.customerPhone',
+        'job.jobType',
+        'job.applianceType',
+        'job.applianceBrand',
+        'job.applianceModel',
+        'job.applianceSerial',
+        'job.reportedFault',
+        'job.receivedDate',
+        'job.promisedDate',
+        'job.estimateAmount',
+        'job.estimateApproved',
+        'job.assignedTo',
+        'job.status',
+        'job.businessUnitId',
+        'job.billToPartyId',
+        'job.revenueType',
+        'job.labourCharge',
+        'job.saleId',
+        'sale.docNo as invoiceDocNo',
+      ])
+      .where('job.id', '=', id)
+      .where('job.tenantId', '=', this.tenantId)
       .executeTakeFirst();
 
     if (!row) return null;
 
     const status = await this.deriveStatus(this.db, id, row.status);
-    return toJobRecord(row, status);
+    return toJobRecord(row, status, row.invoiceDocNo ?? null);
   }
 
   /** Plain filtered SELECT, most recent first — no business logic. */
@@ -426,6 +474,7 @@ export class KyselyJobRepository implements JobRepositoryPort {
             saleId: null,
           },
           status,
+          null,
         );
       }),
     );
@@ -498,7 +547,8 @@ export class KyselyJobRepository implements JobRepositoryPort {
           })
           .execute();
 
-        return toJobRecord(row, input.toStatus);
+        const invoiceDocNo = await this.resolveInvoiceDocNo(trx, row.saleId);
+        return toJobRecord(row, input.toStatus, invoiceDocNo);
       }),
     );
   }
@@ -565,7 +615,8 @@ export class KyselyJobRepository implements JobRepositoryPort {
           .executeTakeFirstOrThrow();
 
         const status = await this.deriveStatus(trx, input.jobId, row.status);
-        return toJobRecord(row, status);
+        const invoiceDocNo = await this.resolveInvoiceDocNo(trx, row.saleId);
+        return toJobRecord(row, status, invoiceDocNo);
       }),
     );
   }

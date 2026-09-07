@@ -134,7 +134,7 @@ export function JobDetailPage({
           {job.status === 'delivered' && (
             <div className="flex flex-col gap-2">
               <p className="text-sm text-gray-600">
-                Job delivered — invoice {deliveredNotice?.docNo ?? job.saleId ?? 'recorded'}.
+                Job delivered — invoice {deliveredNotice?.docNo ?? job.invoiceDocNo ?? 'recorded'}.
               </p>
               {printError && (
                 <Alert

@@ -85,6 +85,7 @@ export const JobDto = z.object({
   revenueType: z.string(),
   labourChargePaisa: z.number().int(),
   saleId: z.string().uuid().nullable(),
+  invoiceDocNo: z.string().nullable(),
 });
 export type JobDto = z.infer<typeof JobDto>;
 

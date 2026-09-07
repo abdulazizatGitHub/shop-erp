@@ -65,6 +65,8 @@ export type {
   NewStaffInput,
   NewStaffResult,
   StaffRecord,
+  PartyAnySearchQuery,
+  PartyAnyRecord,
 } from './party/party.repository.port.js';
 
 export type { AttendanceStatus } from '@shop/contracts';

@@ -726,3 +726,57 @@ describe('KyselyPartyRepository.createStaff / listStaff (PHASE_7.md §5 GAP-9)',
     });
   });
 });
+
+describe('KyselyPartyRepository.searchAnyParty (P8-2, BUG-18)', () => {
+  it('finds a party_type=both party (e.g. a manufacturer like Dawlance) by name', async () => {
+    const dawlanceId = '33333333-0000-1000-8000-000000000001';
+    rawDb
+      .prepare(
+        `INSERT INTO party (id, tenant_id, party_code, party_type, name, is_active, created_at, updated_at)
+         VALUES (?, ?, 'SUP-0099', 'both', 'Dawlance', 1, ?, ?)`,
+      )
+      .run(dawlanceId, TENANT_ID, new Date().toISOString(), new Date().toISOString());
+
+    const results = await repo.searchAnyParty({ query: 'Dawlance' });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: dawlanceId, name: 'Dawlance', partyType: 'both' });
+  });
+
+  it('finds both customer- and supplier-type parties with the same query', async () => {
+    await repo.createCustomer({
+      partyCode: null,
+      name: 'Anywhere Customer',
+      shopName: null,
+      phone: null,
+      customerType: 'retail',
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    await repo.createSupplier({
+      partyCode: null,
+      name: 'Anywhere Supplier',
+      shopName: null,
+      phone: '0300',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+
+    const results = await repo.searchAnyParty({ query: 'Anywhere' });
+    expect(results.map((r) => r.name).sort()).toEqual(['Anywhere Customer', 'Anywhere Supplier']);
+  });
+
+  it('excludes staff parties from the results', async () => {
+    await repo.createStaff({
+      name: 'Anywhere Technician',
+      phone: '0301',
+      staffRole: 'technician',
+      wageRatePaisa: 60000,
+      commissionBp: 0,
+    });
+
+    const results = await repo.searchAnyParty({ query: 'Anywhere Technician' });
+    expect(results).toHaveLength(0);
+  });
+});

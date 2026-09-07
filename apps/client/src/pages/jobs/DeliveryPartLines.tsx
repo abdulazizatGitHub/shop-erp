@@ -1,5 +1,6 @@
-import type { RevenueType } from '@shop/contracts';
+import type { PartyAnyDto, RevenueType } from '@shop/contracts';
 import {
+  Button,
   MoneyDisplay,
   QuantityDisplay,
   Select,
@@ -11,14 +12,61 @@ import {
   TableRow,
   TextInput,
 } from '@shop/ui';
+import { ipc } from '../../lib/ipc.js';
 import type { JobPartRecord } from '../../types/electron-api.js';
+import { SearchSelect } from '../sales/SearchSelect.js';
 
-export type PayerChoice = 'customer' | 'walkin';
+export type PayerChoice = 'customer' | 'walkin' | 'other';
 
 export interface PartLineEdit {
   readonly priceRupees: string;
   readonly payer: PayerChoice;
+  /** Set only when payer === 'other' and a party has actually been picked. */
+  readonly otherPartyId: string | null;
+  readonly otherPartyName: string | null;
   readonly revenueType: RevenueType;
+}
+
+/**
+ * Shown under the payer <Select> whenever payer === 'other'. Search box
+ * until a party is picked, then the picked name with a "Change" button —
+ * shared by DeliveryPartLines and DeliveryLabourLines (P8-2, BUG-18).
+ */
+export function OtherPartyPicker({
+  otherPartyId,
+  otherPartyName,
+  ariaLabel,
+  onPick,
+  onClear,
+}: {
+  readonly otherPartyId: string | null;
+  readonly otherPartyName: string | null;
+  readonly ariaLabel: string;
+  readonly onPick: (party: PartyAnyDto) => void;
+  readonly onClear: () => void;
+}): React.JSX.Element {
+  if (otherPartyId) {
+    return (
+      <div className="mt-1 flex items-center gap-2 text-xs">
+        <span className="truncate">{otherPartyName}</span>
+        <Button variant="secondary" onClick={onClear}>
+          Change
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1">
+      <SearchSelect<PartyAnyDto>
+        placeholder="Search party by name…"
+        search={(query) => ipc.party.searchAny({ query })}
+        getKey={(party) => party.id}
+        getLabel={(party) => party.name}
+        onSelect={onPick}
+      />
+      <span className="sr-only">{ariaLabel}</span>
+    </div>
+  );
 }
 
 const REVENUE_TYPES: readonly RevenueType[] = ['customer_paid', 'contract', 'warranty', 'internal'];
@@ -80,19 +128,31 @@ export function DeliveryPartLines({
                   aria-label={`Payer for ${p.itemName}`}
                   value={edit.payer}
                   onChange={(e) => {
-                    onChange(p.id, { ...edit, payer: e.target.value as PayerChoice });
+                    const payer = e.target.value as PayerChoice;
+                    onChange(p.id, { ...edit, payer, otherPartyId: null, otherPartyName: null });
                   }}
                 >
                   {customerAvailable && <option value="customer">Customer</option>}
                   <option value="walkin">Walk-in (no charge)</option>
-                  {/* TODO(P6-gap): billing a third party (e.g. a manufacturer for
-                      warranty work) needs a payer-party lookup that isn't built
-                      yet — customer.search/party.search only find partyType
-                      'customer'/'supplier', not 'both'. See PROJECT.md/PHASE_6.md §8. */}
-                  <option value="other" disabled>
-                    Other party (manufacturer/warranty) — coming soon
-                  </option>
+                  <option value="other">Other party…</option>
                 </Select>
+                {edit.payer === 'other' && (
+                  <OtherPartyPicker
+                    otherPartyId={edit.otherPartyId}
+                    otherPartyName={edit.otherPartyName}
+                    ariaLabel={`Other payer party for ${p.itemName}`}
+                    onPick={(party) => {
+                      onChange(p.id, {
+                        ...edit,
+                        otherPartyId: party.id,
+                        otherPartyName: party.name,
+                      });
+                    }}
+                    onClear={() => {
+                      onChange(p.id, { ...edit, otherPartyId: null, otherPartyName: null });
+                    }}
+                  />
+                )}
               </TableCell>
               <TableCell>
                 <Select

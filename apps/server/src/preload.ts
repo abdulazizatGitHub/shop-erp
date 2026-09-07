@@ -5,7 +5,6 @@ import type {
   CashBookReportInput,
   CashBookRowDto,
   CreateCustomerInput,
-  CreateInternalTransferInput,
   CreateItemInput,
   CreateJobInput,
   CreatePaymentInput,
@@ -22,8 +21,6 @@ import type {
   DeliverJobResult,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
-  IssuePartsToTechnicianInput,
-  IssuePartsToTechnicianResult,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
@@ -33,7 +30,8 @@ import type {
   JobStatusTransitionInput,
   JobSummaryDto,
   TechnicianCustodyInput,
-  NewInternalTransferResult,
+  PartyAnyDto,
+  PartySearchAnyInput,
   PaymentDto,
   PurchaseIdInput,
   PurchaseListInput,
@@ -131,6 +129,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.party.create, input) as Promise<CreateSupplierResult>,
     search: (input: SupplierSearchInput): Promise<readonly SupplierDto[]> =>
       ipcRenderer.invoke(channels.party.search, input) as Promise<readonly SupplierDto[]>,
+    searchAny: (input: PartySearchAnyInput): Promise<readonly PartyAnyDto[]> =>
+      ipcRenderer.invoke(channels.party.searchAny, input) as Promise<readonly PartyAnyDto[]>,
     get: (id: string): Promise<SupplierDto | null> =>
       ipcRenderer.invoke(channels.party.get, { id }) as Promise<SupplierDto | null>,
     balance: (id: string): Promise<SupplierBalanceDto> =>
@@ -237,26 +237,12 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.job.getById, input) as Promise<JobDto | null>,
     list: (input: JobSearchInput): Promise<readonly JobSummaryDto[]> =>
       ipcRenderer.invoke(channels.job.list, input) as Promise<readonly JobSummaryDto[]>,
-    issueToTechnician: (
-      input: IssuePartsToTechnicianInput,
-    ): Promise<IssuePartsToTechnicianResult> =>
-      ipcRenderer.invoke(
-        channels.job.issueToTechnician,
-        input,
-      ) as Promise<IssuePartsToTechnicianResult>,
     issueToJob: (input: IssuePartsToJobInput): Promise<IssuePartsToJobResult> =>
       ipcRenderer.invoke(channels.job.issueToJob, input) as Promise<IssuePartsToJobResult>,
     listJobParts: (id: string): Promise<readonly JobPartRecord[]> =>
       ipcRenderer.invoke(channels.job.listJobParts, { id }) as Promise<readonly JobPartRecord[]>,
     deliver: (input: DeliverJobInput): Promise<DeliverJobResult> =>
       ipcRenderer.invoke(channels.job.deliver, input) as Promise<DeliverJobResult>,
-    createInternalTransfer: (
-      input: CreateInternalTransferInput,
-    ): Promise<NewInternalTransferResult> =>
-      ipcRenderer.invoke(
-        channels.job.createInternalTransfer,
-        input,
-      ) as Promise<NewInternalTransferResult>,
     reconcileCustody: (
       input: RecordCustodyReconciliationInput,
     ): Promise<CustodyReconciliationResult> =>

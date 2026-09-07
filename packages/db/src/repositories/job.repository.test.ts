@@ -213,6 +213,39 @@ describe('KyselyJobRepository.getJob', () => {
     const job = await jobRepo.getJob(newId());
     expect(job).toBeNull();
   });
+
+  it('P8-3 (BUG-P6.5-1): invoiceDocNo is populated once job.sale_id points at a real sale', async () => {
+    const jobId = insertJob({ doc_no: 'JOB-0004' });
+    const warehouse = rawDb
+      .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND is_default = 1`)
+      .get(TENANT_ID) as { id: string };
+    const priceLevel = rawDb
+      .prepare(`SELECT id FROM price_level WHERE tenant_id = ? AND name = 'Retail'`)
+      .get(TENANT_ID) as { id: string };
+    const saleId = newId();
+    const now = new Date().toISOString();
+    rawDb
+      .prepare(
+        `INSERT INTO sale (id, tenant_id, doc_no, customer_id, warehouse_id, price_level_id, sale_date, sale_type, status, job_id, created_at, updated_at)
+         VALUES (?, ?, 'INV-A-000042', ?, ?, ?, '2026-09-05', 'job', 'confirmed', ?, ?, ?)`,
+      )
+      .run(saleId, TENANT_ID, customerId, warehouse.id, priceLevel.id, jobId, now, now);
+    rawDb.prepare(`UPDATE job SET sale_id = ? WHERE id = ?`).run(saleId, jobId);
+
+    const job = await jobRepo.getJob(jobId);
+
+    expect(job?.saleId).toBe(saleId);
+    expect(job?.invoiceDocNo).toBe('INV-A-000042');
+  });
+
+  it('invoiceDocNo is null for a job that has not been delivered (sale_id is null)', async () => {
+    const jobId = insertJob({ doc_no: 'JOB-0005' });
+
+    const job = await jobRepo.getJob(jobId);
+
+    expect(job?.saleId).toBeNull();
+    expect(job?.invoiceDocNo).toBeNull();
+  });
 });
 
 describe('KyselyJobRepository.listJobs', () => {

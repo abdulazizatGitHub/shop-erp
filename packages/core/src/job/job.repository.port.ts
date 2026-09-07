@@ -41,6 +41,8 @@ export interface JobRecord {
   readonly revenueType: string;
   readonly labourChargePaisa: number;
   readonly saleId: string | null;
+  /** sale.doc_no for saleId, e.g. INV-A-000123 — null until the job is delivered. */
+  readonly invoiceDocNo: string | null;
 }
 
 /** All fields optional/null — an unset field is not filtered on. */

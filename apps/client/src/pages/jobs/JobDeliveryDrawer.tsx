@@ -68,6 +68,8 @@ export function JobDeliveryDrawer({
               {
                 priceRupees: String(Money.toRupees(Money.of(p.unitPricePaisa))),
                 payer: customerAvailable ? 'customer' : 'walkin',
+                otherPartyId: null,
+                otherPartyName: null,
                 revenueType: 'customer_paid',
               } satisfies PartLineEdit,
             ]),
@@ -87,8 +89,13 @@ export function JobDeliveryDrawer({
 
   const parts = useMemo(() => (allParts ? deliverableParts(allParts) : []), [allParts]);
 
-  function resolvePayer(choice: PartLineEdit['payer']): string | null {
-    return choice === 'customer' ? job.customerId : null;
+  function resolvePayer(edit: {
+    readonly payer: PartLineEdit['payer'];
+    readonly otherPartyId: string | null;
+  }): string | null {
+    if (edit.payer === 'customer') return job.customerId;
+    if (edit.payer === 'other') return edit.otherPartyId;
+    return null;
   }
 
   const partsTotalPaisa = useMemo(
@@ -130,11 +137,12 @@ export function JobDeliveryDrawer({
   const payerSet = useMemo(() => {
     const ids = new Set<string>();
     parts.forEach((p) => {
-      const payer = resolvePayer(partEdits[p.id]?.payer ?? 'walkin');
+      const edit = partEdits[p.id];
+      const payer = resolvePayer(edit ?? { payer: 'walkin', otherPartyId: null });
       if (payer) ids.add(payer);
     });
     labourLines.forEach((l) => {
-      const payer = resolvePayer(l.payer);
+      const payer = resolvePayer(l);
       if (payer) ids.add(payer);
     });
     return ids;
@@ -161,10 +169,13 @@ export function JobDeliveryDrawer({
       partLineInputs = parts.map((p) => {
         const edit = partEdits[p.id];
         if (!edit) throw new Error(`Missing price/payer for ${p.itemName}`);
+        if (edit.payer === 'other' && !edit.otherPartyId) {
+          throw new Error(`Pick a payer party for ${p.itemName}`);
+        }
         return {
           jobPartId: p.id,
           unitPricePaisa: Money.fromRupees(edit.priceRupees || '0'),
-          payerPartyId: resolvePayer(edit.payer),
+          payerPartyId: resolvePayer(edit),
           revenueType: edit.revenueType,
         };
       });
@@ -174,13 +185,18 @@ export function JobDeliveryDrawer({
     }
     let labourLineInputs: DeliverJobInput['labourLines'];
     try {
-      labourLineInputs = labourLines.map((line) => ({
-        serviceChargeId: line.serviceChargeId,
-        unitPricePaisa:
-          line.priceRupees.trim().length > 0 ? Money.fromRupees(line.priceRupees) : null,
-        payerPartyId: resolvePayer(line.payer),
-        revenueType: line.revenueType,
-      }));
+      labourLineInputs = labourLines.map((line) => {
+        if (line.payer === 'other' && !line.otherPartyId) {
+          throw new Error(`Pick a payer party for ${line.serviceChargeName}`);
+        }
+        return {
+          serviceChargeId: line.serviceChargeId,
+          unitPricePaisa:
+            line.priceRupees.trim().length > 0 ? Money.fromRupees(line.priceRupees) : null,
+          payerPartyId: resolvePayer(line),
+          revenueType: line.revenueType,
+        };
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'One of the labour prices is not valid');
       return;

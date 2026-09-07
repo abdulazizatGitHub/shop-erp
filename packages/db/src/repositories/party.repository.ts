@@ -10,6 +10,8 @@ import type {
   NewStaffResult,
   NewSupplierInput,
   NewSupplierResult,
+  PartyAnyRecord,
+  PartyAnySearchQuery,
   PartyRepositoryPort,
   StaffRecord,
   StaffRole,
@@ -31,6 +33,17 @@ const CUSTOMER_PARTY_TYPE = 'customer';
 const STAFF_CODE_DOC_TYPE = 'staff';
 const STAFF_CODE_PREFIX = 'STF';
 const STAFF_PARTY_TYPE = 'staff';
+
+const ANY_PARTY_TYPES = ['customer', 'supplier', 'both'] as const;
+
+const PARTY_ANY_COLUMNS = [
+  'party.id',
+  'party.partyCode',
+  'party.name',
+  'party.shopName',
+  'party.phone',
+  'party.partyType',
+] as const;
 
 const STAFF_COLUMNS = [
   'party.id',
@@ -450,6 +463,22 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
 
     return rows.map(toStaffRecord);
   }
+
+  async searchAnyParty(query: PartyAnySearchQuery): Promise<readonly PartyAnyRecord[]> {
+    let q = this.db
+      .selectFrom('party')
+      .select(PARTY_ANY_COLUMNS)
+      .where('party.tenantId', '=', this.tenantId)
+      .where('party.partyType', 'in', ANY_PARTY_TYPES)
+      .where('party.deletedAt', 'is', null);
+
+    if (query.query.length > 0) {
+      q = q.where('party.name', 'like', `%${query.query}%`);
+    }
+
+    const rows = await q.execute();
+    return rows.map(toPartyAnyRecord);
+  }
 }
 
 function toCustomerRecord(row: {
@@ -495,6 +524,24 @@ function toStaffRecord(row: {
     wageRatePaisa: row.wageRate ?? 0,
     commissionBp: row.commissionBp ?? 0,
     createdAt: row.createdAt,
+  };
+}
+
+function toPartyAnyRecord(row: {
+  id: string;
+  partyCode: string;
+  name: string;
+  shopName: string | null;
+  phone: string | null;
+  partyType: string;
+}): PartyAnyRecord {
+  return {
+    id: row.id,
+    partyCode: row.partyCode,
+    name: row.name,
+    shopName: row.shopName,
+    phone: row.phone,
+    partyType: row.partyType as PartyAnyRecord['partyType'],
   };
 }
 

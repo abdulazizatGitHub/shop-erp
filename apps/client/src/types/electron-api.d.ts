@@ -4,7 +4,6 @@ import type {
   CashBookReportInput,
   CashBookRowDto,
   CreateCustomerInput,
-  CreateInternalTransferInput,
   CreateItemInput,
   CreateJobInput,
   CreatePaymentInput,
@@ -21,8 +20,6 @@ import type {
   DeliverJobResult,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
-  IssuePartsToTechnicianInput,
-  IssuePartsToTechnicianResult,
   ItemDto,
   ItemLookups,
   ItemSearchInput,
@@ -32,11 +29,12 @@ import type {
   JobStatusTransitionInput,
   JobSummaryDto,
   TechnicianCustodyInput,
-  NewInternalTransferResult,
   PaymentDto,
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
+  PartyAnyDto,
+  PartySearchAnyInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
   SaleResult,
@@ -221,6 +219,7 @@ export interface ElectronApi {
   readonly party: {
     readonly create: (input: CreateSupplierInput) => Promise<{ id: string; partyCode: string }>;
     readonly search: (input: SupplierSearchInput) => Promise<readonly SupplierDto[]>;
+    readonly searchAny: (input: PartySearchAnyInput) => Promise<readonly PartyAnyDto[]>;
     readonly get: (id: string) => Promise<SupplierDto | null>;
     readonly balance: (id: string) => Promise<SupplierBalanceDto>;
   };
@@ -278,15 +277,9 @@ export interface ElectronApi {
     readonly transitionStatus: (input: JobStatusTransitionInput) => Promise<JobDto>;
     readonly getById: (input: JobIdInput) => Promise<JobDto | null>;
     readonly list: (input: JobSearchInput) => Promise<readonly JobSummaryDto[]>;
-    readonly issueToTechnician: (
-      input: IssuePartsToTechnicianInput,
-    ) => Promise<IssuePartsToTechnicianResult>;
     readonly issueToJob: (input: IssuePartsToJobInput) => Promise<IssuePartsToJobResult>;
     readonly listJobParts: (id: string) => Promise<readonly JobPartRecord[]>;
     readonly deliver: (input: DeliverJobInput) => Promise<DeliverJobResult>;
-    readonly createInternalTransfer: (
-      input: CreateInternalTransferInput,
-    ) => Promise<NewInternalTransferResult>;
     readonly reconcileCustody: (
       input: RecordCustodyReconciliationInput,
     ) => Promise<CustodyReconciliationResult>;

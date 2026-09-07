@@ -41,6 +41,144 @@
 
 ---
 
+## [2026-09-07] Session 39 — Phase 8: Bug-fix & hardening (P8-0 through P8-7)
+
+**Goal:** Work through Phase 8's severity-ordered bug queue (P8-0 health
+check through P8-7), one item at a time, verified before moving on. No new
+features. Owner answered Q1–Q5 (recorded in `docs/phases/PHASE_8.md` §5)
+before any code was written, per the session brief.
+
+**Done:**
+
+- P8-0: repo health check. `git log --oneline -10` confirmed HEAD at
+  `a0877d8`. `npm run verify` 417/417 clean on the first try (no
+  better-sqlite3 ABI rebuild needed this time).
+- P8-1 (BUG-ADR9): **deferred**, owner chose Option B. No code written.
+- P8-2 (BUG-18): built `party:searchAny` (new IPC channel, Option A) —
+  `packages/contracts/src/party/party-any.ts`,
+  `KyselyPartyRepository.searchAnyParty`
+  (`packages/db/src/repositories/party.repository.ts`), handler in
+  `supplier.handler.ts`, preload + `electron-api.d.ts` wiring. Client:
+  new shared `OtherPartyPicker` component in `DeliveryPartLines.tsx`
+  (reused by `DeliveryLabourLines.tsx`), replacing the disabled "coming
+  soon" payer option; `JobDeliveryDrawer.tsx`'s payer-resolution and
+  submit-validation logic updated for the new `'other'` payer choice.
+- P8-3 (BUG-P6.5-1): added `invoiceDocNo` to `JobRecord`/`JobDto`.
+  `job.repository.ts`'s `getJob` now `LEFT JOIN`s `sale`; the other three
+  `toJobRecord` call sites (`createJob`/`updateJobStatus`/
+  `assignTechnician`) go through a new `resolveInvoiceDocNo` helper so the
+  field stays correct everywhere, not just the common path.
+  `JobDetailPage.tsx`'s delivered-job banner now falls back to
+  `job.invoiceDocNo` instead of the raw `saleId` UUID.
+- P8-4 (BUG-20): Option B — added an "Enum-like columns are canonical in
+  application code" note to `docs/DATABASE_RULES.md` §3, naming the
+  `entry_type`/`staff_advance`/`advance` mismatch as the example.
+  `0001_init.sql` untouched.
+- P8-5 (DEBT-2): Option A — deleted `job:issueToTechnician`'s channel,
+  handler registration, preload wrapper, and `electron-api.d.ts` type.
+  Left the underlying core/db function and its own tests untouched.
+- P8-6 (DEBT-3): Option A — deleted `job:createInternalTransfer` the same
+  way; also deleted `internal-transfer.handler.ts` outright (nothing else
+  was left in it) and its registration in `main.ts`.
+- P8-7 (BUG-14): replaced `docs/DATABASE_RULES.md` §3's self-contradicting
+  bullet 2 with the corrected reversal description PHASE_8.md specified.
+
+**Verified:**
+
+- Every task: `npm run typecheck` and `npm run lint` clean after its own
+  change, before moving to the next task (not batched).
+- P8-2: 3 new tests in `party.repository.test.ts` — `searchAnyParty` finds
+  a `party_type='both'` fixture shaped exactly like the codebase's own
+  Dawlance fixture, finds both customer- and supplier-type parties by the
+  same query, and excludes staff. Run in isolation: 28/28 passed.
+- P8-3: 2 new tests in `job.repository.test.ts` — a job whose `sale_id`
+  points at a real `sale` row with `doc_no='INV-A-000042'` gets back
+  `invoiceDocNo === 'INV-A-000042'` exactly (hand-checked, not
+  approximated); an undelivered job gets back `null`. Run in isolation:
+  21/21 passed.
+- P8-5/P8-6: `grep -rn "issueToTechnician"` / `"createInternalTransfer"`
+  against `apps/ --include=*.ts --include=*.tsx` — zero hits in source.
+  (Stale `apps/server/dist/` build output from a prior `electron-vite
+build` still contains both strings — noted explicitly as not being
+  source and not part of this verification, rather than silently
+  excluded without comment.)
+- P8-4/P8-7: `grep -n "canonical in application code"` and
+  `grep -n "reversed_by_id"` against `docs/DATABASE_RULES.md` — matched
+  PHASE_8.md's exact verification instructions.
+- Final: `npm run verify` — **422/422** tests (417 baseline + 5 new),
+  typecheck clean, lint clean, exit 0.
+
+**UI click-through (owner-requested follow-up, same session):** the owner
+asked for the real running-window verification to happen before commit,
+not deferred. Built the app (`npm run build --workspace=@shop/server`),
+rebuilt `better-sqlite3` for Electron's ABI (`npm run rebuild:electron` —
+clean on the first attempt, no duplicate-module quirk this time), and
+drove a real Electron process with Playwright's `_electron`
+(`playwright-core`, installed `--no-save`, same technique as Session 36).
+
+- **P8-3:** reopened `JOB-0001` (delivered 2026-09-06, an earlier
+  session) — header read "Job delivered — invoice INV-0012." — the real
+  doc number, not a raw UUID, and `deliveredNotice` was genuinely null
+  (fresh app launch), so this exercises the actual fallback path.
+- **P8-2:** created a new job (`JOB-0004`) through the real "New Job"
+  form, delivered it with an "AC Installation" labour line whose payer
+  was set via the new "Other party…" picker to "Test Supplier" (a real
+  `party_type='supplier'` fixture, found via live-search against
+  `party:searchAny`) — UI read "Job delivered — invoice INV-0014."
+  Queried the database directly afterward (`ELECTRON_RUN_AS_NODE=1
+electron.exe script.mjs`): `sale_line.payer_party_id` for that sale
+  returned `01a05377-d010-70d6-996b-86f178398ad6` — the exact id of "Test
+  Supplier," confirmed by a direct comparison query (`MATCH: true`).
+- Cleanup: restored `better-sqlite3` to the system-Node ABI
+  (`npm install better-sqlite3 --no-save`), `npm run verify` reconfirmed
+  422/422. Deleted the temporary driver script and screenshots — never
+  committed, same as Session 36.
+- One incidental finding, not a new bug: `require('better-sqlite3')`
+  alone still succeeds under both plain Node and Electron's Node
+  regardless of which ABI the binary targets in this sandbox — the real
+  ABI check only fires inside `new Database(...)`. Recorded as a note on
+  BUG-7 in PROJECT.md, not reopened (BUG-7 stays RESOLVED; this app
+  launched and worked correctly end-to-end this session).
+
+**Not done / deferred:**
+
+- P8-1/BUG-ADR9 — deferred entirely by owner decision, not attempted.
+
+**Bugs found:** none new. BUG-18, BUG-P6.5-1 now FIXED (click-through
+verified, not just code-complete). BUG-20, BUG-14 FIXED. DEBT-2, DEBT-3
+FIXED (removed). BUG-ADR9 unchanged, UNFIXED, deferral recorded.
+
+**Decisions taken:** Q1–Q5 answered by the owner and recorded in
+`docs/phases/PHASE_8.md` §5 before any code was written — P8-1 Option B
+(defer), P8-2 Option A (`party:searchAny`), P8-4 Option B (DATABASE_RULES
+note), P8-5 Option A (delete), P8-6 Option A (delete). Owner additionally
+directed: do the UI click-through before committing rather than deferring
+it, and commit as a single `fix(p8):` commit rather than one per bug.
+
+**Blocked on:** nothing.
+
+**Next session should:** nothing Phase-8-specific is outstanding except
+P8-1/BUG-ADR9, which is deferred by explicit decision, not an open task.
+
+**Checklist:**
+
+- [x] All verification checks passed (422/422, typecheck/lint clean;
+      real running-window click-through for P8-2/P8-3, not just
+      component tests)
+- [x] No unresolved bugs introduced by this phase's changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — Phase 8 complete except P8-1,
+      which is deferred by owner decision, not a blocker
+- [x] Any new bugs documented in PROJECT.md — none new; existing bug
+      entries updated in place
+- [x] Test suite passing
+
+**Commit:** pending — one `fix(p8):` commit for the whole phase, per
+owner instruction, immediately following this session close.
+
+---
+
 ## [2026-09-06] Session 38 — Targeted bug-fix: dashboard nav order + cash-session investigation
 
 **Goal:** Fix exactly two reported bugs, in order, each verified before

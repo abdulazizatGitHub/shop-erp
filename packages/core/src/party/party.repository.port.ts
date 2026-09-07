@@ -110,6 +110,20 @@ export interface StaffRecord {
   readonly createdAt: string;
 }
 
+/** 'customer' | 'supplier' | 'both' — staff excluded, they are never a billing payer. */
+export interface PartyAnySearchQuery {
+  readonly query: string;
+}
+
+export interface PartyAnyRecord {
+  readonly id: string;
+  readonly partyCode: string;
+  readonly name: string;
+  readonly shopName: string | null;
+  readonly phone: string | null;
+  readonly partyType: 'customer' | 'supplier' | 'both';
+}
+
 export interface PartyRepositoryPort {
   /**
    * Inserts the party row with party_type = 'supplier'. Generates
@@ -147,4 +161,12 @@ export interface PartyRepositoryPort {
   listStaff(): Promise<readonly StaffRecord[]>;
   /** One staff member by id, or null if not found / not party_type='staff'. */
   getStaffById(id: string): Promise<StaffRecord | null>;
+
+  /**
+   * Searches by name across party_type IN ('customer', 'supplier', 'both')
+   * — staff excluded. P8-2 (BUG-18): lets the delivery UI find a payer
+   * that customer:search/party:search's narrower filters can't match,
+   * e.g. a manufacturer with party_type='both'.
+   */
+  searchAnyParty(query: PartyAnySearchQuery): Promise<readonly PartyAnyRecord[]>;
 }

@@ -54,8 +54,26 @@ Rules:
 `stock_movement` and `party_ledger` are **INSERT only**.
 
 - No `UPDATE`. No `DELETE`.
-- Corrections insert a reversing row and set `reversed_by_id` on the original.
+- Corrections insert a reversing row (same `source_type` and `source_id` as
+  the original, with the opposite sign). The original row is never touched.
+  A reversal is discoverable by querying for all rows sharing the same
+  `source_type`/`source_id` — the same aggregation pattern `v_stock_on_hand`
+  and `v_party_balance` already use. The `reversed_by_id` column exists in
+  the schema but is never written by any application code path.
 - Any code path that updates these tables is a **CRITICAL** bug.
+
+### Enum-like columns are canonical in application code
+
+`party_ledger.entry_type`, `stock_movement.movement_type`, and similar
+free-text columns have zero `CHECK` constraints (confirmed by grep across
+every migration file) — SQLite never rejects an unlisted value. The value a
+migration's own column comment documents can go stale without anyone
+noticing, e.g. `0001_init.sql`'s `entry_type` comment still lists
+`staff_advance` where Phase 7's application code (and Zod schemas) write
+`advance` (PROJECT.md BUG-20). Treat the value application code and Zod
+schemas actually write as canonical, not the migration comment — run
+`SELECT DISTINCT entry_type FROM party_ledger` (or the equivalent column)
+against real data if you need to know what's actually stored.
 
 ### Soft delete everywhere else
 

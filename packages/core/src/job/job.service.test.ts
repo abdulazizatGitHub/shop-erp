@@ -46,6 +46,7 @@ class FakeJobRepository implements JobRepositoryPort {
     revenueType: 'customer_paid',
     labourChargePaisa: 0,
     saleId: null,
+    invoiceDocNo: null,
   };
 
   getJob(): Promise<JobRecord | null> {

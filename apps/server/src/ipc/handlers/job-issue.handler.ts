@@ -1,12 +1,6 @@
 import { ipcMain } from 'electron';
-import {
-  IssuePartsToJobInput,
-  IssuePartsToTechnicianInput,
-  JobIdInput,
-  type IssuePartsToJobResult,
-  type IssuePartsToTechnicianResult,
-} from '@shop/contracts';
-import { issuePartsToJob, issuePartsToTechnician } from '@shop/core';
+import { IssuePartsToJobInput, JobIdInput, type IssuePartsToJobResult } from '@shop/contracts';
+import { issuePartsToJob } from '@shop/core';
 import type { JobPartRecord } from '@shop/core';
 import { createKyselyDb, KyselyJobPartRepository, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
@@ -20,24 +14,6 @@ export interface JobIssueHandlerDeps {
 
 /** See job.handler.ts's file header — no requirePermission() (PROJECT.md BUG-ADR9). */
 export function registerJobIssueHandlers(deps: JobIssueHandlerDeps): void {
-  ipcMain.handle(
-    channels.job.issueToTechnician,
-    withError(async (_event, raw: unknown): Promise<IssuePartsToTechnicianResult> => {
-      const input = IssuePartsToTechnicianInput.parse(raw);
-      const db = openDatabase(deps.dbPath);
-      try {
-        const repo = new KyselyJobPartRepository(
-          createKyselyDb(db),
-          deps.tenantId,
-          deps.deviceCode,
-        );
-        return await issuePartsToTechnician(repo, input);
-      } finally {
-        db.close();
-      }
-    }),
-  );
-
   ipcMain.handle(
     channels.job.issueToJob,
     withError(async (_event, raw: unknown): Promise<IssuePartsToJobResult> => {

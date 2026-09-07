@@ -13,7 +13,7 @@ import {
   TextInput,
 } from '@shop/ui';
 import type { ServiceChargeOption } from '../../types/electron-api.js';
-import type { PayerChoice } from './DeliveryPartLines.js';
+import { OtherPartyPicker, type PayerChoice } from './DeliveryPartLines.js';
 
 export interface LabourLineEdit {
   readonly key: string;
@@ -21,6 +21,8 @@ export interface LabourLineEdit {
   readonly serviceChargeName: string;
   readonly priceRupees: string;
   readonly payer: PayerChoice;
+  readonly otherPartyId: string | null;
+  readonly otherPartyName: string | null;
   readonly revenueType: RevenueType;
 }
 
@@ -55,6 +57,8 @@ export function DeliveryLabourLines({
       serviceChargeName: charge.name,
       priceRupees: '',
       payer: customerAvailable ? 'customer' : 'walkin',
+      otherPartyId: null,
+      otherPartyName: null,
       revenueType: 'customer_paid',
     });
     setPendingChargeId('');
@@ -92,12 +96,36 @@ export function DeliveryLabourLines({
                     aria-label={`Payer for ${line.serviceChargeName}`}
                     value={line.payer}
                     onChange={(e) => {
-                      onChange(line.key, { ...line, payer: e.target.value as PayerChoice });
+                      const payer = e.target.value as PayerChoice;
+                      onChange(line.key, {
+                        ...line,
+                        payer,
+                        otherPartyId: null,
+                        otherPartyName: null,
+                      });
                     }}
                   >
                     {customerAvailable && <option value="customer">Customer</option>}
                     <option value="walkin">Walk-in (no charge)</option>
+                    <option value="other">Other party…</option>
                   </Select>
+                  {line.payer === 'other' && (
+                    <OtherPartyPicker
+                      otherPartyId={line.otherPartyId}
+                      otherPartyName={line.otherPartyName}
+                      ariaLabel={`Other payer party for ${line.serviceChargeName}`}
+                      onPick={(party) => {
+                        onChange(line.key, {
+                          ...line,
+                          otherPartyId: party.id,
+                          otherPartyName: party.name,
+                        });
+                      }}
+                      onClear={() => {
+                        onChange(line.key, { ...line, otherPartyId: null, otherPartyName: null });
+                      }}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   <Select
