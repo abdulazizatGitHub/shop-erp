@@ -1,0 +1,174 @@
+import type { CustomerDto } from '@shop/contracts';
+import { Money } from '@shop/shared';
+import { Button, MoneyDisplay, TextInput } from '@shop/ui';
+
+export type PaymentMode = 'cash' | 'credit';
+
+export interface CheckoutPanelProps {
+  readonly totalPaisa: number;
+  readonly paymentMode: PaymentMode;
+  readonly onPaymentModeChange: (mode: PaymentMode) => void;
+  readonly selectedCustomer: CustomerDto | null;
+  readonly amountPaidRupees: string;
+  readonly onAmountPaidChange: (value: string) => void;
+  readonly cartEmpty: boolean;
+  readonly onCheckout: () => void;
+  readonly paymentModeRef: React.RefObject<HTMLDivElement>;
+  readonly amountPaidRef: React.RefObject<HTMLInputElement>;
+}
+
+/** Right panel: totals, payment mode, amount/change, Complete sale. No cart or customer-search logic — those stay in SalePage/CartTable/CustomerStrip. */
+export function CheckoutPanel({
+  totalPaisa,
+  paymentMode,
+  onPaymentModeChange,
+  selectedCustomer,
+  amountPaidRupees,
+  onAmountPaidChange,
+  cartEmpty,
+  onCheckout,
+  paymentModeRef,
+  amountPaidRef,
+}: CheckoutPanelProps): React.JSX.Element {
+  let paidAmountPaisa: number | null = null;
+  try {
+    paidAmountPaisa = Money.fromRupees(amountPaidRupees);
+  } catch {
+    paidAmountPaisa = null;
+  }
+  const udhaarDisabled = selectedCustomer === null;
+
+  const diffPaisa =
+    paidAmountPaisa !== null
+      ? Money.subtract(Money.of(paidAmountPaisa), Money.of(totalPaisa))
+      : null;
+  const showChange =
+    paymentMode === 'cash' && diffPaisa !== null && Money.compare(diffPaisa, Money.ZERO) > 0;
+  const showShort =
+    paymentMode === 'cash' &&
+    diffPaisa !== null &&
+    Money.compare(diffPaisa, Money.ZERO) < 0 &&
+    paidAmountPaisa !== null &&
+    Money.compare(Money.of(paidAmountPaisa), Money.ZERO) > 0;
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-lg border border-line bg-surface p-4">
+      <div>
+        <div className="flex items-center justify-between text-xs text-ink-faint">
+          <span>Subtotal</span>
+          <MoneyDisplay paisaValue={totalPaisa} size="sm" />
+        </div>
+        <div className="my-2 border-t border-line" />
+        <div className="flex items-center justify-between">
+          <span className="text-[15px] font-bold text-ink">Total</span>
+          <MoneyDisplay paisaValue={totalPaisa} size="total" />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-sm font-medium text-ink-muted">Payment mode</p>
+        <div
+          ref={paymentModeRef}
+          tabIndex={0}
+          role="radiogroup"
+          aria-label="Payment mode"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              if (udhaarDisabled && paymentMode === 'cash') return;
+              onPaymentModeChange(paymentMode === 'cash' ? 'credit' : 'cash');
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              amountPaidRef.current?.focus();
+            }
+          }}
+          className="grid grid-cols-2 gap-3 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <button
+            type="button"
+            tabIndex={-1}
+            role="radio"
+            aria-checked={paymentMode === 'cash'}
+            onClick={() => {
+              onPaymentModeChange('cash');
+            }}
+            className={`relative rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+              paymentMode === 'cash'
+                ? 'border-success-subtle bg-success-subtle text-success'
+                : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+            }`}
+          >
+            💵 Cash
+            <kbd className="absolute right-2 top-2 rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+              C
+            </kbd>
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            role="radio"
+            aria-checked={paymentMode === 'credit'}
+            aria-disabled={udhaarDisabled}
+            title={udhaarDisabled ? 'Select a customer first.' : undefined}
+            onClick={() => {
+              if (!udhaarDisabled) onPaymentModeChange('credit');
+            }}
+            className={`relative rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+              udhaarDisabled
+                ? 'pointer-events-none border-line bg-surface text-ink-faint opacity-50'
+                : paymentMode === 'credit'
+                  ? 'border-warning-subtle bg-warning-subtle text-warning'
+                  : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+            }`}
+          >
+            💳 Udhaar
+            <kbd className="absolute right-2 top-2 rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+              U
+            </kbd>
+          </button>
+        </div>
+      </div>
+
+      {paymentMode === 'cash' ? (
+        <div>
+          <TextInput
+            ref={amountPaidRef}
+            label="Amount received"
+            variant="number"
+            size="large"
+            align="right"
+            value={amountPaidRupees}
+            onChange={(e) => {
+              onAmountPaidChange(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onCheckout();
+              }
+            }}
+          />
+          {showChange && (
+            <div className="mt-2 flex items-center justify-between rounded-md border border-success-subtle bg-success-subtle px-3 py-2 text-sm font-medium text-success">
+              <span>↩ Change due</span>
+              <MoneyDisplay paisaValue={diffPaisa} size="sm" />
+            </div>
+          )}
+          {showShort && (
+            <div className="mt-2 flex items-center justify-between rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-sm font-medium text-danger">
+              <span>Amount short</span>
+              <MoneyDisplay paisaValue={Money.negate(diffPaisa)} size="sm" />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2 text-sm text-warning">
+          Balance will be added to customer&rsquo;s ledger
+        </div>
+      )}
+
+      <Button variant="primary" size="large" fullWidth disabled={cartEmpty} onClick={onCheckout}>
+        ✓ Complete sale <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-xs">F10</kbd>
+      </Button>
+    </div>
+  );
+}

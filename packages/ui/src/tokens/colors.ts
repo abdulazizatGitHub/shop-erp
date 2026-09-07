@@ -4,8 +4,17 @@
  */
 export const colors = {
   ink: { default: '#14181F', muted: '#5A6472', faint: '#8B94A3' },
-  surface: { default: '#FFFFFF', sunken: '#F4F6F8' },
+  surface: {
+    default: '#FFFFFF',
+    sunken: '#F4F6F8',
+    /** Page/canvas background behind panels — distinct from `sunken` (used inside panels). */
+    page: '#F0F2F5',
+    /** Input and row background inside a white panel. */
+    input: '#F7F8FA',
+  },
   line: { default: '#DFE4EA', strong: '#B8C0CC' },
+  /** Dark navigation chrome — the sidebar only. Never used on main content. */
+  sidebar: { bg: '#1E2235', text: '#9AA0B8', active: '#6FA8FF' },
   brand: { default: '#1B5E8C', hover: '#164E75', subtle: '#E7F0F6' },
   /** Semantic, never decorative. in = received, out = paid, due = outstanding. */
   money: { in: '#116149', out: '#A32B1F', due: '#8A5B00' },

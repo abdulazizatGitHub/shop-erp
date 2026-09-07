@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { TextInput } from '@shop/ui';
 import { debounce } from '../../lib/debounce.js';
 
@@ -26,23 +26,48 @@ export interface SearchSelectProps<T> {
   readonly renderItem?: (item: T, highlighted: boolean) => React.ReactNode;
   /** Shown below the input when a non-empty search returns zero results. */
   readonly renderEmpty?: () => React.ReactNode;
+  /**
+   * When this returns true for the selected item, SearchSelect "holds" that
+   * item instead of the normal select-and-reset: query/results stay in
+   * place, arrow-key navigation is disabled, and the held row is rendered
+   * as a plain (non-button) container so renderItem can put a live,
+   * focusable input inside it (e.g. an inline quantity field) without
+   * nesting interactive elements inside a <button>. The caller releases
+   * the hold via the imperative handle (see SearchSelectHandle).
+   */
+  readonly holdSelection?: (item: T) => boolean;
+  /** Rendered between the search input and the results list — e.g. filter tabs. Purely presentational, no state or keyboard logic of its own. */
+  readonly belowInput?: React.ReactNode;
 }
 
-export function SearchSelect<T>({
-  autoFocus,
-  placeholder,
-  search,
-  getKey,
-  getLabel,
-  onSelect,
-  onEmptyEnter,
-  inputRef,
-  renderItem,
-  renderEmpty,
-}: SearchSelectProps<T>): React.JSX.Element {
+export interface SearchSelectHandle {
+  /** Clears the held item plus query/results — used both for Esc-while-held and after a successful confirm. */
+  releaseHeld: () => void;
+  /** Refocuses the search input — needed after confirming/canceling a held row, since SearchSelect stays mounted (no autoFocus remount) once a row can be held in place. */
+  focusInput: () => void;
+}
+
+function SearchSelectInner<T>(
+  {
+    autoFocus,
+    placeholder,
+    search,
+    getKey,
+    getLabel,
+    onSelect,
+    onEmptyEnter,
+    inputRef,
+    renderItem,
+    renderEmpty,
+    holdSelection,
+    belowInput,
+  }: SearchSelectProps<T>,
+  ref: React.Ref<SearchSelectHandle>,
+): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly T[]>([]);
   const [highlighted, setHighlighted] = useState(0);
+  const [heldItem, setHeldItem] = useState<T | null>(null);
   const ownRef = useRef<HTMLInputElement>(null);
   const effectiveRef = inputRef ?? ownRef;
 
@@ -73,33 +98,76 @@ export function SearchSelect<T>({
     debouncedSearch(query);
   }, [query, debouncedSearch]);
 
-  function selectAndReset(item: T): void {
-    onSelect(item);
+  function releaseHeld(): void {
+    setHeldItem(null);
     setQuery('');
     setResults([]);
   }
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      releaseHeld,
+      focusInput: () => {
+        effectiveRef.current?.focus();
+      },
+    }),
+    [effectiveRef],
+  );
+
+  function resetAfterSelect(): void {
+    setQuery('');
+    setResults([]);
+  }
+
+  /** Enter/Tab/click all resolve a picked item through this — holds it if the caller asked to, otherwise the normal select-and-reset. */
+  function chooseItem(item: T): void {
+    onSelect(item);
+    if (holdSelection?.(item)) {
+      setHeldItem(item);
+    } else {
+      setHeldItem(null);
+      resetAfterSelect();
+    }
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'ArrowDown') {
+      if (heldItem) return; // nav disabled while a row is held
       event.preventDefault();
       setHighlighted((h) => Math.min(h + 1, results.length - 1));
     } else if (event.key === 'ArrowUp') {
+      if (heldItem) return;
       event.preventDefault();
       setHighlighted((h) => Math.max(h - 1, 0));
     } else if (event.key === 'Escape') {
-      // Clears the results list only — no stopPropagation, so a parent's
-      // own Escape handler (e.g. cancelling a pending item/quantity step)
-      // still fires. Focus stays on the input; nothing here moves it.
+      // Clears the dropdown, the query text, and any held item — no
+      // stopPropagation, so a parent's own Escape handler still fires.
+      // Focus stays on the input; nothing here moves it.
       event.preventDefault();
-      setResults([]);
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
+      releaseHeld();
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      if (heldItem) return; // a row is already held; nothing left to select from this input
+      // Tab acts as Enter here (keyboard-first counter flow — the brief's
+      // spec) when there's an actual result to select or a search still in
+      // flight. But on a genuinely empty query, Tab must NOT also trigger
+      // onEmptyEnter (checkout) the way Enter does — K-15's audit found
+      // that with a non-empty cart and an empty search box, this made Tab
+      // silently submit the sale instead of moving focus to the next
+      // field, which conflicts with normal tab-order navigation through
+      // the checkout panel. Enter alone keeps that shortcut; Tab falls
+      // through to the browser's default focus movement.
       const picked = results[highlighted];
       if (picked) {
-        selectAndReset(picked);
+        event.preventDefault();
+        chooseItem(picked);
       } else if (query.trim().length === 0) {
-        onEmptyEnter?.();
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onEmptyEnter?.();
+        }
       } else {
+        event.preventDefault();
         // BUG-C fix (found P4-1d real-hardware testing): results[] is
         // populated by a 200ms-debounced async search. A fast typist —
         // exactly what this keyboard-driven counter is built for —
@@ -114,7 +182,7 @@ export function SearchSelect<T>({
             setHighlighted(0);
             const firstMatch = rows[0];
             if (firstMatch) {
-              selectAndReset(firstMatch);
+              chooseItem(firstMatch);
             }
             // else: genuinely zero matches — rows now shows that in
             // the UI instead of leaving the user with no feedback.
@@ -139,26 +207,46 @@ export function SearchSelect<T>({
         }}
         onKeyDown={handleKeyDown}
       />
+      {belowInput}
       {results.length > 0 && (
         <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-line">
           {results.map((item, index) => {
-            const isHighlighted = index === highlighted;
+            const isHeld = heldItem !== null && getKey(item) === getKey(heldItem);
+            const isHighlighted = isHeld || (heldItem === null && index === highlighted);
+            const content = renderItem ? renderItem(item, isHighlighted) : getLabel(item);
+
+            // Held row: a plain container, not a <button> — it may contain
+            // a live focusable input (e.g. the inline qty field), and
+            // interactive elements can't legally nest inside a <button>.
+            if (isHeld) {
+              return (
+                <li key={getKey(item)}>
+                  <div
+                    aria-selected="true"
+                    className="block w-full border-b border-line bg-brand-subtle px-3 py-2 text-left text-sm last:border-b-0"
+                  >
+                    {content}
+                  </div>
+                </li>
+              );
+            }
+
             return (
               <li key={getKey(item)}>
                 <button
                   type="button"
                   aria-selected={isHighlighted}
                   onMouseEnter={() => {
-                    setHighlighted(index);
+                    if (heldItem === null) setHighlighted(index);
                   }}
                   onClick={() => {
-                    selectAndReset(item);
+                    chooseItem(item);
                   }}
                   className={`block w-full border-b border-line px-3 py-2 text-left text-sm last:border-b-0 ${
                     isHighlighted ? 'bg-brand-subtle' : 'hover:bg-surface-sunken'
                   }`}
                 >
-                  {renderItem ? renderItem(item, isHighlighted) : getLabel(item)}
+                  {content}
                 </button>
               </li>
             );
@@ -169,3 +257,7 @@ export function SearchSelect<T>({
     </div>
   );
 }
+
+export const SearchSelect = forwardRef(SearchSelectInner) as <T>(
+  props: SearchSelectProps<T> & { ref?: React.Ref<SearchSelectHandle> },
+) => React.JSX.Element;

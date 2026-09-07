@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ipc } from '../lib/ipc.js';
-import { APP_VERSION } from '../version.js';
 import { NavIcon } from './NavIcon.js';
 import { NAV_ITEMS } from './navigation.js';
-import type { Tab } from './navigation.js';
+import type { NavItem, Tab } from './navigation.js';
 
 export interface SidebarProps {
   readonly activeTab: Tab;
@@ -19,6 +18,41 @@ const DEFAULT_SHOP_NAME = 'Shop ERP';
  * enhancement — logged in PROJECT.md, not built here). Never scrolls;
  * only the main content area does.
  */
+/** Icon-only nav button with a hover/focus tooltip. Shared by the main list and the pinned Settings slot. */
+function NavButton({
+  item,
+  active,
+  onSelectTab,
+}: {
+  readonly item: NavItem;
+  readonly active: boolean;
+  readonly onSelectTab: (tab: Tab) => void;
+}): React.JSX.Element {
+  const tooltip = item.shortcutDigit ? `${item.label} · Alt+${item.shortcutDigit}` : item.label;
+  return (
+    <button
+      type="button"
+      aria-current={active ? 'page' : undefined}
+      aria-label={tooltip}
+      onClick={() => {
+        onSelectTab(item.key);
+      }}
+      className={`group relative flex h-11 w-11 items-center justify-center rounded-md transition-colors ${
+        active ? 'bg-brand/20 text-sidebar-active' : 'text-sidebar-text hover:text-white'
+      }`}
+    >
+      <NavIcon tab={item.key} />
+      <span
+        className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap
+                   rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity
+                   group-hover:opacity-100 group-focus-visible:opacity-100"
+      >
+        {tooltip}
+      </span>
+    </button>
+  );
+}
+
 export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Element {
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
 
@@ -31,44 +65,42 @@ export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Ele
       });
   }, []);
 
+  // Settings is rendered separately, pinned to the bottom — same NAV_ITEMS
+  // data and array order, just two render targets. Not a nav-data change.
+  const mainItems = NAV_ITEMS.filter((item) => item.key !== 'settings');
+  const settingsItem = NAV_ITEMS.find((item) => item.key === 'settings');
+
   return (
-    <aside className="flex h-screen w-52 shrink-0 flex-col border-r border-line bg-surface">
-      <div className="border-b border-line px-4 py-4">
-        <p className="truncate text-base font-semibold text-ink" title={shopName}>
-          {shopName}
-        </p>
+    <aside className="flex h-screen w-14 shrink-0 flex-col bg-sidebar-bg">
+      <div className="flex items-center justify-center border-b border-white/10 py-3">
+        <div
+          className="flex h-[34px] w-[34px] items-center justify-center rounded-md bg-brand text-sm font-bold text-white"
+          title={shopName}
+        >
+          {shopName.charAt(0).toUpperCase()}
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {NAV_ITEMS.map((item) => {
-          const active = item.key === activeTab;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              aria-current={active ? 'page' : undefined}
-              onClick={() => {
-                onSelectTab(item.key);
-              }}
-              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                active ? 'bg-brand text-white' : 'text-ink hover:bg-surface-sunken'
-              }`}
-            >
-              <NavIcon tab={item.key} />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.shortcutDigit && (
-                <span className={`text-xs ${active ? 'text-white/70' : 'text-ink-faint'}`}>
-                  Alt+{item.shortcutDigit}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-3">
+        {mainItems.map((item) => (
+          <NavButton
+            key={item.key}
+            item={item}
+            active={item.key === activeTab}
+            onSelectTab={onSelectTab}
+          />
+        ))}
       </nav>
 
-      <div className="border-t border-line px-4 py-3">
-        <p className="text-xs text-ink-faint">v{APP_VERSION}</p>
-      </div>
+      {settingsItem && (
+        <div className="flex items-center justify-center border-t border-white/10 py-3">
+          <NavButton
+            item={settingsItem}
+            active={settingsItem.key === activeTab}
+            onSelectTab={onSelectTab}
+          />
+        </div>
+      )}
     </aside>
   );
 }
