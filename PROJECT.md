@@ -3,7 +3,7 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-08
 **Current phase:** Phase 8 — Bug-fix & hardening (P8-0 through P8-7 all
 DONE — P8-1/BUG-ADR9 explicitly deferred by owner decision, everything
 else fixed and verified, including a real running-window click-through
@@ -138,6 +138,43 @@ redesign). `SalePage.tsx` ends this session at 367 lines, still over the
 session would need to decide to close that gap. See `PROGRESS.md`
 Session 40 for the full sub-task-by-sub-task record.
 
+**Update, 2026-09-08 (Session 41) — Sale screen UX improvements
+COMPLETE.** Seven renderer-only tasks, all typechecked/linted/422-422/
+built/real-running-window-verified per task, in the order: T4 (payment
+mode emoji → inline SVG icons — found and fixed a kbd-badge/label
+overlap at the app's default 800×600 window that the icon swap itself
+introduced), T7 (12-hour clock + weekday/date, both built from fixed
+tables rather than `toLocaleDateString` after finding en-GB gives
+"8 Sept"/four letters and en-US orders month-before-day in this
+environment's ICU data), T1 (item-search results now a `position:
+absolute` floating dropdown with click-outside-close, verified not
+clipped by the panel's own `overflow-y-auto` ancestor), T2 (customer
+"Change" now opens a floating `CustomerPopover` — strip stays visible,
+never replaced), T3 (cart line −/+ qty steppers; trash goes from
+hover-only to always-visible; a decrement to zero removes the line —
+found and fixed a real text-wrapping/horizontal-scrollbar regression for
+long unit names like "Centimeter", confirmed the shared `CartTable`
+change doesn't break `PurchasePage`), T5 (sidebar expand/collapse,
+200px↔56px, `localStorage`-persisted, Alt+\ global toggle, verified
+across a real app reload), T6 (Help modal — the topbar's hint row
+replaced by a single "? Help" button; `?`/Esc/click-outside/topbar-button
+all verified; `Modal.tsx` gained click-outside-close scoped to `role=
+'dialog'` only, explicitly excluding `alertdialog` so the stock-below-
+zero/credit-limit warning gate can't be accidentally dismissed by an
+outside click — regression-tested directly). Icon approach for T4 was a
+deliberate owner decision: Tabler Icons (as literally specified) would
+need either a new npm dependency or vendored webfont files neither of
+which fit "no new dependencies" on an app that must work fully offline
+on the shop PC, so inline SVGs matching the existing hand-authored icon
+convention were used instead. **`SalePage.tsx`'s state machine — left
+in place as of Session 40 by explicit prior owner decision — was
+extracted this session by a second, explicit owner decision** overriding
+the first once the file grew to 423 lines mid-session; see §2.5 UI
+Redesign State for the full detail and its own real-running-window
+re-verification (a complete cash sale and a complete credit sale, both
+through the warning-gate path, both hand-verified). See `PROGRESS.md`
+Session 41 for the full task-by-task record.
+
 ---
 
 ## 1. Snapshot
@@ -258,50 +295,49 @@ not been otherwise redesigned. This is intentional — the PurchasePage
 redesign is a future session. Known visual inconsistency until that
 session runs.
 
-**SalePage.tsx is over the 300-line file cap (367 lines as of P-UI-8
-close-out, 2026-09-07 — was 425 at P-UI-6).** The large inline blocks
-(item search, checkout, success state) moved out across P-UI-4/P-UI-5/
-P-UI-6 to `ItemSearchPanel.tsx`/`CheckoutPanel.tsx`/`SaleSuccessCard.tsx`.
-At P-UI-8 close-out, the two remaining extractable JSX blocks also moved
-out: the customer-search-open/`CustomerStrip` toggle to
-`CustomerSearchSlot.tsx`, and the error/notice/printError banners to
-`SaleAlerts.tsx` — both re-verified working in a real running window
-after the extraction (`npm run verify` 422/422, a direct smoke test of
-Change → search → select-customer → strip update).
-What remains, and is why the file is still over cap, is the sale
-screen's own state machine — `handleCheckout`, `finishSuccess`,
-`confirmLine`, `handleCancelAfterWarning`, the F10 and C/U keydown
-effects, and the warning-gate message computation. This redesign's
-brief explicitly protected that state machine from being moved
-("SalePage's existing state machine... do not touch"), and relocating
-it now (e.g. into a `useSaleFlow` hook) is a real architecture decision
-— where session state and side effects live, how it composes with
-future features — not a file-organization tweak, and was explicitly
-not authorized for this session. Owner decision at P-UI-8 close-out:
-commit at 367 lines rather than force that decision under a line-count
-deadline; a dedicated follow-up session should decide whether and how
-to extract the state machine itself.
+**RESOLVED, 2026-09-08 (UI improvement session).** `SalePage.tsx`'s
+state machine — `handleCheckout`, `finishSuccess`, `confirmLine`,
+`handleCancelAfterWarning`, the F10/C-U/`?` keydown effects, and the
+warning-gate message computation — was extracted into three hooks after
+an explicit owner decision to do so now rather than defer again:
+`useCart.ts` (cart lines, subtotal, item lookups — 99 lines),
+`useReceiptPrinting.ts` (reprint/print-invoice actions for the success
+card — 54 lines), and `useSaleFlow.ts` (customer/payment/checkout/
+warning-gate flow, composes `useCart` and `useReceiptPrinting` — 281
+lines). `SalePage.tsx` itself is now a thin render component at 148
+lines. Behavior is unchanged from before the extraction — a structural
+move, not a rewrite — re-verified with a full real-running-window
+walkthrough after the split: a complete keyboard-only cash sale
+(INV-0038, Rs 18,000, hand-verified 2×Rs 9,000) through F10 → warning
+gate (stock-below-zero, real low-stock dev data) → Continue →
+success card → F10 "New sale", and a complete credit/udhaar sale
+(INV-0039, Rs 9,000) via the U shortcut → F10 → warning gate → Continue
+→ success card showing "posted to Ahmad Retail" — both exercising the
+extracted `finishSuccess`/`handleCancelAfterWarning` path for real, not
+just the happy path. `npm run verify` 422/422 throughout. Every file
+in `apps/client/src/pages/sales/` is now under the 300-line cap.
 
 ---
 
 ## 3. Phase status
 
-| Phase  | Name                                      | Status                                                                                                                                                     | Completed                                                                                                                             |
-| ------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 0      | Foundation & Environment                  | COMPLETE                                                                                                                                                   | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
-| 1      | Item master + import                      | COMPLETE                                                                                                                                                   | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
-| 2      | Purchases + suppliers                     | COMPLETE                                                                                                                                                   | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
-| 2G     | P2-1/P2-2 IPC+UI gap closure              | COMPLETE                                                                                                                                                   | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
-| 3      | Counter sale + udhaar                     | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                                                       | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
-| 3.5    | Document numbering + multi-unit selling   | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                                              | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
-| 4      | Printing + reports                        | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs)                             | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
-| 4.5    | Full UI Redesign                          | ✅ COMPLETE                                                                                                                                                | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
-| 5      | Deploy + parallel run                     | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                        | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
-| 6      | Repair jobs (two-unit split)              | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                          | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
-| 6.5    | Jobs UI modernisation (modal → full page) | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
-| 7      | Staff, wages, expenses                    | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                         | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
-| 8      | Bug-fix & hardening                       | ✅ P8-0–P8-7 all DONE — P8-1/BUG-ADR9 deferred by owner decision, everything else fixed and click-through-verified in a running window                     | P8-0–P8-7 (2026-09-07). 422/422 tests. See `docs/phases/PHASE_8.md`                                                                   |
-| 8 (UI) | Sale screen redesign (renderer-only)      | ✅ P-UI-2–P-UI-8 all DONE — light-theme keyboard-first counter sale, full keyboard audit passed, 2 bugs found+fixed, 2 logged open (BUG-UI-1, BUG-UI-2)    | P-UI-2–P-UI-8 (2026-09-07). 422/422 tests. See `PROGRESS.md` Session 40                                                               |
+| Phase  | Name                                        | Status                                                                                                                                                                                                                                                          | Completed                                                                                                                             |
+| ------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | Foundation & Environment                    | COMPLETE                                                                                                                                                                                                                                                        | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
+| 1      | Item master + import                        | COMPLETE                                                                                                                                                                                                                                                        | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
+| 2      | Purchases + suppliers                       | COMPLETE                                                                                                                                                                                                                                                        | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
+| 2G     | P2-1/P2-2 IPC+UI gap closure                | COMPLETE                                                                                                                                                                                                                                                        | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
+| 3      | Counter sale + udhaar                       | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                                                                                                                                                            | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
+| 3.5    | Document numbering + multi-unit selling     | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                                                                                                                                                   | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
+| 4      | Printing + reports                          | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs)                                                                                                                                  | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
+| 4.5    | Full UI Redesign                            | ✅ COMPLETE                                                                                                                                                                                                                                                     | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
+| 5      | Deploy + parallel run                       | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                                                                                                                             | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
+| 6      | Repair jobs (two-unit split)                | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                                                                                                                               | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
+| 6.5    | Jobs UI modernisation (modal → full page)   | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window                                                                                                      | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
+| 7      | Staff, wages, expenses                      | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                                                                                                                              | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
+| 8      | Bug-fix & hardening                         | ✅ P8-0–P8-7 all DONE — P8-1/BUG-ADR9 deferred by owner decision, everything else fixed and click-through-verified in a running window                                                                                                                          | P8-0–P8-7 (2026-09-07). 422/422 tests. See `docs/phases/PHASE_8.md`                                                                   |
+| 8 (UI) | Sale screen redesign (renderer-only)        | ✅ P-UI-2–P-UI-8 all DONE — light-theme keyboard-first counter sale, full keyboard audit passed, 2 bugs found+fixed, 2 logged open (BUG-UI-1, BUG-UI-2)                                                                                                         | P-UI-2–P-UI-8 (2026-09-07). 422/422 tests. See `PROGRESS.md` Session 40                                                               |
+| 8 (UX) | Sale screen UX improvements (renderer-only) | ✅ T1–T7 all DONE — floating search dropdown, customer popover, cart qty steppers, sidebar expand/collapse, help modal, icon/time polish; SalePage.tsx state machine extracted to useCart/useReceiptPrinting/useSaleFlow, every sales/ file now under 300 lines | Session 41 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 41                                                                  |
 
 ---
 

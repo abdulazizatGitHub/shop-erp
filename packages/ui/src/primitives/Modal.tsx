@@ -41,7 +41,19 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+      onMouseDown={(e) => {
+        // Click-outside-closes only for plain informational dialogs.
+        // 'alertdialog' (e.g. the stock-below-zero/credit-limit warning
+        // gate) requires an explicit Continue/Cancel decision — an
+        // accidental outside click must not silently pick one for the
+        // user. Also: only a click that both starts and ends on the
+        // backdrop itself closes, so a drag/selection starting inside
+        // the panel and releasing over the backdrop doesn't count.
+        if (role === 'dialog' && e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         ref={panelRef}
         tabIndex={-1}

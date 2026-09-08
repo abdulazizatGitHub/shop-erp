@@ -70,6 +70,7 @@ function SearchSelectInner<T>(
   const [heldItem, setHeldItem] = useState<T | null>(null);
   const ownRef = useRef<HTMLInputElement>(null);
   const effectiveRef = inputRef ?? ownRef;
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const debouncedSearch = useMemo(
     () =>
@@ -97,6 +98,21 @@ function SearchSelectInner<T>(
     }
     debouncedSearch(query);
   }, [query, debouncedSearch]);
+
+  // Closes the floating results dropdown when the user clicks anywhere
+  // outside this component — the input, the filter row, and the dropdown
+  // itself are all inside containerRef, so a click there is never "outside".
+  useEffect(() => {
+    function onMouseDown(event: MouseEvent): void {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        releaseHeld();
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, []);
 
   function releaseHeld(): void {
     setHeldItem(null);
@@ -195,7 +211,7 @@ function SearchSelectInner<T>(
   };
 
   return (
-    <div>
+    <div ref={containerRef} className="relative">
       <TextInput
         ref={effectiveRef}
         variant="search"
@@ -209,7 +225,7 @@ function SearchSelectInner<T>(
       />
       {belowInput}
       {results.length > 0 && (
-        <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-line">
+        <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface shadow-lg">
           {results.map((item, index) => {
             const isHeld = heldItem !== null && getKey(item) === getKey(heldItem);
             const isHighlighted = isHeld || (heldItem === null && index === highlighted);
@@ -253,7 +269,11 @@ function SearchSelectInner<T>(
           })}
         </ul>
       )}
-      {results.length === 0 && query.trim().length > 0 && renderEmpty?.()}
+      {results.length === 0 && query.trim().length > 0 && renderEmpty && (
+        <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-md border border-line bg-surface shadow-lg">
+          {renderEmpty()}
+        </div>
+      )}
     </div>
   );
 }

@@ -41,6 +41,170 @@
 
 ---
 
+## [2026-09-08] Session 41 — Phase 8 (UX): Sale screen UX improvements (T1–T7, COMPLETE)
+
+**Goal:** Renderer-only UI improvement pass on the sale screen: seven
+tasks (T4, T7, T1, T2, T3, T5, T6, in that order per the session brief).
+No IPC changes, no schema changes, no business-logic changes.
+
+**Health check at session start:** `npm run verify` initially showed
+211/422 failed — `better-sqlite3`'s native binary was left Electron-ABI
+compiled (130, not system-Node's 127) from a prior session's dev/
+packaging run, the exact pre-documented BUG-7 environment state, not a
+new bug. Fixed by the documented recovery step
+(`npm install better-sqlite3 --no-save`); re-ran clean at 422/422.
+
+**Done:**
+
+- T4: `CheckoutPanel.tsx` — replaced the 💵/💳 emoji with inline hand-
+  authored SVG icons (cash-stack, clock), matching the existing stroke-
+  icon convention already used elsewhere (`CartLineRow.tsx`,
+  `CustomerStrip.tsx`) rather than adding Tabler Icons as the task's
+  literal spec asked — Tabler isn't installed anywhere in the repo, and
+  adding it would need either a new npm dependency (forbidden this
+  session) or vendored webfont files, on an app that must work fully
+  offline on the shop PC. Owner decision via AskUserQuestion before
+  starting. Found and fixed a real bug this same task introduced: the
+  `C`/`U` `<kbd>` shortcut badges were absolutely positioned in the
+  button's top-right corner and overlapped the now-longer icon+label
+  content at the app's real default 800×600 window, hiding the trailing
+  letter of "Udhaar" — fixed by moving the kbd into the normal flex flow
+  instead of overlaying it.
+- T7: `SalesTopbar.tsx` — 12-hour clock with AM/PM, plus weekday+day+
+  month ("Tue, 8 Sep"), separated by a `·`. Built both from a fixed
+  weekday/month lookup table rather than `toLocaleDateString`, after
+  finding real locale variance in this environment's ICU data: `en-GB`
+  gives day-before-month ordering (matching the spec) but abbreviates
+  September as "Sept" (4 letters); `en-US` gives the correct 3-letter
+  "Sep" but orders month-before-day. Neither locale alone matched the
+  spec's "Mon, 7 Sep" shape, so the exact table avoids relying on either.
+- T1: `SearchSelect.tsx` — results dropdown (and the "no results" empty
+  state) now `position: absolute`, `max-h-[320px]`, `overflow-y-auto`,
+  box-shadow, closes on Esc (existing) or a new `document`-level
+  `mousedown` click-outside listener (new pattern in this codebase,
+  cleaned up on unmount). Verified in a real window that it floats over
+  the cart without pushing it down and is not clipped by the item-search
+  panel's own `overflow-y-auto` ancestor — a real risk flagged in this
+  session's own pre-check that turned out fine in practice.
+- T2: new `CustomerPopover.tsx` (autofocused search, "Walk-in (no
+  account)" row, click-outside/Esc-to-close) + rewritten
+  `CustomerSearchSlot.tsx` — the customer strip (`CustomerStrip.tsx`,
+  unchanged) now stays permanently visible; "Change" opens the popover
+  anchored below it instead of replacing the strip.
+- T3: `CartTable.tsx`/`CartLineRow.tsx`/`SalePage.tsx` (now
+  `useCart.ts`, see below) — new optional `onQuantityChange` prop
+  threading a `(index, delta)` callback down to per-row −/+ buttons;
+  `SalePage`'s `adjustQuantity` does the actual milli-unit arithmetic
+  (`Qty.add`/`Qty.of`, ±1000 milli per whole unit, per CLAUDE.md §3.2) —
+  `CartTable`/`CartLineRow` only forward intent. A decrement to zero or
+  below removes the line, same as the trash icon, which is now always-
+  visible instead of hover-only (matches the task spec; also affects
+  `PurchasePage`'s shared cart rows as an intentional, verified-safe side
+  effect of the shared component — spot-checked in a real running window,
+  no regression). Found and fixed a real layout bug mid-task: longer unit
+  names (e.g. "Centimeter") caused the −/+ qty row to either wrap mid-word
+  or force a horizontal mini-scrollbar inside the cart row; fixed with
+  `flex-wrap` + `whitespace-nowrap` on each chunk so the row wraps as
+  whole units (button/qty/button on one line, price on the next) instead.
+- T5: `Sidebar.tsx` — expand/collapse (56px ↔ 200px,
+  `transition-[width] duration-200 ease-in-out`), state in
+  `localStorage['sidebar-expanded']`, a toggle button (chevron flips)
+  above Settings, tooltip suppressed when expanded (label already
+  visible), global `Alt+\` handler. `App.tsx` needed no changes — `<main>`
+  is a flex sibling and reflows automatically. Verified persistence
+  across a real app reload, and both the keyboard shortcut and the
+  toggle button itself in both directions.
+- T6: new `HelpShortcutsModal.tsx` (built on the existing `Modal`
+  primitive, not `ConfirmDialog` — a plain informational dialog, not a
+  confirm/cancel gate) — two-column keyboard-shortcut reference, opened
+  by `?` (guarded against text-input focus, same pattern as the existing
+  C/U shortcut) or the topbar's new single "? Help" button, which
+  replaced the old three-badge hint row in `SalesTopbar.tsx`. Extended
+  the shared `packages/ui/src/primitives/Modal.tsx` with click-outside-
+  to-close — deliberately scoped to `role="dialog"` only, explicitly
+  excluding `role="alertdialog"` (the stock-below-zero/credit-limit
+  warning gate uses `ConfirmDialog`/`alertdialog`), so an accidental
+  outside click during a real warning decision can't silently cancel a
+  sale. Regression-tested directly: forced the warning gate open with a
+  real oversell, clicked outside it, confirmed it stayed open.
+
+**File-cap resolution (owner-directed mid-session):** T3+T6 grew
+`SalePage.tsx` from 378 to 423 lines. `SalePage.tsx` was already over the
+300-line cap before this session, with an explicit prior owner decision
+(Session 40 close-out) to defer its state-machine extraction to a
+dedicated follow-up session — but this session's own brief said splits
+must not be deferred. Flagged the conflict via AskUserQuestion; owner
+chose to extract now. Split into `useCart.ts` (cart lines/subtotal/
+lookups, 99 lines), `useReceiptPrinting.ts` (reprint/print-invoice for
+the success card, 54 lines), and `useSaleFlow.ts` (customer/payment/
+checkout/warning-gate, composes the other two, 281 lines); `SalePage.tsx`
+is now a 148-line render component. Every file in
+`apps/client/src/pages/sales/` is under 300 lines. See PROJECT.md §2.5
+for the full detail.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — clean after every task.
+- `npm run verify` — 422/422 after every task and after the final
+  state-machine extraction, pasted each time.
+- `npm run build --workspace=@shop/client` and
+  `npm run build --workspace=@shop/server` — clean after every task.
+- Real running-window verification (Playwright `_electron`) after every
+  task, not just component tests — including the two bugs found and
+  fixed mid-task (T4's kbd overlap, T3's unit-name wrapping), the T1
+  overflow-clipping risk flagged in the plan, T2's full search→select→
+  strip-update flow with real customer fixtures, T5's persistence across
+  a real reload, and T6's alertdialog regression check. After the
+  state-machine extraction specifically: a complete keyboard-only cash
+  sale (INV-0038, Rs 18,000, hand-verified as 2×Rs 9,000 after a qty
+  stepper click) through F10 → warning gate (real stock-below-zero from
+  accumulated test data) → Continue → success card → F10 "New sale", and
+  a complete credit/udhaar sale (INV-0039, Rs 9,000) via the `U` shortcut
+  → F10 → warning gate → Continue → success card showing "posted to
+  Ahmad Retail" — both exercising the extracted `finishSuccess`/
+  `handleCancelAfterWarning` path for real, not just typechecked.
+
+**Not done / deferred:** nothing from this session's own scope. BUG-UI-1
+and BUG-UI-2 (logged Session 40) remain open, untouched — not part of
+this session's seven tasks.
+
+**Bugs found:** three real bugs found and fixed within the same task
+that introduced them (T4's kbd/label overlap, T7's date-format ordering
+via locale variance, T3's long-unit-name wrapping) — none left open, so
+none get a new BUG-N entry per CLAUDE.md §8. No new bugs found and left
+unfixed this session.
+
+**Decisions taken:** T4's icon approach (inline SVG, not Tabler) and the
+file-cap/state-machine-extraction question were both put to the owner
+via AskUserQuestion before proceeding — see above for both outcomes.
+
+**Blocked on:** nothing.
+
+**Next session should:** nothing UX-specific is outstanding. BUG-UI-1
+(cosmetic item-name truncation) and BUG-UI-2 (`Modal.tsx` had no focus
+trap — still true; this session's click-outside addition is a different,
+unrelated affordance) remain open for a future polish/accessibility pass.
+`PurchasePage.tsx` still has not been visually redesigned to match the
+sale screen (pre-existing, unchanged this session).
+
+**Checklist:**
+
+- [x] All verification checks passed (422/422 throughout; typecheck/lint
+      clean after every task; real running-window verification for every
+      task including the state-machine extraction)
+- [x] No unresolved bugs introduced by this session — three were found
+      and fixed within the same task, none left open
+- [x] PROJECT.md updated with new status (top status block, §2.5, Phase
+      status table)
+- [x] PROGRESS.md updated with this session entry
+- [x] Next phase prerequisites are met — no next UX-specific phase is
+      queued
+- [x] Any new bugs documented in PROJECT.md — none new; BUG-UI-1/BUG-UI-2
+      unchanged
+- [x] Test suite passing — `npm run verify` 422/422
+
+---
+
 ## [2026-09-07] Session 40 — Phase 8: Sale screen redesign (P-UI-2 through P-UI-8, COMPLETE)
 
 **Goal:** Renderer-only light-theme, keyboard-first redesign of the counter

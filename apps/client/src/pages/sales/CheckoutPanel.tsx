@@ -4,6 +4,43 @@ import { Button, MoneyDisplay, TextInput } from '@shop/ui';
 
 export type PaymentMode = 'cash' | 'credit';
 
+/** Matches the stroke-icon convention used elsewhere (CartLineRow, CustomerStrip): 24x24 viewBox, currentColor stroke. */
+function CashIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M6 6v0M18 18v0" />
+    </svg>
+  );
+}
+
+function UdhaarIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l3 2" />
+      <path d="M9 2h6" />
+    </svg>
+  );
+}
+
 export interface CheckoutPanelProps {
   readonly totalPaisa: number;
   readonly paymentMode: PaymentMode;
@@ -91,14 +128,15 @@ export function CheckoutPanel({
             onClick={() => {
               onPaymentModeChange('cash');
             }}
-            className={`relative rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+            className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-3 text-base font-medium transition-colors ${
               paymentMode === 'cash'
                 ? 'border-success-subtle bg-success-subtle text-success'
                 : 'border-line bg-surface text-ink hover:bg-surface-sunken'
             }`}
           >
-            💵 Cash
-            <kbd className="absolute right-2 top-2 rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+            <CashIcon />
+            Cash
+            <kbd className="rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
               C
             </kbd>
           </button>
@@ -112,7 +150,7 @@ export function CheckoutPanel({
             onClick={() => {
               if (!udhaarDisabled) onPaymentModeChange('credit');
             }}
-            className={`relative rounded-md border px-4 py-3 text-base font-medium transition-colors ${
+            className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-3 text-base font-medium transition-colors ${
               udhaarDisabled
                 ? 'pointer-events-none border-line bg-surface text-ink-faint opacity-50'
                 : paymentMode === 'credit'
@@ -120,8 +158,9 @@ export function CheckoutPanel({
                   : 'border-line bg-surface text-ink hover:bg-surface-sunken'
             }`}
           >
-            💳 Udhaar
-            <kbd className="absolute right-2 top-2 rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+            <UdhaarIcon />
+            Udhaar
+            <kbd className="rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
               U
             </kbd>
           </button>

@@ -15,19 +15,59 @@ function resolveTypePill(
   return null;
 }
 
+function MinusIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="11"
+      height="11"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function PlusIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="11"
+      height="11"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
 export interface CartLineRowProps {
   readonly line: CartLine;
   readonly lookups: ItemLookups | null;
   readonly onRemove: () => void;
+  /** Optional: when omitted, no −/+ buttons are rendered. delta is +1 or -1 whole unit. */
+  readonly onQuantityChange?: ((delta: number) => void) | undefined;
 }
 
-/** One cart row: type pill, name, "qty × price" secondary line, total, hover-only trash. */
-export function CartLineRow({ line, lookups, onRemove }: CartLineRowProps): React.JSX.Element {
+/** One cart row: type pill, name, "qty × price" secondary line with -/+ steppers, total, always-visible trash. */
+export function CartLineRow({
+  line,
+  lookups,
+  onRemove,
+  onQuantityChange,
+}: CartLineRowProps): React.JSX.Element {
   const totalPaisa = lineTotalPaisa(line);
   const pill = resolveTypePill(line.businessUnitId ?? null, lookups);
 
   return (
-    <div className="group flex items-center gap-2 border-b border-line px-1 py-2 last:border-b-0">
+    <div className="flex items-center gap-2 border-b border-line px-1 py-2 last:border-b-0">
       <span
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold ${
           pill ? pill.className : 'bg-surface-input text-ink-faint'
@@ -39,15 +79,40 @@ export function CartLineRow({ line, lookups, onRemove }: CartLineRowProps): Reac
         <p className="truncate text-[13px] font-semibold text-ink" title={line.itemLabel}>
           {line.itemLabel}
         </p>
-        <p className="text-[11px] text-ink-faint">
-          <QuantityDisplay quantityMilli={line.quantityMilli} /> {line.unitLabel}
-          {line.unitPricePaisa !== null && (
-            <>
-              {' '}
-              × <MoneyDisplay paisaValue={line.unitPricePaisa} size="sm" />
-            </>
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] text-ink-faint">
+          {onQuantityChange && (
+            <button
+              type="button"
+              aria-label={`Decrease quantity of ${line.itemLabel}`}
+              onClick={() => {
+                onQuantityChange(-1);
+              }}
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-danger hover:text-danger"
+            >
+              <MinusIcon />
+            </button>
           )}
-        </p>
+          <span className="shrink-0 whitespace-nowrap">
+            <QuantityDisplay quantityMilli={line.quantityMilli} /> {line.unitLabel}
+          </span>
+          {onQuantityChange && (
+            <button
+              type="button"
+              aria-label={`Increase quantity of ${line.itemLabel}`}
+              onClick={() => {
+                onQuantityChange(1);
+              }}
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-brand hover:text-brand"
+            >
+              <PlusIcon />
+            </button>
+          )}
+          {line.unitPricePaisa !== null && (
+            <span className="shrink-0 whitespace-nowrap">
+              × <MoneyDisplay paisaValue={line.unitPricePaisa} size="sm" />
+            </span>
+          )}
+        </div>
       </div>
       <div className="shrink-0 text-right text-[14px] font-bold text-ink">
         {totalPaisa !== null ? <MoneyDisplay paisaValue={totalPaisa} /> : '—'}
@@ -56,7 +121,7 @@ export function CartLineRow({ line, lookups, onRemove }: CartLineRowProps): Reac
         type="button"
         aria-label={`Remove ${line.itemLabel}`}
         onClick={onRemove}
-        className="shrink-0 text-ink-faint opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+        className="shrink-0 text-ink-faint hover:text-danger"
       >
         <svg
           viewBox="0 0 24 24"

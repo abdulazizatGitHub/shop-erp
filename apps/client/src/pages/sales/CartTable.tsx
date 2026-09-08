@@ -57,6 +57,13 @@ export interface CartTableProps {
   readonly onRemove: (index: number) => void;
   /** Optional: when omitted, no "Clear" link is rendered (existing callers like PurchasePage keep their prior behavior). */
   readonly onClear?: () => void;
+  /**
+   * Optional: when omitted, no −/+ quantity buttons are rendered (existing
+   * callers like PurchasePage keep their prior row layout). delta is
+   * always +1 or -1 whole display unit — SalePage does the milli-unit
+   * arithmetic; CartTable only forwards the intent.
+   */
+  readonly onQuantityChange?: (index: number, delta: number) => void;
 }
 
 export function CartTable({
@@ -65,6 +72,7 @@ export function CartTable({
   lookups = null,
   onRemove,
   onClear,
+  onQuantityChange,
 }: CartTableProps): React.JSX.Element {
   return (
     <div className="flex flex-1 flex-col rounded-lg border border-line bg-surface p-3">
@@ -113,6 +121,13 @@ export function CartTable({
                 onRemove={() => {
                   onRemove(index);
                 }}
+                onQuantityChange={
+                  onQuantityChange
+                    ? (delta) => {
+                        onQuantityChange(index, delta);
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>
