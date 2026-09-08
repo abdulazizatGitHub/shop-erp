@@ -98,6 +98,7 @@ export function ItemSearchPanel({
     <SearchSelect<ItemDto>
       ref={searchSelectRef}
       autoFocus
+      inputTone="accent"
       placeholder="Search items (Enter on empty to confirm line)"
       search={searchItems}
       getKey={(item) => item.id}
@@ -116,7 +117,7 @@ export function ItemSearchPanel({
               }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 filterTab === tab.key
-                  ? 'bg-brand text-white'
+                  ? 'bg-pos-accent text-white'
                   : 'bg-surface-input text-ink-muted hover:text-ink'
               }`}
             >
@@ -166,7 +167,7 @@ export function ItemSearchPanel({
                     setSaleUnit((u) => (u === 'stock' ? 'alt' : 'stock'));
                   }
                 }}
-                className="w-24 rounded-md border border-line bg-surface px-2 py-1 font-mono text-base text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+                className="w-24 rounded-md border border-line bg-surface px-2 py-1 font-mono text-base text-ink focus:border-pos-accent focus:outline-none focus:ring-[3px] focus:ring-pos-accent/10"
               />
               <span className="text-sm text-ink-muted">
                 {saleUnit === 'alt' && pendingItem.altUomId !== null
@@ -174,7 +175,7 @@ export function ItemSearchPanel({
                   : uomName(pendingItem.stockUomId)}
               </span>
               <span className="ml-auto flex items-center gap-1 text-xs text-ink-faint">
-                <kbd className="rounded border border-line bg-surface-input px-1.5 py-0.5 font-mono">
+                <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
                   Enter
                 </kbd>
                 to add

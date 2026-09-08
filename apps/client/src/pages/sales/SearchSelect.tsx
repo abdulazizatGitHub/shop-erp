@@ -38,6 +38,8 @@ export interface SearchSelectProps<T> {
   readonly holdSelection?: (item: T) => boolean;
   /** Rendered between the search input and the results list — e.g. filter tabs. Purely presentational, no state or keyboard logic of its own. */
   readonly belowInput?: React.ReactNode;
+  /** Forwarded to the search TextInput's `tone` — 'accent' only for the Sale screen's A-1 redesign; other callers (Jobs, Purchases) keep the default. */
+  readonly inputTone?: 'default' | 'accent';
 }
 
 export interface SearchSelectHandle {
@@ -61,6 +63,7 @@ function SearchSelectInner<T>(
     renderEmpty,
     holdSelection,
     belowInput,
+    inputTone = 'default',
   }: SearchSelectProps<T>,
   ref: React.Ref<SearchSelectHandle>,
 ): React.JSX.Element {
@@ -215,6 +218,7 @@ function SearchSelectInner<T>(
       <TextInput
         ref={effectiveRef}
         variant="search"
+        tone={inputTone}
         autoFocus={autoFocus}
         placeholder={placeholder}
         value={query}
@@ -225,11 +229,25 @@ function SearchSelectInner<T>(
       />
       {belowInput}
       {results.length > 0 && (
-        <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface shadow-lg">
+        <ul
+          className={`absolute left-0 right-0 top-full z-40 mt-1 max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface shadow-lg ${
+            inputTone === 'accent' ? 'flex flex-col gap-1 p-1' : ''
+          }`}
+        >
           {results.map((item, index) => {
             const isHeld = heldItem !== null && getKey(item) === getKey(heldItem);
             const isHighlighted = isHeld || (heldItem === null && index === highlighted);
             const content = renderItem ? renderItem(item, isHighlighted) : getLabel(item);
+            const rowClass =
+              inputTone === 'accent'
+                ? `block w-full rounded-[10px] border-[1.5px] px-3 py-2 text-left text-sm ${
+                    isHighlighted
+                      ? 'border-pos-accent-border bg-pos-accent-subtle'
+                      : 'border-transparent hover:bg-surface-input'
+                  }`
+                : `block w-full border-b border-line px-3 py-2 text-left text-sm last:border-b-0 ${
+                    isHighlighted ? 'bg-brand-subtle' : 'hover:bg-surface-sunken'
+                  }`;
 
             // Held row: a plain container, not a <button> — it may contain
             // a live focusable input (e.g. the inline qty field), and
@@ -237,10 +255,7 @@ function SearchSelectInner<T>(
             if (isHeld) {
               return (
                 <li key={getKey(item)}>
-                  <div
-                    aria-selected="true"
-                    className="block w-full border-b border-line bg-brand-subtle px-3 py-2 text-left text-sm last:border-b-0"
-                  >
+                  <div aria-selected="true" className={rowClass}>
                     {content}
                   </div>
                 </li>
@@ -258,9 +273,7 @@ function SearchSelectInner<T>(
                   onClick={() => {
                     chooseItem(item);
                   }}
-                  className={`block w-full border-b border-line px-3 py-2 text-left text-sm last:border-b-0 ${
-                    isHighlighted ? 'bg-brand-subtle' : 'hover:bg-surface-sunken'
-                  }`}
+                  className={rowClass}
                 >
                   {content}
                 </button>

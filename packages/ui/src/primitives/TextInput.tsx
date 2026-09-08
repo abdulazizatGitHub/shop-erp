@@ -13,6 +13,12 @@ export interface TextInputProps extends Omit<
   readonly size?: TextInputSize;
   /** Right-align — e.g. a money/quantity entry field. Defaults to left. */
   readonly align?: 'left' | 'right';
+  /**
+   * 'accent' swaps the focus border/ring to pos-accent and applies the
+   * Sale-screen's Apple-style height/radius (A-1 redesign) — opt-in, so
+   * every other input in the app keeps its default look unchanged.
+   */
+  readonly tone?: 'default' | 'accent';
 }
 
 const VARIANT_INPUT_MODE: Partial<Record<TextInputVariant, TextInputProps['inputMode']>> = {
@@ -29,9 +35,21 @@ const SIZE_CLASSES: Record<TextInputSize, string> = {
  * screens focus these programmatically (F10 checkout flow, Enter-to-next-field).
  */
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { variant = 'text', label, size = 'default', align = 'left', inputMode, ...rest },
+  {
+    variant = 'text',
+    label,
+    size = 'default',
+    align = 'left',
+    tone = 'default',
+    inputMode,
+    ...rest
+  },
   ref,
 ) {
+  const toneClasses =
+    tone === 'accent'
+      ? 'h-11 rounded-xl border-[1.5px] border-line focus:border-pos-accent focus:outline-none focus:ring-[3px] focus:ring-pos-accent/10'
+      : 'rounded-md border border-line focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus';
   const input = (
     <input
       ref={ref}
@@ -42,7 +60,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
       inputMode={inputMode ?? VARIANT_INPUT_MODE[variant]}
       // Monospace only for "number" (money/quantity entry) — a "text"/"search"
       // input (item/customer/supplier name search) must stay font-sans.
-      className={`w-full rounded-md border border-line bg-surface text-ink placeholder:text-ink-faint focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus disabled:bg-surface-sunken disabled:text-ink-faint ${variant === 'number' ? 'font-mono' : 'font-sans'} ${SIZE_CLASSES[size]} ${align === 'right' ? 'text-right' : 'text-left'}`}
+      className={`w-full bg-surface text-ink placeholder:text-ink-faint disabled:bg-surface-sunken disabled:text-ink-faint ${toneClasses} ${variant === 'number' ? 'font-mono' : 'font-sans'} ${SIZE_CLASSES[size]} ${align === 'right' ? 'text-right' : 'text-left'}`}
       {...rest}
     />
   );

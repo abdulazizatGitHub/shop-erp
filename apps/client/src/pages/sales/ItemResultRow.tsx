@@ -33,13 +33,11 @@ export function ItemResultRow({ item, lookups, uomName }: ItemResultRowProps): R
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-input text-sm font-semibold text-ink-muted">
           {item.nameEn.charAt(0).toUpperCase()}
         </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-medium text-ink">{item.nameEn}</p>
-            <span className="shrink-0 rounded bg-surface-input px-1.5 py-0.5 text-xs text-ink-faint">
-              {item.itemCode}
-            </span>
-          </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14px] font-semibold text-ink">{item.nameEn}</p>
+          <span className="mt-0.5 inline-block rounded bg-surface-input px-1.5 py-0.5 text-xs text-ink-faint">
+            {item.itemCode}
+          </span>
           {/* TODO(P-UI-4): stock-on-hand badge — no data source yet.
               ItemDto/item:search carry no stock quantity field. Left
               empty rather than fabricated; see PROJECT.md known gaps. */}

@@ -64,6 +64,14 @@ export interface CartTableProps {
    * arithmetic; CartTable only forwards the intent.
    */
   readonly onQuantityChange?: (index: number, delta: number) => void;
+  /**
+   * 'card' (default) keeps this component's own border/background — used
+   * by PurchasePage, which has no outer card wrapper of its own. 'flat'
+   * drops both, for callers (the Sale screen's A-1 redesign) that already
+   * nest CartTable inside their own white card and would otherwise get a
+   * double border.
+   */
+  readonly chrome?: 'card' | 'flat';
 }
 
 export function CartTable({
@@ -73,11 +81,16 @@ export function CartTable({
   onRemove,
   onClear,
   onQuantityChange,
+  chrome = 'card',
 }: CartTableProps): React.JSX.Element {
   return (
-    <div className="flex flex-1 flex-col rounded-lg border border-line bg-surface p-3">
+    <div
+      className={`flex flex-1 flex-col p-3 ${chrome === 'card' ? 'rounded-lg border border-line bg-surface' : ''}`}
+    >
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">Cart</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+          Cart
+        </span>
         <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-medium text-brand">
           {cart.length} {cart.length === 1 ? 'item' : 'items'}
         </span>

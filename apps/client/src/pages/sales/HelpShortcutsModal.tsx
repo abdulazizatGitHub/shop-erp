@@ -18,6 +18,7 @@ const SHORTCUTS: readonly Shortcut[] = [
   { keys: ['C'], description: 'Set payment to Cash' },
   { keys: ['U'], description: 'Set payment to Udhaar' },
   { keys: ['F10'], description: 'Complete sale' },
+  { keys: ['Alt', 'H'], description: 'Hold sale (cart must have items)' },
   { keys: ['?'], description: 'Show this help' },
   { keys: ['Alt', '1..7'], description: 'Navigate to a section' },
   { keys: ['Alt', '\\'], description: 'Expand/collapse sidebar' },
@@ -35,7 +36,7 @@ export function HelpShortcutsModal({ open, onClose }: HelpShortcutsModalProps): 
                 {shortcut.keys.map((key, i) => (
                   <span key={key}>
                     {i > 0 && <span className="mx-1 text-ink-faint">+</span>}
-                    <kbd className="rounded border border-line bg-surface-input px-1.5 py-0.5 font-mono text-xs">
+                    <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
                       {key}
                     </kbd>
                   </span>

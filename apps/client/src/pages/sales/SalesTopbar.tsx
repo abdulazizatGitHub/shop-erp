@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { HeldSalesPopover } from './HeldSalesPopover.js';
+import type { QueuedSale } from './useSaleQueue.js';
 
 function formatClock(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -34,11 +36,28 @@ function formatDate(date: Date): string {
 
 export interface SalesTopbarProps {
   readonly onHelpClick: () => void;
+  /** Only rendered once a sale has completed this session (A-5). */
+  readonly hasLastSale: boolean;
+  readonly onLastSaleClick: () => void;
+  /** Hold-sale button (A-4) — only rendered when the cart has at least one item. */
+  readonly cartHasItems: boolean;
+  readonly onHoldClick: () => void;
+  readonly heldSales: readonly QueuedSale[];
+  readonly onResumeHeldSale: (id: string) => void;
 }
 
-/** 52px topbar for the sale screen: title, session pill, Help button, live clock. Visual only — no IPC. */
-export function SalesTopbar({ onHelpClick }: SalesTopbarProps): React.JSX.Element {
+/** 52px topbar for the sale screen: title, session pill, Hold/Last sale/Help buttons, live clock. Visual only — no IPC. */
+export function SalesTopbar({
+  onHelpClick,
+  hasLastSale,
+  onLastSaleClick,
+  cartHasItems,
+  onHoldClick,
+  heldSales,
+  onResumeHeldSale,
+}: SalesTopbarProps): React.JSX.Element {
   const [now, setNow] = useState(() => new Date());
+  const [queueOpen, setQueueOpen] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -50,9 +69,9 @@ export function SalesTopbar({ onHelpClick }: SalesTopbarProps): React.JSX.Elemen
   }, []);
 
   return (
-    <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-line bg-surface px-4">
-      <div className="flex items-center gap-3">
-        <span className="text-[15px] font-bold text-ink">Counter sale</span>
+    <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-white/60 bg-white/80 px-4 backdrop-blur-[12px] backdrop-saturate-[1.8]">
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="whitespace-nowrap text-[15px] font-bold text-ink">Counter sale</span>
         <span className="text-line" aria-hidden="true">
           |
         </span>
@@ -64,12 +83,66 @@ export function SalesTopbar({ onHelpClick }: SalesTopbarProps): React.JSX.Elemen
       </div>
 
       <div className="flex items-center gap-3 text-xs text-ink-faint">
+        {cartHasItems && (
+          <button
+            type="button"
+            onClick={onHoldClick}
+            title="Hold sale (Alt+H)"
+            className="shrink-0 whitespace-nowrap rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
+          >
+            Hold sale
+          </button>
+        )}
+        {heldSales.length > 0 && (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setQueueOpen((open) => !open);
+              }}
+              className="shrink-0 whitespace-nowrap rounded-full bg-warning-subtle px-2.5 py-1 text-xs font-medium text-warning hover:opacity-80"
+            >
+              {heldSales.length} held
+            </button>
+            {queueOpen && (
+              <HeldSalesPopover
+                queue={heldSales}
+                onResume={(id) => {
+                  onResumeHeldSale(id);
+                  setQueueOpen(false);
+                }}
+                onClose={() => {
+                  setQueueOpen(false);
+                }}
+              />
+            )}
+          </div>
+        )}
+        {(cartHasItems || heldSales.length > 0) && (
+          <span className="text-line" aria-hidden="true">
+            |
+          </span>
+        )}
+        {hasLastSale && (
+          <>
+            <button
+              type="button"
+              onClick={onLastSaleClick}
+              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
+            >
+              🕘 Last sale
+            </button>
+            <span className="text-line" aria-hidden="true">
+              |
+            </span>
+          </>
+        )}
         <button
           type="button"
           onClick={onHelpClick}
           className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
         >
-          <kbd className="rounded border border-line bg-surface-input px-1.5 py-0.5 font-mono">
+          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
             ?
           </kbd>
           Help

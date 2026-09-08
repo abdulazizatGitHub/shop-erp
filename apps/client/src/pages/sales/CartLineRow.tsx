@@ -65,6 +65,8 @@ export function CartLineRow({
 }: CartLineRowProps): React.JSX.Element {
   const totalPaisa = lineTotalPaisa(line);
   const pill = resolveTypePill(line.businessUnitId ?? null, lookups);
+  const minStepMilli = line.saleToStockFactor ?? 1000;
+  const atMinimum = line.quantityMilli <= minStepMilli;
 
   return (
     <div className="flex items-center gap-2 border-b border-line px-1 py-2 last:border-b-0">
@@ -76,7 +78,7 @@ export function CartLineRow({
         {pill?.letter ?? ''}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-ink" title={line.itemLabel}>
+        <p className="truncate text-[14px] font-semibold text-ink" title={line.itemLabel}>
           {line.itemLabel}
         </p>
         <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] text-ink-faint">
@@ -84,10 +86,11 @@ export function CartLineRow({
             <button
               type="button"
               aria-label={`Decrease quantity of ${line.itemLabel}`}
+              disabled={atMinimum}
               onClick={() => {
                 onQuantityChange(-1);
               }}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-danger hover:text-danger"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-danger hover:text-danger disabled:pointer-events-none disabled:opacity-40"
             >
               <MinusIcon />
             </button>

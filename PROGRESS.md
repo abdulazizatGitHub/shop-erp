@@ -41,6 +41,157 @@
 
 ---
 
+## [2026-09-08] Session 42 — Phase 8 (A): Apple-style redesign, modal, queue, last-sale (A-1–A-7, COMPLETE)
+
+**Goal:** Renderer-only redesign pass on the sale screen: seven tasks
+(A-6, A-7, A-2, A-3, A-5, A-1, A-4, in that order per the session brief).
+No IPC changes, no schema changes, no new npm dependencies (one
+exception, see Verified below).
+
+**Health check at session start:** `npm run verify` initially showed
+211/422 failed — the same pre-documented BUG-7 environment state as
+Session 41 (`better-sqlite3` left Electron-ABI compiled from a prior
+dev/package run). Fixed via `npm install better-sqlite3 --no-save`;
+re-ran clean at 422/422 before starting.
+
+**Done:**
+
+- A-6: `CartLineRow.tsx` — the `−` quantity button now disables (with
+  `opacity-40`) when `quantityMilli` is at or below the minimum step
+  (`saleToStockFactor ?? 1000`). The `+`/`−` handlers were already pure
+  `onClick` with no focus dependency — confirmed, no change needed.
+- A-7 (fixes BUG-UI-1): `ItemResultRow.tsx` — item name is now
+  `flex-1 min-w-0 truncate` on its own line; the `itemCode` badge moved
+  to a second line below it instead of competing for the same row's
+  width.
+- A-2: `CustomerPopover.tsx` — it never reused `SearchSelect` (its own
+  plain click-only `<ul>`), so had zero keyboard navigation. Added a
+  `highlighted` index (0 = "Walk-in", always navigable) and
+  `ArrowUp`/`ArrowDown`/`Enter` handling on the input; Esc already closed
+  without changing selection.
+- A-3: new `SaleSuccessModal.tsx` replaces the old full-panel
+  `SaleSuccessCard.tsx` (deleted). `SalePage.tsx` now renders the
+  two-panel layout unconditionally and overlays the modal
+  (`rgba(0,0,0,.35)` + `backdrop-blur-[2px]`) on the exact same
+  `confirmedSale` state from `useSaleFlow` — no duplicated state. F10,
+  Esc, and backdrop-click all close it via the same `setConfirmedSale(null)`.
+- A-5: new `useLastSale.ts` + `LastSaleModal.tsx`. `SaleResult` (the
+  return of `sale:create`) carries only `{id, docNo, totalAmountPaisa,
+warnings}` — no line items, customer, payment mode, or timestamp, a
+  real gap against the task brief's assumption. Worked around without a
+  new IPC call: `useSaleFlow.finishSuccess` now also captures a
+  `LastSaleSummary` snapshot (cart lines + customer + payment + a
+  client-side `completedAt`) at the same moment it builds `confirmedSale`,
+  before `clearCart()` runs — persists for the rest of the session
+  (unlike `confirmedSale`/`lastResult`, which clear on "New sale").
+- A-1: new `pos-accent` token (#2563EB) added to `colors.ts` and
+  `tailwind.config.js` per explicit owner decision — kept separate from
+  the existing `brand` token (#1B5E8C) so this redesign doesn't recolour
+  the rest of the app (see PROJECT.md §2.5). `surface.page` retextured
+  to #F2F4F7 directly (safe — grepped, used only by `SalePage.tsx`).
+  Layout: two nested white cards (16px radius, `shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]`)
+  replacing the old bordered panels, 12px gap between them. Glass
+  topbar: `bg-white/80` + `backdrop-blur-[12px] backdrop-saturate-[1.8]`
+  — confirmed via `getComputedStyle` that `backdrop-filter` actually
+  computes to `blur(12px) saturate(1.8)` against a genuinely
+  semi-transparent background (the topbar was fully opaque `bg-surface`
+  before — glass would have had zero visible effect otherwise, exactly
+  the failure mode flagged in the plan's pre-check). Apple-style search
+  input/result-row/payment-button/Complete-sale styling throughout.
+  Three shared `packages/ui` primitives extended with purely-additive,
+  opt-in variants rather than edited in place or forked — every other
+  screen's look is unchanged (grepped each new prop's callers to
+  confirm): `Button` gained a `posAccent` variant, `TextInput` gained a
+  `tone="accent"` prop, `MoneyDisplay` gained a `size="grand"` and a
+  `tone="accent"`. `CartTable.tsx` (shared with `PurchasePage.tsx`)
+  gained an opt-in `chrome="flat"` prop so the Sale screen's nested-card
+  look doesn't leak into Purchases, which keeps its own default bordered
+  card.
+- A-4: new `useSaleQueue.ts` (up to 5 held sales, in-memory only) +
+  `HeldSalesPopover.tsx`. Alt+H holds the current sale (cart must be
+  non-empty) into the queue and resets the screen; a "N held" badge in
+  the topbar opens a popover listing each held sale (customer/item
+  count/total) with a Resume button restoring cart+customer+payment+
+  amount-received exactly. Full-queue and one-time
+  (`localStorage`-gated) warnings reuse the existing notice-banner
+  mechanism (`SaleAlerts`/`flow.setNotice`) rather than a new tooltip
+  component.
+
+**Verified:** `npm run verify` 422/422 after every one of the seven
+tasks, pasted at each step. Additionally, real running-window
+verification via a one-session-only `playwright-core` dev install
+(explicit owner approval via AskUserQuestion mid-session, since no
+Playwright driver existed and new deps are otherwise forbidden this
+session — confirmed afterward via `git diff --stat package.json
+package-lock.json` that nothing was persisted; the package was
+uninstalled again at session end). Built the real app
+(`electron-vite build`), rebuilt `better-sqlite3` for Electron's ABI
+(`npm run rebuild:electron` — clean single-module rebuild, no
+recurrence of BUG-7's historical duplication issue), and drove the
+actual packaged Electron window via Playwright's `_electron` (had to
+`env -u ELECTRON_RUN_AS_NODE` — this sandbox sets that variable
+globally, which silently makes `electron.exe` run as plain Node
+instead of launching a window; not previously documented, worth a
+BUG entry if it recurs for a future agent in this same sandbox).
+Screenshotted the real Sales screen against real dev-DB data
+(`Compressor`, Rs 6,000) at the app's actual 800×600 default window —
+**this caught two real bugs, not just eyeballed:**
+
+1. `CustomerStrip.tsx`'s walk-in label was missing the `truncate` class
+   its named-customer sibling already had; at the real ~196px-wide
+   right panel (icon+Change-button alone measured ~140px of that) it
+   word-wrapped across three lines ("Walk-\nin\ncustomer"). Fixed by
+   adding `truncate`, and further shrinking the icon (32px→24px) and
+   making Change/Remove icon-only buttons (dropped their text labels,
+   added `aria-label`/`title`) to recover real width — measured: the
+   name's text column went from 21px to 80px wide, confirmed on-screen
+   as readable "Walk-in cus…" instead of unreadable "W…".
+2. Adding A-4's Hold-sale button crowded the topbar enough that
+   "Counter sale" itself started wrapping onto two lines. Fixed by
+   giving the title cluster `shrink-0` (so it stops compressing before
+   text wraps) and trimming the Hold button (dropped its inline `Alt+H`
+   kbd badge — documented the shortcut in `HelpShortcutsModal.tsx`
+   instead, a real, separate gap since Alt+H had no discoverable
+   documentation anywhere in the UI otherwise).
+   Confirmed no residual horizontal page overflow via direct DOM
+   measurement (`document.body.scrollWidth === clientWidth`), not just
+   a screenshot glance.
+
+**Not done / deferred:** none — all seven tasks (A-1 through A-7)
+completed and verified.
+
+**Bugs found:** BUG-UI-1 (FIXED this session, see PROJECT.md). Two new
+bugs found and fixed in the running-window pass (customer-strip word-
+wrap, topbar title word-wrap) — not tracked as new BUG-N entries since
+both were introduced and fixed within this same session, never shipped.
+
+**Decisions taken:** pos-accent as a separate token from brand (owner
+decision, plan-approval message). One-time `playwright-core` dev
+install for visual verification (owner decision via AskUserQuestion
+mid-session).
+
+**Blocked on:** nothing.
+
+**Next session should:** Consider whether `HeldSalesPopover.tsx`'s
+`right-0` anchor (which can overlap the topbar's title row at narrow
+widths when opened) is worth a cleaner anchoring pass — functional,
+not broken, but visually inelegant; deferred as a polish item, not
+fixed this session. Also: BUG-UI-2 (`Modal.tsx` has no focus trap)
+remains open, out of this session's scope.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase (2 found and fixed
+      within-session, not shipped; see Bugs found)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (BUG-UI-1 marked FIXED)
+- [x] Test suite passing (`npm run verify` 422/422)
+
+---
+
 ## [2026-09-08] Session 41 — Phase 8 (UX): Sale screen UX improvements (T1–T7, COMPLETE)
 
 **Goal:** Renderer-only UI improvement pass on the sale screen: seven

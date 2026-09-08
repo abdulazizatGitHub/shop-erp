@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ipc } from '../../lib/ipc.js';
-import type { ConfirmedSale } from './SaleSuccessCard.js';
+import type { ConfirmedSale } from './SaleSuccessModal.js';
 
 /**
  * Reprint/print-invoice actions for the success card — split out of

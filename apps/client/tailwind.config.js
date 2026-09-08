@@ -20,10 +20,18 @@ export default {
     extend: {
       colors: {
         ink: { DEFAULT: '#14181F', muted: '#5A6472', faint: '#8B94A3' },
-        surface: { DEFAULT: '#FFFFFF', sunken: '#F4F6F8', page: '#F0F2F5', input: '#F7F8FA' },
+        surface: { DEFAULT: '#FFFFFF', sunken: '#F4F6F8', page: '#F2F4F7', input: '#F7F8FA' },
         line: { DEFAULT: '#DFE4EA', strong: '#B8C0CC' },
         sidebar: { bg: '#1E2235', text: '#9AA0B8', active: '#6FA8FF' },
         brand: { DEFAULT: '#1B5E8C', hover: '#164E75', subtle: '#E7F0F6' },
+        // Sale-screen-only accent (A-1) — see colors.ts for why this is
+        // separate from `brand`.
+        'pos-accent': {
+          DEFAULT: '#2563EB',
+          hover: '#1D4ED8',
+          subtle: '#EFF4FF',
+          border: '#BFCFFE',
+        },
         money: { in: '#116149', out: '#A32B1F', due: '#8A5B00' },
         danger: { DEFAULT: '#B3261E', subtle: '#FBEAE9' },
         warning: { DEFAULT: '#9A6300', subtle: '#FBF0DA' },

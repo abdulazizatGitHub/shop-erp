@@ -89,7 +89,7 @@ export function CheckoutPanel({
     Money.compare(Money.of(paidAmountPaisa), Money.ZERO) > 0;
 
   return (
-    <div className="flex h-full flex-col gap-4 rounded-lg border border-line bg-surface p-4">
+    <div className="flex flex-1 flex-col gap-4">
       <div>
         <div className="flex items-center justify-between text-xs text-ink-faint">
           <span>Subtotal</span>
@@ -97,13 +97,17 @@ export function CheckoutPanel({
         </div>
         <div className="my-2 border-t border-line" />
         <div className="flex items-center justify-between">
-          <span className="text-[15px] font-bold text-ink">Total</span>
-          <MoneyDisplay paisaValue={totalPaisa} size="total" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+            Total
+          </span>
+          <MoneyDisplay paisaValue={totalPaisa} size="grand" />
         </div>
       </div>
 
       <div>
-        <p className="mb-1 text-sm font-medium text-ink-muted">Payment mode</p>
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+          Payment mode
+        </p>
         <div
           ref={paymentModeRef}
           tabIndex={0}
@@ -128,15 +132,15 @@ export function CheckoutPanel({
             onClick={() => {
               onPaymentModeChange('cash');
             }}
-            className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-3 text-base font-medium transition-colors ${
+            className={`flex h-[42px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border-[1.5px] text-base font-semibold transition-colors ${
               paymentMode === 'cash'
                 ? 'border-success-subtle bg-success-subtle text-success'
-                : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+                : 'border-line bg-surface-input text-ink-muted hover:bg-surface-sunken'
             }`}
           >
             <CashIcon />
             Cash
-            <kbd className="rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+            <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
               C
             </kbd>
           </button>
@@ -150,17 +154,17 @@ export function CheckoutPanel({
             onClick={() => {
               if (!udhaarDisabled) onPaymentModeChange('credit');
             }}
-            className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-3 text-base font-medium transition-colors ${
+            className={`flex h-[42px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border-[1.5px] text-base font-semibold transition-colors ${
               udhaarDisabled
-                ? 'pointer-events-none border-line bg-surface text-ink-faint opacity-50'
+                ? 'pointer-events-none border-line bg-surface-input text-ink-faint opacity-50'
                 : paymentMode === 'credit'
                   ? 'border-warning-subtle bg-warning-subtle text-warning'
-                  : 'border-line bg-surface text-ink hover:bg-surface-sunken'
+                  : 'border-line bg-surface-input text-ink-muted hover:bg-surface-sunken'
             }`}
           >
             <UdhaarIcon />
             Udhaar
-            <kbd className="rounded border border-line bg-surface-input px-1 text-[10px] font-mono">
+            <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
               U
             </kbd>
           </button>
@@ -205,7 +209,7 @@ export function CheckoutPanel({
         </div>
       )}
 
-      <Button variant="primary" size="large" fullWidth disabled={cartEmpty} onClick={onCheckout}>
+      <Button variant="posAccent" size="large" fullWidth disabled={cartEmpty} onClick={onCheckout}>
         ✓ Complete sale <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-xs">F10</kbd>
       </Button>
     </div>

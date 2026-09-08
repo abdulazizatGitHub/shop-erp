@@ -3,8 +3,10 @@ import type { CreateSaleInput, CustomerDto, ItemLookups, SaleResult } from '@sho
 import { Money } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
 import type { CartLine } from './CartTable.js';
-import type { ConfirmedSale } from './SaleSuccessCard.js';
+import type { LastSaleSummary } from './LastSaleModal.js';
+import type { ConfirmedSale } from './SaleSuccessModal.js';
 import { useCart } from './useCart.js';
+import { useLastSale } from './useLastSale.js';
 import { useReceiptPrinting } from './useReceiptPrinting.js';
 
 type Step = 'search-item' | 'warning-gate';
@@ -22,6 +24,8 @@ export interface SaleFlow {
   readonly lookups: ItemLookups | null;
   readonly uomName: (id: string) => string;
   readonly cart: readonly CartLine[];
+  /** Bulk cart replace — used by the A-4 sale-queue resume path in SalePage. */
+  readonly setCart: (cart: readonly CartLine[]) => void;
   readonly cartSubtotalPaisa: number;
   readonly confirmLine: ReturnType<typeof useCart>['confirmLine'];
   readonly removeLine: (index: number) => void;
@@ -45,6 +49,7 @@ export interface SaleFlow {
   readonly invoicePrinting: boolean;
   readonly step: Step;
   readonly lastResult: SaleResult | null;
+  readonly lastSale: LastSaleSummary | null;
   readonly warningTitle: string;
   readonly warningMessages: readonly string[];
   readonly paymentModeRef: React.RefObject<HTMLDivElement>;
@@ -75,6 +80,7 @@ export function useSaleFlow(): SaleFlow {
     confirmedSale,
     setPrintError,
   );
+  const { lastSale, captureLastSale } = useLastSale();
 
   const paymentModeRef = useRef<HTMLDivElement>(null);
   const amountPaidRef = useRef<HTMLInputElement>(null);
@@ -113,6 +119,15 @@ export function useSaleFlow(): SaleFlow {
       paymentMode,
       paidAmountPaisa,
       customerName: selectedCustomer?.name ?? null,
+    });
+    captureLastSale({
+      docNo: result.docNo,
+      lines: cartFlow.cart,
+      subtotalPaisa: cartFlow.cartSubtotalPaisa,
+      totalAmountPaisa: result.totalAmountPaisa,
+      customerName: selectedCustomer?.name ?? null,
+      paymentMode,
+      paidAmountPaisa,
     });
     cartFlow.clearCart();
     setSelectedCustomer(null);
@@ -245,6 +260,7 @@ export function useSaleFlow(): SaleFlow {
     lookups: cartFlow.lookups,
     uomName: cartFlow.uomName,
     cart: cartFlow.cart,
+    setCart: cartFlow.setCart,
     cartSubtotalPaisa: cartFlow.cartSubtotalPaisa,
     confirmLine,
     removeLine: cartFlow.removeLine,
@@ -268,6 +284,7 @@ export function useSaleFlow(): SaleFlow {
     invoicePrinting,
     step,
     lastResult,
+    lastSale,
     warningTitle,
     warningMessages,
     paymentModeRef,
