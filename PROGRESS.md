@@ -41,6 +41,134 @@
 
 ---
 
+## [2026-09-08] Session 43 — Phase 8 (B): wholesale price preview in sale-screen cart (B-1–B-4, COMPLETE)
+
+**Goal:** Wire the existing wholesale/retail price-level system into the
+sale screen cart so the salesman sees the correct price before checkout
+instead of only on the receipt — display-only, `sale:create` stays the
+price authority.
+
+**Done:**
+
+- `packages/contracts/src/item/item.ts` — `ItemGetPricesInput`,
+  `ItemPricePreview`, `ItemPricesDto`
+- `apps/server/src/ipc/channels.ts` — `item:getPrices`
+- `packages/db/src/repositories/lookup.repository.ts` — new
+  `getItemPrices(db, tenantId, itemIds, priceLevelId)`, following the
+  file's existing bare-function convention (no new repository class);
+  batches one `item_price` select (`ORDER BY effectiveFrom DESC` per
+  owner instruction) and one `price_level` select, then calls
+  `resolvePricePaisa` from `@shop/core` (the exact function `sale:create`
+  itself calls) twice per item — once for retail, once for the given
+  level — so the preview can never diverge from what checkout would
+  charge for a normal (single price row per item+level) item.
+- `apps/server/src/ipc/handlers/item.handler.ts`,
+  `apps/server/src/preload.ts`,
+  `apps/client/src/types/electron-api.d.ts` — wired the new channel
+  through, Zod-validated at the boundary like every other handler.
+- `apps/client/src/pages/sales/useSaleFlow.ts` — new `useEffect`, keyed on
+  a stable itemIds string plus `selectedCustomer?.priceLevelId`, with an
+  explicit `if (itemIds.length === 0) return` per owner instruction (so an
+  empty cart never sends `item:getPrices` an empty array, which
+  `ItemGetPricesInput`'s `z.array().min(1)` would reject). Updates each
+  cart line's `unitPricePaisa` to `levelPaisa ?? retailPaisa`; walk-in
+  (`priceLevelId: null`) naturally reverts every line to retail since
+  `levelPaisa` always comes back null — one code path handles both apply
+  and revert.
+- `apps/client/src/pages/sales/CartTable.tsx` — `CartLine` gained optional
+  `priceLevelBadge?: 'retail' | 'wholesale' | null`.
+- `apps/client/src/pages/sales/CartLineRow.tsx` — renders a small
+  "Wholesale price"/"Retail price" badge next to the unit price only when
+  `priceLevelBadge` is set (i.e. only when the resolved price actually
+  differs from retail) — reuses `CustomerDto.customerType` already in
+  hand for the label, no new IPC round-trip.
+- `packages/db/src/repositories/lookup.repository.test.ts` — new, 4
+  DB-backed tests for `getItemPrices`.
+- `PROJECT.md` — BUG-22 logged (see below).
+
+**Verified:**
+
+- Pre-check reading confirmed `sale.repository.ts`'s own `item_price`
+  read has no `ORDER BY` at all (flagged to the owner before writing any
+  code — see BUG-22) and that the cart's `unitPricePaisa` was already
+  fully decoupled from `sale:create` (`CartLine.unitPricePaisa` already
+  documented "never sent to sale:create"; `useSaleFlow.ts` already always
+  sent `null`) — confirming this feature could only ever touch display,
+  never checkout, before a line of code was written.
+- `npm run verify` — baseline initially FAILED 211/422 (`better-sqlite3`
+  Electron-targeted from a prior session's `npm run dev`/`package` — the
+  documented BUG-7 trade-off, not a regression). Fixed with `npm install
+better-sqlite3 --no-save`, re-confirmed clean 422/422 before writing
+  any code. Then re-run after every sub-task: 422/422 (B-1), 422/422
+  (B-2/B-3), 426/426 (B-4, the +4 new tests).
+- `npm run build --workspace=@shop/client` — clean.
+- Real-running-window verification: launched the actual packaged
+  Electron build via a session-only `playwright-core` install (same
+  precedent as Session 42 — approved by owner, not persisted,
+  `package.json`/`package-lock.json` confirmed untouched via `git status`
+  after cleanup). Diagnosed and worked around a genuine environment
+  quirk found along the way: `ELECTRON_RUN_AS_NODE=1` was set at the
+  OS/user environment level (not introduced this session), silently
+  forcing every direct `electron.exe` launch to run as plain Node
+  (`require('electron')` returning the path string, `app.setName`
+  throwing `undefined`) — worked around per-invocation with `env -u
+ELECTRON_RUN_AS_NODE`, no persistent config touched.
+  Added temporary dev fixtures directly via SQL (left in place afterward,
+  same precedent as prior sessions' dev fixtures): a `Wholesale`
+  `price_level`, a Rs 4,500 `item_price` row for the existing
+  `Compressor` item, and set the existing `Khan Wholesale` customer
+  fixture's `price_level_id` to it (it was `null` — nothing to show
+  before this).
+  1. Selected Khan Wholesale with an **empty** cart — no error, screenshot
+     confirmed clean state (the B-2 empty-cart guard working).
+  2. Added Compressor — cart showed **Rs 4,500** with a **"WHOLESALE
+     PRICE"** badge.
+  3. Added Compressor 2 Ton (no distinct Wholesale `item_price` row) —
+     showed its unchanged **Rs 9,000** retail price with correctly **no**
+     badge (price didn't differ from retail); both lines' totals summed
+     correctly (Rs 13,500).
+  4. Removed the customer — both lines reverted to retail (Rs 6,000 / Rs
+     9,000), both badges disappeared, subtotal Rs 15,000.
+  5. Direct query: `SELECT ip.price, pl.name FROM item_price ip JOIN
+price_level pl ON pl.id = ip.price_level_id WHERE ip.item_id = ?
+ORDER BY ip.effective_from DESC` → `[{"price":450000,"name":
+"Wholesale"},{"price":600000,"name":"Retail"}]` — Wholesale
+     (450000 paisa = Rs 4,500) matches the cart's displayed price exactly.
+     Zero console/page errors across the whole run (`pageerror` +
+     console-error listeners attached for the duration).
+
+**Not done / deferred:** `sale.repository.ts`'s own missing
+`ORDER BY effective_from` — explicit owner decision to log only, not fix,
+this session (CLAUDE.md §8). Discount system untouched, per the session
+brief. `CreateSaleInput`/`sale:create` untouched, per the session brief
+and confirmed unnecessary by the pre-check reading above.
+
+**Bugs found:** BUG-22 (see PROJECT.md) — logged, not fixed, dormant
+today.
+
+**Decisions taken:** none new (owner confirmed the plan's two
+clarifications — `ORDER BY effective_from DESC` on the new query, and the
+empty-cart guard — both applied as specified).
+
+**Blocked on:** nothing.
+
+**Next session should:** if a bug-fix phase opens, fix BUG-22
+(`sale.repository.ts`'s missing `ORDER BY`) alongside whatever else is in
+scope. Otherwise, continue wherever `PROJECT.md`'s "Next milestone" points.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes (BUG-22
+      is pre-existing, not introduced here)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (426/426)
+
+---
+
 ## [2026-09-08] Session 42 — Phase 8 (A): Apple-style redesign, modal, queue, last-sale (A-1–A-7, COMPLETE)
 
 **Goal:** Renderer-only redesign pass on the sale screen: seven tasks

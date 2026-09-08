@@ -36,6 +36,7 @@ export {
   listUomConversions,
   listTechnicians,
   listServiceCharges,
+  getItemPrices,
 } from './repositories/lookup.repository.js';
 export type {
   BusinessUnitOption,
@@ -44,6 +45,7 @@ export type {
   UomConversionOption,
   TechnicianOption,
   ServiceChargeOption,
+  ItemPricePreview,
 } from './repositories/lookup.repository.js';
 export { KyselyImportRepository } from './repositories/import.repository.js';
 export type { InsertedImportItem } from './repositories/import.repository.js';

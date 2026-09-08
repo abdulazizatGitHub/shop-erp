@@ -44,6 +44,27 @@ export const ItemSearchInput = z.object({
 });
 export type ItemSearchInput = z.infer<typeof ItemSearchInput>;
 
+/**
+ * Cart price preview (sale screen). priceLevelId is the selected
+ * customer's level, or null for walk-in — sale:create still resolves
+ * the authoritative price server-side; this is display-only.
+ */
+export const ItemGetPricesInput = z.object({
+  itemIds: z.array(z.string().uuid()).min(1),
+  priceLevelId: z.string().uuid().nullable(),
+});
+export type ItemGetPricesInput = z.infer<typeof ItemGetPricesInput>;
+
+export const ItemPricePreview = z.object({
+  retailPaisa: z.number().int().nonnegative(),
+  levelPaisa: z.number().int().nonnegative().nullable(),
+});
+export type ItemPricePreview = z.infer<typeof ItemPricePreview>;
+
+/** Keyed by itemId. An item omitted from the map has no resolvable Retail price yet. */
+export const ItemPricesDto = z.record(z.string().uuid(), ItemPricePreview);
+export type ItemPricesDto = z.infer<typeof ItemPricesDto>;
+
 export const ItemDto = z.object({
   id: z.string().uuid(),
   itemCode: z.string(),

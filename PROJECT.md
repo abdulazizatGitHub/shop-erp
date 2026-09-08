@@ -378,6 +378,75 @@ against real dev-DB data (`Compressor`, Rs 6,000). `npm run verify`
 (BUG-UI-1 above, now fixed) and BUG-UI-2 (`Modal.tsx` focus trap,
 below) reviewed — BUG-UI-2 remains open, out of this session's scope.
 
+**Update, 2026-09-08 (Session 43) — wholesale price preview in the sale
+screen cart COMPLETE.** B-1 through B-4 all done: a new `item:getPrices`
+IPC channel (`packages/contracts/src/item/item.ts`'s `ItemGetPricesInput`/
+`ItemPricesDto`, handler in `apps/server/src/ipc/handlers/item.handler.ts`,
+new `getItemPrices` in `packages/db/src/repositories/lookup.repository.ts`
+following that file's existing bare-function convention rather than a new
+repository class) resolves both the retail and the customer's price-level
+price for a batch of item ids, reusing `resolvePricePaisa` from
+`@shop/core` — the exact function `sale:create` itself calls — so the
+preview can never compute a value the server wouldn't also charge.
+`useSaleFlow.ts` gained a `useEffect` (keyed on a stable itemIds string
+and `selectedCustomer?.priceLevelId`, with an explicit empty-cart early
+return per owner instruction, to avoid an `item:getPrices` Zod validation
+error when a customer is picked before any items are added) that updates
+each cart line's displayed `unitPricePaisa` — walk-in naturally reverts
+every line to retail since `priceLevelId: null` always returns
+`levelPaisa: null`. `CartLine` gained an optional `priceLevelBadge` field
+and `CartLineRow.tsx` renders a small "Wholesale price"/"Retail price"
+badge only when the resolved price actually differs from retail — no new
+IPC round-trip for the label, reusing `CustomerDto.customerType` already
+in hand. `sale:create`/`CreateSaleInput` were not touched — the cart
+already sent `unitPricePaisa: null` unconditionally before this session
+(confirmed by reading `useSaleFlow.ts` before writing any code), so this
+feature is provably display-only. One new DB-backed test file,
+`packages/db/src/repositories/lookup.repository.test.ts` (4 tests: exact
+wholesale price, walk-in retail fallback, no-wholesale-row fallback, and
+`ORDER BY effective_from DESC` picking the newest of two dated rows for
+the same item+level). `npm run verify` 422/422 baseline confirmed before
+starting, then re-confirmed after every sub-task, ending at 426/426.
+**One environment problem found and fixed before any code was written,
+not a regression from this session's changes**: `npm run verify` initially
+failed 211/422 — `better-sqlite3` was Electron-targeted (`NODE_MODULE_VERSION
+130`) from a prior session's `npm run dev`/`package`, the exact BUG-7
+trade-off already documented in that bug's own entry. Fixed with `npm
+install better-sqlite3 --no-save` before touching any source file.
+**Real-running-window verification, not just code-read**: launched the
+actual packaged Electron build via a session-only `playwright-core`
+install (same precedent as the Apple-redesign session above — not
+persisted, `package.json`/`package-lock.json` confirmed untouched via
+`git status` after cleanup). Hit and diagnosed a genuine environment
+quirk along the way: `ELECTRON_RUN_AS_NODE=1` was set at the OS/user
+environment level (not introduced by this session), which silently made
+every direct `electron.exe` launch run as plain Node instead of the real
+Electron app (`require('electron')` returning the path string, so
+`app.setName` threw `undefined`) — fixed per-invocation with `env -u
+ELECTRON_RUN_AS_NODE`, not by touching any persistent environment
+config. Verified against real dev-DB data (temporary fixtures added
+directly via SQL for this run: a `Wholesale` price_level, a Rs 4,500
+`item_price` row for the existing `Compressor` item, and pointing the
+existing `Khan Wholesale` customer fixture — previously seeded with
+`price_level_id: null`, so the wholesale UI had nothing to show before
+this — at that level; left in place afterward as a reusable dev fixture,
+same precedent as prior sessions' fixture data): selecting Khan Wholesale
+with an empty cart raised no error; adding Compressor showed Rs 4,500
+with a "Wholesale price" badge; adding Compressor 2 Ton (no distinct
+Wholesale `item_price` row) showed its unchanged Rs 9,000 retail price
+with correctly no badge; removing the customer reverted both lines to
+retail (Rs 6,000 / Rs 9,000) and both badges disappeared; a direct
+`item_price` query (`ORDER BY effective_from DESC`) confirmed the
+Wholesale row is exactly 450000 paisa, matching the cart's Rs 4,500
+display. Zero console/page errors across the whole run. **One known bug
+found and logged, not fixed** (owner decision, explicitly deferred to a
+future bug-fix phase per CLAUDE.md §8): BUG-22 —
+`sale.repository.ts`'s own `item_price` read has no `ORDER BY
+effective_from`, unlike this session's new `getItemPrices`, which could
+theoretically diverge from the cart preview if an item ever gets more
+than one dated price row per level — dormant today since no code path
+creates such a row yet.
+
 ---
 
 ## 3. Phase status
@@ -400,6 +469,7 @@ below) reviewed — BUG-UI-2 remains open, out of this session's scope.
 | 8 (UI) | Sale screen redesign (renderer-only)                          | ✅ P-UI-2–P-UI-8 all DONE — light-theme keyboard-first counter sale, full keyboard audit passed, 2 bugs found+fixed, 2 logged open (BUG-UI-1, BUG-UI-2)                                                                                                                        | P-UI-2–P-UI-8 (2026-09-07). 422/422 tests. See `PROGRESS.md` Session 40                                                               |
 | 8 (UX) | Sale screen UX improvements (renderer-only)                   | ✅ T1–T7 all DONE — floating search dropdown, customer popover, cart qty steppers, sidebar expand/collapse, help modal, icon/time polish; SalePage.tsx state machine extracted to useCart/useReceiptPrinting/useSaleFlow, every sales/ file now under 300 lines                | Session 41 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 41                                                                  |
 | 8 (A)  | Apple-style redesign, modal, queue, last-sale (renderer-only) | ✅ A-1–A-7 all DONE — pos-accent token, glass topbar, card layout, customer popover arrow-nav, sale-complete modal, last-sale summary, 5-slot sale queue; BUG-UI-1 fixed; 2 new bugs found+fixed via real-running-window verification, every sales/ file still under 300 lines | Session 42 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 42                                                                  |
+| 8 (B)  | Wholesale price preview in sale-screen cart                   | ✅ B-1–B-4 all DONE — new item:getPrices IPC channel reusing resolvePricePaisa, cart preview + Wholesale/Retail badge, sale:create untouched (already price-authoritative), real-running-window-verified with a direct item_price query match; BUG-22 logged, not fixed        | Session 43 (2026-09-08). 426/426 tests. See `PROGRESS.md` Session 43                                                                  |
 
 ---
 
@@ -1999,6 +2069,48 @@ selecting a unit shows the visible error and is blocked, and selecting
 a unit and submitting creates the expense with the correct
 `business_unit_id` (confirmed EXP-0005 saved as REPAIR after selecting
 Repair).
+
+### BUG-22: `sale.repository.ts`'s `createSale` reads `item_price` with no `ORDER BY effective_from` — LOW, not fixed
+
+Found in: Session 43 (wholesale price preview), 2026-09-08, while building
+`getItemPrices` (the sale screen's cart price preview) and confirming its
+query matches what `sale:create` actually charges.
+Description: `KyselySaleRepository.createSale` (`packages/db/src/
+repositories/sale.repository.ts`, the `itemPriceRows` query inside the
+per-line loop) selects `priceLevelId, price` from `item_price` filtered
+only by `itemId`/`tenantId` — no `effective_from` column in the select, no
+`.orderBy(...)` clause. The result then passes through `resolvePricePaisa`
+(`packages/core/src/sale/sale.ts`), which does `itemPrices.find(p =>
+p.priceLevelId === resolvedLevelId)` — i.e. whichever row SQLite's
+unindexed table scan happens to return first for that `(item_id,
+tenant_id)` match, not necessarily the most recently dated one. This
+session's new `getItemPrices` (`packages/db/src/repositories/
+lookup.repository.ts`, the sale screen's cart price preview) does add
+`ORDER BY effective_from DESC` per the session's explicit instruction, so
+it always resolves the newest row.
+Impact: dormant today — `item_price` only ever has one row per (item,
+price_level) in current data (no price-history/effective-dating feature
+is built or used yet; `UNIQUE (item_id, price_level_id, effective_from)`
+is a schema seam for a future feature, not something any code path
+populates with more than one row). If that feature is ever built without
+also fixing this, `createSale`'s resolved price and the cart preview's
+displayed price could diverge for the same item — the exact
+inconsistency this session's preview feature exists to prevent.
+Fix: add `.orderBy('effectiveFrom', 'desc')` to `createSale`'s
+`itemPriceRows` query, mirroring `getItemPrices`, so both paths are
+provably consistent. Explicitly deferred this session (owner decision,
+2026-09-08): the wholesale price preview session should not silently
+touch `sale:create`'s pricing logic — CLAUDE.md §8, bug-fixing has its
+own phase.
+IMPORTANT: getItemPrices (new, Session B) uses ORDER BY effective_from
+DESC correctly. sale.repository.ts (existing) does not. These two code
+paths will diverge on any item with more than one price row per level —
+the preview will show the most recent price, but sale:create may charge
+a different price. The BUG-22 fix must update both files in the same
+commit.
+Status: UNFIXED — waiting for a bug-fix phase, or for whenever
+effective-dated pricing is actually built (at which point this becomes a
+real, non-dormant bug and must be fixed alongside it).
 
 ### BUG-DASH-1: Dashboard positioned second-to-last in sidebar navigation — LOW — FIXED
 

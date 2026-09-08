@@ -1,4 +1,5 @@
 import type { Kysely } from 'kysely';
+import { resolvePricePaisa } from '@shop/core';
 import type { Database } from '../kysely-schema.js';
 
 export interface BusinessUnitOption {
@@ -135,6 +136,75 @@ export async function listServiceCharges(
     businessUnitId: r.businessUnitId,
     retailChargePaisa: r.retailCharge,
   }));
+}
+
+export interface ItemPricePreview {
+  readonly retailPaisa: number;
+  readonly levelPaisa: number | null;
+}
+
+/**
+ * Cart price preview for the sale screen (display only — sale:create
+ * remains the price authority, see packages/core/src/sale/sale.ts). Reuses
+ * resolvePricePaisa, the exact function sale:create's own price resolution
+ * calls, so this preview can never compute a value sale:create wouldn't.
+ *
+ * ORDER BY effective_from DESC so the most-recently-dated item_price row
+ * for a given (item, level) is the one resolvePricePaisa sees first.
+ * NOTE: sale.repository.ts's own item_price read has no such ordering —
+ * a pre-existing gap, logged in PROJECT.md Known Bugs, not fixed here.
+ */
+export async function getItemPrices(
+  db: Kysely<Database>,
+  tenantId: string,
+  itemIds: readonly string[],
+  priceLevelId: string | null,
+): Promise<Record<string, ItemPricePreview>> {
+  const [priceRows, levelRows] = await Promise.all([
+    db
+      .selectFrom('itemPrice')
+      .select(['itemId', 'priceLevelId', 'price'])
+      .where('tenantId', '=', tenantId)
+      .where('itemId', 'in', itemIds)
+      .orderBy('effectiveFrom', 'desc')
+      .execute(),
+    db
+      .selectFrom('priceLevel')
+      .select(['id', 'isDefault'])
+      .where('tenantId', '=', tenantId)
+      .execute(),
+  ]);
+
+  const priceLevels = levelRows.map((l) => ({ id: l.id, isDefault: l.isDefault === 1 }));
+
+  const result: Record<string, ItemPricePreview> = {};
+  for (const itemId of itemIds) {
+    const itemPrices = priceRows
+      .filter((p) => p.itemId === itemId)
+      .map((p) => ({ priceLevelId: p.priceLevelId, pricePaisa: p.price }));
+
+    let retailPaisa: number;
+    try {
+      retailPaisa = resolvePricePaisa(null, itemPrices, priceLevels);
+    } catch {
+      // No resolvable Retail row for this item — omit it, same as
+      // ItemDto.retailPricePaisa being nullable for the same reason.
+      continue;
+    }
+
+    let levelPaisa: number | null = null;
+    if (priceLevelId !== null) {
+      try {
+        levelPaisa = resolvePricePaisa(priceLevelId, itemPrices, priceLevels);
+      } catch {
+        levelPaisa = null;
+      }
+    }
+
+    result[itemId] = { retailPaisa, levelPaisa };
+  }
+
+  return result;
 }
 
 /** ADR-0013 Type 1 fixed conversions, seeded in bootstrap.ts (P3.5E) — read-only, no UI to manage them yet (Phase 4+). */

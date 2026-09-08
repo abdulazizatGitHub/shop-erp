@@ -115,6 +115,17 @@ export function CartLineRow({
               × <MoneyDisplay paisaValue={line.unitPricePaisa} size="sm" />
             </span>
           )}
+          {line.priceLevelBadge && (
+            <span
+              className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] ${
+                line.priceLevelBadge === 'wholesale'
+                  ? 'bg-brand-subtle text-brand'
+                  : 'bg-surface-input text-ink-faint'
+              }`}
+            >
+              {line.priceLevelBadge === 'wholesale' ? 'Wholesale price' : 'Retail price'}
+            </span>
+          )}
         </div>
       </div>
       <div className="shrink-0 text-right text-[14px] font-bold text-ink">

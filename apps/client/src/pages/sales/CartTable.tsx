@@ -18,6 +18,13 @@ export interface CartLine {
   readonly saleToStockFactor?: number | undefined;
   /** For the cart row's Parts/Repair pill — resolved against ItemLookups, no new IPC. Optional: existing test fixtures predate this field. */
   readonly businessUnitId?: string | null;
+  /**
+   * Set only when a named customer is selected AND item:getPrices resolved
+   * a price for their level that differs from retail — badges the unit
+   * price so the salesman never sees an unlabelled non-retail price.
+   * null/undefined (walk-in, or no price difference): no badge.
+   */
+  readonly priceLevelBadge?: 'retail' | 'wholesale' | null;
 }
 
 /**

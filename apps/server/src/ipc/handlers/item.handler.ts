@@ -1,8 +1,15 @@
 import { ipcMain } from 'electron';
-import { CreateItemInput, ItemSearchInput, type ItemLookups } from '@shop/contracts';
+import {
+  CreateItemInput,
+  ItemGetPricesInput,
+  ItemSearchInput,
+  type ItemLookups,
+  type ItemPricesDto,
+} from '@shop/contracts';
 import { createItem, searchItems } from '@shop/core';
 import {
   createKyselyDb,
+  getItemPrices,
   KyselyItemRepository,
   listBusinessUnits,
   listCategories,
@@ -38,6 +45,21 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
     try {
       const repo = new KyselyItemRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
       return await searchItems(repo, input);
+    } finally {
+      db.close();
+    }
+  });
+
+  ipcMain.handle(channels.item.getPrices, async (_event, raw: unknown): Promise<ItemPricesDto> => {
+    const input = ItemGetPricesInput.parse(raw);
+    const db = openDatabase(deps.dbPath);
+    try {
+      return await getItemPrices(
+        createKyselyDb(db),
+        deps.tenantId,
+        input.itemIds,
+        input.priceLevelId,
+      );
     } finally {
       db.close();
     }

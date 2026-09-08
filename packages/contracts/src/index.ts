@@ -1,4 +1,11 @@
-export { CreateItemInput, UpdateItemInput, ItemSearchInput, ItemDto } from './item/item.js';
+export {
+  CreateItemInput,
+  UpdateItemInput,
+  ItemSearchInput,
+  ItemDto,
+  ItemGetPricesInput,
+  ItemPricesDto,
+} from './item/item.js';
 export type { ItemLookups } from './item/item.js';
 
 export {
