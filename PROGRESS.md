@@ -41,6 +41,164 @@
 
 ---
 
+## [2026-09-09] Session 45 — Phase 8 (D): discount presets, owner-configured (D-1–D-4, COMPLETE)
+
+**Goal:** Replace Session 44's free-form PKR/% discount text inputs on the
+sale screen with owner-configured preset dropdowns. `sale.discount_amount`
+(the DB column) untouched — only the input method changes.
+
+**Done:**
+
+- Health check: `npm run verify` was 211/428 (the documented BUG-7
+  `better-sqlite3` ABI mismatch) before any code was touched; fixed with
+  `npm install better-sqlite3 --no-save`, confirmed 428/428, then proceeded.
+- File-cap prerequisite: `useSaleFlow.ts` was actually 371 live lines and
+  `SettingsPage.tsx` 309 (not the 356/311 PROJECT.md had recorded —
+  CLAUDE.md rule 6, live code is the truth). Split both before any feature
+  code:
+  - `apps/client/src/pages/sales/usePricePreview.ts` — new; the B-2/B-3
+    cart price-preview effect, extracted verbatim out of `useSaleFlow.ts`.
+  - `apps/client/src/pages/sales/useSaleKeyboardShortcuts.ts` — new; the
+    F10/C/U keyboard-shortcut effects, extracted verbatim.
+  - `apps/client/src/pages/sales/saleWarnings.ts` — new; a pure
+    `computeSaleWarningText` helper, extracted once the new discount-dropdown
+    props pushed `useSaleFlow.ts` back over cap a second time.
+  - `apps/client/src/pages/settings/ShopIdentityCard.tsx`,
+    `ReceiptSettingsCard.tsx`, `BackupRestoreCard.tsx` — new; each existing
+    `SettingsPage.tsx` section extracted into its own component.
+    `SettingsPage.tsx` itself is now a 23-line composer.
+- **Owner-directed change to the brief, mid-session (approved before any
+  removal code was written):** Session 44's "Discount defaults" card
+  (wholesale auto-prefill %/PKR) removed entirely, not kept alongside the
+  new presets — two discount configuration surfaces in Settings would
+  confuse whoever manages them, and the new preset system already covers
+  wholesale. Removed: `DiscountDefaultsCard` UI (was never extracted to its
+  own file — deleted inline during the `SettingsPage.tsx` split instead),
+  the `useDiscount.ts` prefill effect that called it,
+  `setting.repository.ts`'s `getWholesaleDefaultDiscountPct`/`Paisa` +
+  setters, the two contracts (`SetWholesaleDefaultDiscountPctInput`/
+  `PaisaInput`), the two IPC channels, the two handlers, the preload
+  exposures, the `electron-api.d.ts` types. A repo-wide grep for both key
+  strings (`wholesaleDefaultDiscountPct`/`Paisa`) returned zero source
+  hits after removal (see Verified).
+- `packages/db/src/repositories/setting.repository.ts` — new discount-preset
+  functions using the brief's exact snake_case setting keys
+  (`discount_apply_walkin`, `discount_apply_wholesale`,
+  `discount_pkr_enabled`, `discount_pct_enabled`, `discount_pkr_presets`,
+  `discount_pct_presets`) — a deliberate deviation from this file's usual
+  camelCase key convention since the brief specified the literal strings.
+  Booleans stored as `'true'`/`'false'`; presets stored as JSON arrays of
+  the owner's raw typed strings (never paisa/percent-as-number here).
+- `packages/contracts/src/setting/setting.ts` — six new `SetDiscount*Input`
+  schemas plus `DiscountConfigDto` (the combined read's output shape:
+  `applyToWalkin`/`applyToWholesale`/`pkrEnabled`/`pkrPresets` (paisa,
+  number[])/`pctEnabled`/`pctPresets` (percentages, number[])).
+- `apps/server/src/ipc/handlers/setting.handler.ts` — `registerBooleanSetting`/
+  `registerPresetListSetting` generic helpers (keeps the file under 300
+  lines despite 6 new get/set pairs), plus `settings:getDiscountConfig` —
+  the single combined read (D-2) that does the only PKR-string-to-paisa
+  conversion in the whole feature, matching the brief's explicit
+  "conversion happens in the handler, not the renderer" instruction; each
+  raw preset string is re-validated against the numeric-string regex before
+  the paisa conversion, not trusted blindly from the DB.
+- `apps/client/src/pages/settings/DiscountPresetsCard.tsx` — new (D-1):
+  apply-to-walkin/wholesale checkboxes, PKR/% enable checkboxes + CSV preset
+  inputs, one Save button (`Promise.all` of the 6 setters — same pattern as
+  Session 44's now-removed card).
+- `apps/client/src/pages/sales/useDiscount.ts` — rewritten (D-3): fetches
+  `getDiscountConfig` on mount and on customer change, exposes
+  `applicable`/`pkrEnabled`/`pkrOptionsPaisa`/`pctEnabled`/`pctOptions` plus
+  selected-value state with mutual exclusivity (picking one preset resets
+  and disables the other — same onChange-not-onBlur precedent as Session
+  44). Applicability: `walkin` = no customer selected, `wholesale` =
+  `customerType === 'wholesale'` — **a named retail credit customer gets no
+  discount option under either checkbox**, per the brief's literal
+  two-checkbox spec; flagged since it's a real behavior change from Session
+  44's free-form inputs, which had no customer-type restriction.
+- `apps/client/src/pages/sales/CheckoutPanel.tsx` — old PKR/% `TextInput`
+  pair replaced by up to two `<select>` dropdowns (D-3/D-4); the whole
+  discount block is hidden when `discountApplicable` is false or neither
+  preset list is enabled.
+- `apps/client/src/pages/sales/useSaleFlow.ts`/`SalePage.tsx` — wiring
+  updated to the new prop shape; `discountPaisa` itself still flows into
+  `sale:create` exactly as Session 44 left it (unchanged).
+
+**Verified:**
+
+- `npm run typecheck`/`npm run lint` — exit 0 after every sub-task.
+- `npm run verify` — 428/428 after every sub-task (split, backend removal,
+  D-1, D-2, D-3/D-4), pasted each time.
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server` —
+  clean after every sub-task.
+- `grep -rn "WholesaleDefaultDiscount|wholesaleDefaultDiscount"` across the
+  whole repo (excluding `node_modules`) — zero hits after the removal step.
+- File caps: `useSaleFlow.ts` 371→295, `SettingsPage.tsx` 309→23,
+  `CheckoutPanel.tsx` 296, `useDiscount.ts` 115, `setting.handler.ts` 255,
+  `DiscountPresetsCard.tsx` 180 — all under 300, pasted via `wc -l`.
+- **Real running-window verification**, not just code-read: session-only
+  `playwright-core` dev install (same precedent as Sessions 42–44, not
+  persisted — `git status --short` after cleanup showed no `package.json`/
+  `package-lock.json` change), `better-sqlite3` rebuilt for Electron then
+  restored to the system-Node build afterward. `_electron.launch`'s own
+  launch-line detection failed in this sandbox (Electron rejected
+  playwright's injected `--remote-debugging-port=0` as "bad option" — not
+  further diagnosed, logged here for a future session hitting the same
+  issue); worked around by manually spawning `electron.exe` with a fixed
+  `--remote-debugging-port` and attaching via `chromium.connectOverCDP`,
+  which worked cleanly. All 5 brief scenarios run against real dev-DB
+  fixtures (`Compressor` Rs 6,000 retail / Rs 4,500 wholesale, `Khan
+Wholesale`):
+  1. Settings: enabled PKR (100,200,500) and % (3,5,10), Walk-in only.
+     "Discount presets saved." shown; a direct `setting` table read
+     confirmed all 6 keys (`discount_apply_walkin`: `"true"`,
+     `discount_apply_wholesale`: `"false"`, `discount_pkr_enabled`:
+     `"true"`, `discount_pct_enabled`: `"true"`, `discount_pkr_presets`:
+     `["100","200","500"]`, `discount_pct_presets`: `["3","5","10"]`).
+  2. Walk-in + Compressor (Rs 6,000): both dropdowns rendered with the
+     right options; selecting Rs 200 PKR disabled the % dropdown and
+     dropped the total to exactly Rs 5,800 (screenshot + DOM text both
+     confirm).
+  3. Reset PKR to None, selected 5%: PKR dropdown disabled, total showed
+     Rs 5,700 (Rs 300 discount). Completed the sale (F10 → stock-below-zero
+     warning gate, an existing low-stock dev fixture unrelated to this
+     feature → Continue) → INV-0066. Direct `sale` table query:
+     `discount_amount = 30000`, `total_amount = 570000` — matches the hand
+     calc (5% of 600000 = 30000; 600000 − 30000 = 570000) exactly.
+  4. Selected Khan Wholesale (wholesale not yet enabled for discount): the
+     entire discount section disappeared — confirmed in both the DOM text
+     and a screenshot.
+  5. Enabled "Apply to: Wholesale" in Settings, re-selected Khan Wholesale
+     on a fresh cart: both dropdowns reappeared for the wholesale customer.
+
+**Not done / deferred:** nothing from this session's scope.
+
+**Bugs found:** none.
+
+**Decisions taken:** owner-directed removal of the Session 44 "Discount
+defaults" card (see Done above) — not a formal ADR, a scoped mid-session
+correction to the brief.
+
+**Blocked on:** nothing.
+
+**Next session should:** nothing specific to this feature — it is
+complete end-to-end. A future session could revisit whether a named
+retail credit customer (not walk-in, not wholesale) should also get a
+discount option; today they get none, per this session's literal reading
+of the two-checkbox brief.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — n/a, this was a standalone UI/
+      settings feature, not a phase gate
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing (`npm run verify` 428/428)
+
+---
+
 ## [2026-09-08] Session 44 — Phase 8 (C): sale-level discount (C-2–C-7, COMPLETE — C-1 dropped)
 
 **Goal:** Add a sale-level discount (fixed PKR or percentage, mutually

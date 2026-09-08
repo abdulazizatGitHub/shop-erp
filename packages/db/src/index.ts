@@ -75,10 +75,18 @@ export {
   setReceiptPaperSize,
   getShopName,
   setShopName,
-  getWholesaleDefaultDiscountPct,
-  setWholesaleDefaultDiscountPct,
-  getWholesaleDefaultDiscountPaisa,
-  setWholesaleDefaultDiscountPaisa,
+  getDiscountApplyWalkin,
+  setDiscountApplyWalkin,
+  getDiscountApplyWholesale,
+  setDiscountApplyWholesale,
+  getDiscountPkrEnabled,
+  setDiscountPkrEnabled,
+  getDiscountPctEnabled,
+  setDiscountPctEnabled,
+  getDiscountPkrPresets,
+  setDiscountPkrPresets,
+  getDiscountPctPresets,
+  setDiscountPctPresets,
 } from './repositories/setting.repository.js';
 export type { ReceiptPaperSize } from './repositories/setting.repository.js';
 export { getSaleReceiptData } from './repositories/receipt.repository.js';

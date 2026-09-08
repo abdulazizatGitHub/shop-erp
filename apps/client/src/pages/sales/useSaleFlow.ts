@@ -5,10 +5,13 @@ import { ipc } from '../../lib/ipc.js';
 import type { CartLine } from './CartTable.js';
 import type { LastSaleSummary } from './LastSaleModal.js';
 import type { ConfirmedSale } from './SaleSuccessModal.js';
+import { computeSaleWarningText } from './saleWarnings.js';
 import { useCart } from './useCart.js';
 import { useDiscount } from './useDiscount.js';
 import { useLastSale } from './useLastSale.js';
+import { usePricePreview } from './usePricePreview.js';
 import { useReceiptPrinting } from './useReceiptPrinting.js';
+import { useSaleKeyboardShortcuts } from './useSaleKeyboardShortcuts.js';
 
 type Step = 'search-item' | 'warning-gate';
 export type PaymentMode = 'cash' | 'credit';
@@ -38,10 +41,15 @@ export interface SaleFlow {
   readonly setPaymentMode: (mode: PaymentMode) => void;
   readonly amountPaidRupees: string;
   readonly setAmountPaidRupees: (value: string) => void;
-  readonly discountPctInput: string;
-  readonly setDiscountPctInput: (value: string) => void;
-  readonly discountPkrInput: string;
-  readonly setDiscountPkrInput: (value: string) => void;
+  readonly discountApplicable: boolean;
+  readonly discountPkrEnabled: boolean;
+  readonly discountPkrOptionsPaisa: readonly number[];
+  readonly selectedDiscountPkrPaisa: number;
+  readonly setSelectedDiscountPkrPaisa: (paisa: number) => void;
+  readonly discountPctEnabled: boolean;
+  readonly discountPctOptions: readonly number[];
+  readonly selectedDiscountPct: number;
+  readonly setSelectedDiscountPct: (pct: number) => void;
   readonly discountPaisa: number;
   readonly totalAmountPaisa: number;
   readonly confirmedSale: ConfirmedSale | null;
@@ -89,10 +97,15 @@ export function useSaleFlow(): SaleFlow {
   );
   const { lastSale, captureLastSale } = useLastSale();
   const {
-    discountPctInput,
-    setDiscountPctInput,
-    discountPkrInput,
-    setDiscountPkrInput,
+    applicable: discountApplicable,
+    pkrEnabled: discountPkrEnabled,
+    pkrOptionsPaisa: discountPkrOptionsPaisa,
+    selectedPkrPaisa: selectedDiscountPkrPaisa,
+    setSelectedPkrPaisa: setSelectedDiscountPkrPaisa,
+    pctEnabled: discountPctEnabled,
+    pctOptions: discountPctOptions,
+    selectedPct: selectedDiscountPct,
+    setSelectedPct: setSelectedDiscountPct,
     discountPaisa,
     reset: resetDiscount,
   } = useDiscount(cartFlow.cartSubtotalPaisa, selectedCustomer);
@@ -119,47 +132,7 @@ export function useSaleFlow(): SaleFlow {
     );
   }, [paymentMode, totalAmountPaisa]);
 
-  // B-2/B-3: cart price preview. Display only — sale:create always sends
-  // unitPricePaisa: null and resolves price itself (see handleCheckout
-  // below); this effect can never change what a sale actually charges,
-  // only what the salesman sees before checkout. Walk-in (priceLevelId
-  // null) naturally gets levelPaisa: null back for every item, so the
-  // same code path both applies and reverts the preview.
-  const cartItemIdsKey = Array.from(new Set(cartFlow.cart.map((l) => l.itemId))).join(',');
-  useEffect(() => {
-    const itemIds = cartItemIdsKey.length > 0 ? cartItemIdsKey.split(',') : [];
-    if (itemIds.length === 0) return;
-    const priceLevelId = selectedCustomer?.priceLevelId ?? null;
-    const customerType = selectedCustomer?.customerType ?? null;
-    let cancelled = false;
-    ipc.item
-      .getPrices({ itemIds, priceLevelId })
-      .then((prices) => {
-        if (cancelled) return;
-        cartFlow.setCart((prev) =>
-          prev.map((line) => {
-            const preview = prices[line.itemId];
-            if (!preview) return line;
-            const resolvedPaisa = preview.levelPaisa ?? preview.retailPaisa;
-            const priceDiffers =
-              priceLevelId !== null &&
-              preview.levelPaisa !== null &&
-              preview.levelPaisa !== preview.retailPaisa;
-            const badge: CartLine['priceLevelBadge'] =
-              priceDiffers && (customerType === 'wholesale' || customerType === 'retail')
-                ? customerType
-                : null;
-            return { ...line, unitPricePaisa: resolvedPaisa, priceLevelBadge: badge };
-          }),
-        );
-      })
-      .catch(() => {
-        // Preview lookup failed — cart keeps its last known prices, not fatal to selling.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cartItemIdsKey, selectedCustomer?.priceLevelId, selectedCustomer?.customerType]);
+  usePricePreview(cartFlow.cart, cartFlow.setCart, selectedCustomer);
 
   function confirmLine(...args: Parameters<typeof cartFlow.confirmLine>): void {
     setError(null);
@@ -255,73 +228,19 @@ export function useSaleFlow(): SaleFlow {
     setStep('search-item'); // keep the cart and checkout selections so the salesman can retry
   }
 
-  // Checkout trigger — F10, whenever the cart is actionable. Also handles
-  // F10 on the success card (starts a new sale) — same key, different
-  // meaning depending on whether confirmedSale is set. Re-subscribes on
-  // every value handleCheckout's closure actually reads, so the listener
-  // is never left holding a stale customer/payment-mode/amount-paid
-  // snapshot now that the checkout panel is edited continuously rather
-  // than entered as a discrete step.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'F10' && confirmedSale !== null) {
-        event.preventDefault();
-        setConfirmedSale(null);
-        return;
-      }
-      if (
-        event.key === 'F10' &&
-        cartFlow.cart.length > 0 &&
-        step !== 'warning-gate' &&
-        confirmedSale === null
-      ) {
-        event.preventDefault();
-        void handleCheckout();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [cartFlow.cart, step, confirmedSale, selectedCustomer, paymentMode, amountPaidRupees]);
+  useSaleKeyboardShortcuts({
+    cart: cartFlow.cart,
+    step,
+    confirmedSale,
+    setConfirmedSale,
+    handleCheckout,
+    selectedCustomer,
+    paymentMode,
+    amountPaidRupees,
+    setPaymentMode,
+  });
 
-  // C/U payment-mode shortcuts — work from anywhere on screen, except while
-  // a text input/textarea has focus (so typing a customer name or a
-  // quantity containing 'c'/'u' doesn't flip payment mode).
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if (confirmedSale !== null) return;
-      const tag = (event.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (event.key === 'c' || event.key === 'C') {
-        setPaymentMode('cash');
-      } else if ((event.key === 'u' || event.key === 'U') && selectedCustomer !== null) {
-        setPaymentMode('credit');
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [confirmedSale, selectedCustomer]);
-
-  // BUG-Y fix: this used to be inline alertdialog text; ConfirmDialog (P4.5-0)
-  // replaces it. Data gap, flagged rather than fabricated: SaleResult's
-  // warnings are booleans only (stockBelowZero/creditLimitExceeded) — there
-  // is no per-item name available to name in the message, so the wording
-  // below is deliberately item-agnostic rather than inventing a name.
-  const warningTitle =
-    lastResult?.warnings.stockBelowZero === true && lastResult.warnings.creditLimitExceeded
-      ? 'Stock below zero & credit limit exceeded'
-      : lastResult?.warnings.stockBelowZero === true
-        ? 'Stock below zero'
-        : 'Credit limit exceeded';
-  const warningMessages = [
-    lastResult?.warnings.stockBelowZero === true &&
-      'This sale will take stock below zero for one or more items. Stock will go negative.',
-    lastResult?.warnings.creditLimitExceeded === true &&
-      "This sale exceeds the customer's credit limit.",
-  ].filter((message): message is string => typeof message === 'string');
+  const { title: warningTitle, messages: warningMessages } = computeSaleWarningText(lastResult);
 
   return {
     lookups: cartFlow.lookups,
@@ -339,10 +258,15 @@ export function useSaleFlow(): SaleFlow {
     setPaymentMode,
     amountPaidRupees,
     setAmountPaidRupees,
-    discountPctInput,
-    setDiscountPctInput,
-    discountPkrInput,
-    setDiscountPkrInput,
+    discountApplicable,
+    discountPkrEnabled,
+    discountPkrOptionsPaisa,
+    selectedDiscountPkrPaisa,
+    setSelectedDiscountPkrPaisa,
+    discountPctEnabled,
+    discountPctOptions,
+    selectedDiscountPct,
+    setSelectedDiscountPct,
     discountPaisa,
     totalAmountPaisa,
     confirmedSale,

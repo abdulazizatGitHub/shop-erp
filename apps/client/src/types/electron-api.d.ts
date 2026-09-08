@@ -185,12 +185,38 @@ export interface SetShopNameInput {
   readonly value: string;
 }
 
-export interface SetWholesaleDefaultDiscountPctInput {
-  readonly value: number;
+export interface SetDiscountApplyWalkinInput {
+  readonly value: boolean;
 }
 
-export interface SetWholesaleDefaultDiscountPaisaInput {
-  readonly value: number;
+export interface SetDiscountApplyWholesaleInput {
+  readonly value: boolean;
+}
+
+export interface SetDiscountPkrEnabledInput {
+  readonly value: boolean;
+}
+
+export interface SetDiscountPctEnabledInput {
+  readonly value: boolean;
+}
+
+export interface SetDiscountPkrPresetsInput {
+  readonly value: readonly string[];
+}
+
+export interface SetDiscountPctPresetsInput {
+  readonly value: readonly string[];
+}
+
+/** settings:getDiscountConfig — pkrPresets already converted to paisa; pctPresets are plain percentages. Array fields are mutable to match @shop/contracts' zod-inferred DiscountConfigDto shape (z.array infers number[], not readonly number[]). */
+export interface DiscountConfigDto {
+  readonly applyToWalkin: boolean;
+  readonly applyToWholesale: boolean;
+  readonly pkrEnabled: boolean;
+  readonly pkrPresets: number[];
+  readonly pctEnabled: boolean;
+  readonly pctPresets: number[];
 }
 
 export interface CreateSaleAndPrintResult extends SaleResult {
@@ -325,14 +351,19 @@ export interface ElectronApi {
     readonly setReceiptPaperSize: (input: SetReceiptPaperSizeInput) => Promise<void>;
     readonly getShopName: () => Promise<string>;
     readonly setShopName: (input: SetShopNameInput) => Promise<void>;
-    readonly getWholesaleDefaultDiscountPct: () => Promise<number>;
-    readonly setWholesaleDefaultDiscountPct: (
-      input: SetWholesaleDefaultDiscountPctInput,
-    ) => Promise<void>;
-    readonly getWholesaleDefaultDiscountPaisa: () => Promise<number>;
-    readonly setWholesaleDefaultDiscountPaisa: (
-      input: SetWholesaleDefaultDiscountPaisaInput,
-    ) => Promise<void>;
+    readonly getDiscountApplyWalkin: () => Promise<boolean>;
+    readonly setDiscountApplyWalkin: (input: SetDiscountApplyWalkinInput) => Promise<void>;
+    readonly getDiscountApplyWholesale: () => Promise<boolean>;
+    readonly setDiscountApplyWholesale: (input: SetDiscountApplyWholesaleInput) => Promise<void>;
+    readonly getDiscountPkrEnabled: () => Promise<boolean>;
+    readonly setDiscountPkrEnabled: (input: SetDiscountPkrEnabledInput) => Promise<void>;
+    readonly getDiscountPctEnabled: () => Promise<boolean>;
+    readonly setDiscountPctEnabled: (input: SetDiscountPctEnabledInput) => Promise<void>;
+    readonly getDiscountPkrPresets: () => Promise<readonly string[]>;
+    readonly setDiscountPkrPresets: (input: SetDiscountPkrPresetsInput) => Promise<void>;
+    readonly getDiscountPctPresets: () => Promise<readonly string[]>;
+    readonly setDiscountPctPresets: (input: SetDiscountPctPresetsInput) => Promise<void>;
+    readonly getDiscountConfig: () => Promise<DiscountConfigDto>;
   };
   readonly report: {
     readonly stockValuation: () => Promise<StockValuationReportDto>;

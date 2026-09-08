@@ -104,8 +104,13 @@ export {
 export {
   SetReceiptPaperSizeInput,
   SetShopNameInput,
-  SetWholesaleDefaultDiscountPctInput,
-  SetWholesaleDefaultDiscountPaisaInput,
+  SetDiscountApplyWalkinInput,
+  SetDiscountApplyWholesaleInput,
+  SetDiscountPkrEnabledInput,
+  SetDiscountPctEnabledInput,
+  SetDiscountPkrPresetsInput,
+  SetDiscountPctPresetsInput,
+  DiscountConfigDto,
 } from './setting/setting.js';
 
 export {

@@ -3,7 +3,7 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-09 (Session 44)
+**Last updated:** 2026-09-09 (Session 45)
 **Current phase:** Phase 8 — Bug-fix & hardening (P8-0 through P8-7 all
 DONE — P8-1/BUG-ADR9 explicitly deferred by owner decision, everything
 else fixed and verified, including a real running-window click-through
@@ -521,30 +521,121 @@ proved the real save/read plumbing was correct the whole time).
 existing accepted-by-owner state per Session 41; net +15 from this
 session's extraction) and `SettingsPage.tsx` (311 lines, +11).
 
----
+**Update, 2026-09-09 (Session 45) — discount presets (owner-configured,
+replaces free-form entry) COMPLETE.** Session C's free-form PKR/%
+discount text inputs are gone; the owner now configures fixed preset
+lists (PKR amounts and percentages) in Settings, and the salesman picks
+from a dropdown built from those presets — no typed discount value on
+the sale screen any more. `sale.discount_amount` (the DB column) is
+unchanged; only the input method changed, confirmed by re-reading
+`useSaleFlow.ts`'s `handleCheckout` before writing any code — it still
+sends a single `discountPaisa` number to `sale:create` exactly as
+Session 44 left it.
+**Both `useSaleFlow.ts` (371 live lines, not the 356 PROJECT.md had
+recorded) and `SettingsPage.tsx` (309 live lines) were confirmed over
+cap by direct `wc -l`, per CLAUDE.md rule 6 (live code is the truth,
+not the last-recorded number) — both split before any feature code,
+per the brief's explicit prerequisite.** `useSaleFlow.ts` → 295 lines,
+via two new hooks (`usePricePreview.ts`, `useSaleKeyboardShortcuts.ts`)
+and a pure-function extraction (`saleWarnings.ts`) once the new
+discount-dropdown props pushed it back over cap a second time.
+`SettingsPage.tsx` → 23 lines, now a thin composer over four new card
+components (`ShopIdentityCard.tsx`, `ReceiptSettingsCard.tsx`,
+`BackupRestoreCard.tsx`, `DiscountPresetsCard.tsx`).
+**Owner-directed mid-session change to the brief**: the Session 44
+"Discount defaults" card (wholesale auto-prefill %/PKR) was removed
+entirely rather than kept alongside the new presets — two discount
+configuration surfaces in Settings would have confused whoever manages
+them, and the new preset system already covers the wholesale case.
+Removed end-to-end: UI card, the `useDiscount.ts` prefill effect that
+called it, and the full backend (`setting.repository.ts`'s
+`getWholesaleDefaultDiscountPct`/`Paisa` functions and their setters,
+the two contracts, the two IPC channels, the two handlers, the preload
+exposures, the `electron-api.d.ts` types) — a repo-wide grep for both
+key strings (`wholesaleDefaultDiscountPct`/`Paisa`) returned zero
+source hits after removal, pasted in the session transcript.
+New setting keys, using the exact snake_case names the brief specified
+(a deliberate deviation from this file's usual camelCase convention,
+since the brief was explicit): `discount_apply_walkin`,
+`discount_apply_wholesale`, `discount_pkr_enabled`,
+`discount_pct_enabled`, `discount_pkr_presets`, `discount_pct_presets`
+— the last two stored as JSON arrays of the owner's raw typed strings
+(never paisa/percent-as-number at the repository layer). New combined
+IPC read `settings:getDiscountConfig` (single call, D-2) does the only
+PKR-string-to-paisa conversion in the whole feature, in the handler,
+matching the brief's explicit "conversion happens in the handler, not
+the renderer" instruction. `useDiscount.ts` rewritten around this:
+exposes `applicable`/`pkrEnabled`/`pkrOptionsPaisa`/`pctEnabled`/
+`pctOptions` plus selected-value state with mutual exclusivity
+(selecting one preset resets and disables the other, matching Session
+44's onChange-not-onBlur precedent) and a customer-type/`applyTo*`
+applicability check (`walkin` = no customer selected; wholesale =
+`customerType === 'wholesale'` — a named retail credit customer gets
+no discount option under either checkbox, per the brief's literal two-
+checkbox spec; flagged here since it's a real behavior change from
+Session 44's free-form inputs, which had no customer-type
+restriction). `CheckoutPanel.tsx`'s old PKR/% `TextInput` pair is
+fully gone, replaced by up to two `<select>` dropdowns, hidden
+entirely when the section isn't applicable to the selected customer.
+`npm run verify` 428/428 confirmed before starting (after the routine
+BUG-7 `better-sqlite3` ABI fix — `npm install better-sqlite3 --no-save`
+— documented as already known, not a new bug) and after every
+sub-task; `npm run build --workspace=@shop/client` and
+`--workspace=@shop/server` both clean throughout.
+**Real running-window verification, not just code-read**: same
+session-only `playwright-core` precedent as Sessions 42–44 (not
+persisted — confirmed via `git status` after cleanup), this time
+connected over CDP (`chromium.connectOverCDP`) rather than
+`_electron.launch`, since the latter's own launch-line detection
+failed in this sandbox for a reason not fully diagnosed (Electron
+rejected a `--remote-debugging-port=0` switch playwright inserts as
+"bad option" — logged here rather than investigated further, out of
+this session's scope) — manually spawning `electron.exe` with a fixed
+`--remote-debugging-port` and attaching Playwright to that CDP
+endpoint worked cleanly and is a valid fallback for any future session
+hitting the same issue. All 5 scenarios from the brief run against
+real dev-DB fixtures (`Compressor` Rs 6,000/Rs 4,500 wholesale,
+`Khan Wholesale`): Settings save showed "Discount presets saved.",
+confirmed via a direct `setting` table read (all 6 keys present,
+JSON-array values exactly as typed); walk-in + Compressor showed both
+dropdowns, selecting Rs 200 PKR disabled the % dropdown and dropped
+the total to Rs 5,800 exactly; resetting to None and picking 5% showed
+Rs 5,700 (Rs 300 discount) and completed the sale (INV-0066) — a
+direct `sale` table query confirmed `discount_amount = 30000`,
+`total_amount = 570000`, matching the hand-calc exactly; switching to
+Khan Wholesale (wholesale not yet enabled for discount) made the whole
+discount section disappear, confirmed both in the DOM text and a
+screenshot; enabling "Apply to: Wholesale" in Settings and re-selecting
+Khan Wholesale on a fresh cart brought the dropdowns back. Zero bugs
+found this session. `better-sqlite3` rebuilt for Electron then
+restored to the system-Node build before the final `npm run verify`;
+`playwright-core` uninstalled; all screenshots/temp scripts deleted
+before commit — confirmed via `git status --short` showing only the
+intended source-file changes.
 
 ## 3. Phase status
 
-| Phase  | Name                                                          | Status                                                                                                                                                                                                                                                                         | Completed                                                                                                                             |
-| ------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 0      | Foundation & Environment                                      | COMPLETE                                                                                                                                                                                                                                                                       | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
-| 1      | Item master + import                                          | COMPLETE                                                                                                                                                                                                                                                                       | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
-| 2      | Purchases + suppliers                                         | COMPLETE                                                                                                                                                                                                                                                                       | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
-| 2G     | P2-1/P2-2 IPC+UI gap closure                                  | COMPLETE                                                                                                                                                                                                                                                                       | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
-| 3      | Counter sale + udhaar                                         | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                                                                                                                                                                           | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
-| 3.5    | Document numbering + multi-unit selling                       | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                                                                                                                                                                  | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
-| 4      | Printing + reports                                            | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs)                                                                                                                                                 | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
-| 4.5    | Full UI Redesign                                              | ✅ COMPLETE                                                                                                                                                                                                                                                                    | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
-| 5      | Deploy + parallel run                                         | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                                                                                                                                            | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
-| 6      | Repair jobs (two-unit split)                                  | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                                                                                                                                              | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
-| 6.5    | Jobs UI modernisation (modal → full page)                     | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window                                                                                                                     | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
-| 7      | Staff, wages, expenses                                        | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                                                                                                                                             | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
-| 8      | Bug-fix & hardening                                           | ✅ P8-0–P8-7 all DONE — P8-1/BUG-ADR9 deferred by owner decision, everything else fixed and click-through-verified in a running window                                                                                                                                         | P8-0–P8-7 (2026-09-07). 422/422 tests. See `docs/phases/PHASE_8.md`                                                                   |
-| 8 (UI) | Sale screen redesign (renderer-only)                          | ✅ P-UI-2–P-UI-8 all DONE — light-theme keyboard-first counter sale, full keyboard audit passed, 2 bugs found+fixed, 2 logged open (BUG-UI-1, BUG-UI-2)                                                                                                                        | P-UI-2–P-UI-8 (2026-09-07). 422/422 tests. See `PROGRESS.md` Session 40                                                               |
-| 8 (UX) | Sale screen UX improvements (renderer-only)                   | ✅ T1–T7 all DONE — floating search dropdown, customer popover, cart qty steppers, sidebar expand/collapse, help modal, icon/time polish; SalePage.tsx state machine extracted to useCart/useReceiptPrinting/useSaleFlow, every sales/ file now under 300 lines                | Session 41 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 41                                                                  |
-| 8 (A)  | Apple-style redesign, modal, queue, last-sale (renderer-only) | ✅ A-1–A-7 all DONE — pos-accent token, glass topbar, card layout, customer popover arrow-nav, sale-complete modal, last-sale summary, 5-slot sale queue; BUG-UI-1 fixed; 2 new bugs found+fixed via real-running-window verification, every sales/ file still under 300 lines | Session 42 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 42                                                                  |
-| 8 (B)  | Wholesale price preview in sale-screen cart                   | ✅ B-1–B-4 all DONE — new item:getPrices IPC channel reusing resolvePricePaisa, cart preview + Wholesale/Retail badge, sale:create untouched (already price-authoritative), real-running-window-verified with a direct item_price query match; BUG-22 logged, not fixed        | Session 43 (2026-09-08). 426/426 tests. See `PROGRESS.md` Session 43                                                                  |
-| 8 (C)  | Sale-level discount                                           | ✅ C-2–C-7 all DONE (C-1 dropped — reuses pre-existing unused `discount_amount` column instead of a new one, owner-approved); ledger-correct posting, wholesale default setting, checkout UI; 2 bugs found+fixed via real-running-window verification, no bugs left open       | Session 44 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 44                                                                  |
+| Phase  | Name                                                          | Status                                                                                                                                                                                                                                                                                                                                                                            | Completed                                                                                                                             |
+| ------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | Foundation & Environment                                      | COMPLETE                                                                                                                                                                                                                                                                                                                                                                          | P0-1–P0-11 (2026-08-20). All confirmed with real output, dev and packaged both                                                        |
+| 1      | Item master + import                                          | COMPLETE                                                                                                                                                                                                                                                                                                                                                                          | P1-0–P1-3 (2026-08-24, cut scope). 82 tests passing, real import run verified                                                         |
+| 2      | Purchases + suppliers                                         | COMPLETE                                                                                                                                                                                                                                                                                                                                                                          | P2-1–P2-3, P2-H (2026-08-24, cut scope). 114 tests passing                                                                            |
+| 2G     | P2-1/P2-2 IPC+UI gap closure                                  | COMPLETE                                                                                                                                                                                                                                                                                                                                                                          | PG-A–PG-D (2026-08-28). 187 tests passing. See `docs/phases/PHASE_2G.md` §4                                                           |
+| 3      | Counter sale + udhaar                                         | ⏳ ALL SUB-PHASES DONE, pending real-hardware timing                                                                                                                                                                                                                                                                                                                              | P3-0–P3-4 (2026-08-27). 160 tests passing. See `docs/phases/PHASE_3.md` §4                                                            |
+| 3.5    | Document numbering + multi-unit selling                       | ⏳ ALL SUB-PHASES DONE, all exit criteria met                                                                                                                                                                                                                                                                                                                                     | P3.5A–P3.5H incl. P3.5G-UI (2026-08-28). 186 tests passing. See `docs/phases/PHASE_3.5.md` §4                                         |
+| 4      | Printing + reports                                            | ✅ COMPLETE — 2 of 8 exit criteria closed short of their written bar by owner decision (shop-PC P4-0, P4-5b's final 2/10 runs)                                                                                                                                                                                                                                                    | P4-0–P4-5 (2026-08-30). 245 tests passing. See `docs/phases/PHASE_4.md` §4                                                            |
+| 4.5    | Full UI Redesign                                              | ✅ COMPLETE                                                                                                                                                                                                                                                                                                                                                                       | P4.5-0–P4.5-8 + purchase PDF printing + 3 post-P4.5-8 UI improvements (2026-09-01). 294 tests passing. See `docs/phases/PHASE_4_5.md` |
+| 5      | Deploy + parallel run                                         | ⏳ IN PROGRESS — BLOCKED on `BUG-PACK-1` (CRITICAL)                                                                                                                                                                                                                                                                                                                               | Planning + P5-2a-pre + P5-3a built, BUG-NEW3 fixed (2026-09-02). No installer exists; P5-1 not started.                               |
+| 6      | Repair jobs (two-unit split)                                  | ⏳ CODE-COMPLETE — P6-0–P6-10 done, all 4 exit criteria hand-checked and passed; UI not yet visually verified in a running window                                                                                                                                                                                                                                                 | P6-0–P6-10 (2026-09-05). 349 tests passing. See `docs/phases/PHASE_6.md` §4/§8                                                        |
+| 6.5    | Jobs UI modernisation (modal → full page)                     | ✅ CODE-COMPLETE — renderer-only, 353/353 baseline confirmed then 350/350 after approved test-file deletion; not yet visually verified in a running window                                                                                                                                                                                                                        | Session 26 (2026-09-05). See `PROGRESS.md` entry                                                                                      |
+| 7      | Staff, wages, expenses                                        | ✅ CODE-COMPLETE — P7-0..P7-11 all done; UI not yet visually verified in a running window (same caveat as Phase 6)                                                                                                                                                                                                                                                                | P7-0–P7-11 (2026-09-06). 416 tests passing. See `docs/phases/PHASE_7.md`                                                              |
+| 8      | Bug-fix & hardening                                           | ✅ P8-0–P8-7 all DONE — P8-1/BUG-ADR9 deferred by owner decision, everything else fixed and click-through-verified in a running window                                                                                                                                                                                                                                            | P8-0–P8-7 (2026-09-07). 422/422 tests. See `docs/phases/PHASE_8.md`                                                                   |
+| 8 (UI) | Sale screen redesign (renderer-only)                          | ✅ P-UI-2–P-UI-8 all DONE — light-theme keyboard-first counter sale, full keyboard audit passed, 2 bugs found+fixed, 2 logged open (BUG-UI-1, BUG-UI-2)                                                                                                                                                                                                                           | P-UI-2–P-UI-8 (2026-09-07). 422/422 tests. See `PROGRESS.md` Session 40                                                               |
+| 8 (UX) | Sale screen UX improvements (renderer-only)                   | ✅ T1–T7 all DONE — floating search dropdown, customer popover, cart qty steppers, sidebar expand/collapse, help modal, icon/time polish; SalePage.tsx state machine extracted to useCart/useReceiptPrinting/useSaleFlow, every sales/ file now under 300 lines                                                                                                                   | Session 41 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 41                                                                  |
+| 8 (A)  | Apple-style redesign, modal, queue, last-sale (renderer-only) | ✅ A-1–A-7 all DONE — pos-accent token, glass topbar, card layout, customer popover arrow-nav, sale-complete modal, last-sale summary, 5-slot sale queue; BUG-UI-1 fixed; 2 new bugs found+fixed via real-running-window verification, every sales/ file still under 300 lines                                                                                                    | Session 42 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 42                                                                  |
+| 8 (B)  | Wholesale price preview in sale-screen cart                   | ✅ B-1–B-4 all DONE — new item:getPrices IPC channel reusing resolvePricePaisa, cart preview + Wholesale/Retail badge, sale:create untouched (already price-authoritative), real-running-window-verified with a direct item_price query match; BUG-22 logged, not fixed                                                                                                           | Session 43 (2026-09-08). 426/426 tests. See `PROGRESS.md` Session 43                                                                  |
+| 8 (C)  | Sale-level discount                                           | ✅ C-2–C-7 all DONE (C-1 dropped — reuses pre-existing unused `discount_amount` column instead of a new one, owner-approved); ledger-correct posting, wholesale default setting, checkout UI; 2 bugs found+fixed via real-running-window verification, no bugs left open                                                                                                          | Session 44 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 44                                                                  |
+| 8 (D)  | Discount presets (owner-configured, replaces free-form entry) | ✅ D-1–D-4 all DONE — Settings "Discount presets" card, combined `settings:getDiscountConfig` IPC, checkout dropdowns replace Session 44's free-form inputs; Session 44's "Discount defaults" card removed entirely (owner-directed, zero grep hits after removal); `useSaleFlow.ts`/`SettingsPage.tsx` both split under cap first; real-running-window-verified, zero bugs found | Session 45 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 45                                                                  |
 
 ---
 

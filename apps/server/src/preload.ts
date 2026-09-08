@@ -44,8 +44,13 @@ import type {
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
-  SetWholesaleDefaultDiscountPaisaInput,
-  SetWholesaleDefaultDiscountPctInput,
+  DiscountConfigDto,
+  SetDiscountApplyWalkinInput,
+  SetDiscountApplyWholesaleInput,
+  SetDiscountPctEnabledInput,
+  SetDiscountPctPresetsInput,
+  SetDiscountPkrEnabledInput,
+  SetDiscountPkrPresetsInput,
   AdvanceDto,
   AttendanceRecordDto,
   CashSessionDto,
@@ -316,15 +321,31 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getShopName) as Promise<string>,
     setShopName: (input: SetShopNameInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setShopName, input) as Promise<void>,
-    getWholesaleDefaultDiscountPct: (): Promise<number> =>
-      ipcRenderer.invoke(channels.setting.getWholesaleDefaultDiscountPct) as Promise<number>,
-    setWholesaleDefaultDiscountPct: (input: SetWholesaleDefaultDiscountPctInput): Promise<void> =>
-      ipcRenderer.invoke(channels.setting.setWholesaleDefaultDiscountPct, input) as Promise<void>,
-    getWholesaleDefaultDiscountPaisa: (): Promise<number> =>
-      ipcRenderer.invoke(channels.setting.getWholesaleDefaultDiscountPaisa) as Promise<number>,
-    setWholesaleDefaultDiscountPaisa: (
-      input: SetWholesaleDefaultDiscountPaisaInput,
-    ): Promise<void> =>
-      ipcRenderer.invoke(channels.setting.setWholesaleDefaultDiscountPaisa, input) as Promise<void>,
+    getDiscountApplyWalkin: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.setting.getDiscountApplyWalkin) as Promise<boolean>,
+    setDiscountApplyWalkin: (input: SetDiscountApplyWalkinInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountApplyWalkin, input) as Promise<void>,
+    getDiscountApplyWholesale: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.setting.getDiscountApplyWholesale) as Promise<boolean>,
+    setDiscountApplyWholesale: (input: SetDiscountApplyWholesaleInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountApplyWholesale, input) as Promise<void>,
+    getDiscountPkrEnabled: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.setting.getDiscountPkrEnabled) as Promise<boolean>,
+    setDiscountPkrEnabled: (input: SetDiscountPkrEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountPkrEnabled, input) as Promise<void>,
+    getDiscountPctEnabled: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.setting.getDiscountPctEnabled) as Promise<boolean>,
+    setDiscountPctEnabled: (input: SetDiscountPctEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountPctEnabled, input) as Promise<void>,
+    getDiscountPkrPresets: (): Promise<readonly string[]> =>
+      ipcRenderer.invoke(channels.setting.getDiscountPkrPresets) as Promise<readonly string[]>,
+    setDiscountPkrPresets: (input: SetDiscountPkrPresetsInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountPkrPresets, input) as Promise<void>,
+    getDiscountPctPresets: (): Promise<readonly string[]> =>
+      ipcRenderer.invoke(channels.setting.getDiscountPctPresets) as Promise<readonly string[]>,
+    setDiscountPctPresets: (input: SetDiscountPctPresetsInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDiscountPctPresets, input) as Promise<void>,
+    getDiscountConfig: (): Promise<DiscountConfigDto> =>
+      ipcRenderer.invoke(channels.setting.getDiscountConfig) as Promise<DiscountConfigDto>,
   },
 });

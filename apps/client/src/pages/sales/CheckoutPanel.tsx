@@ -45,10 +45,16 @@ export interface CheckoutPanelProps {
   readonly subtotalPaisa: number;
   readonly discountPaisa: number;
   readonly totalPaisa: number;
-  readonly discountPctInput: string;
-  readonly onDiscountPctChange: (value: string) => void;
-  readonly discountPkrInput: string;
-  readonly onDiscountPkrChange: (value: string) => void;
+  /** false: no preset list applies to this customer — the whole discount section is hidden. */
+  readonly discountApplicable: boolean;
+  readonly discountPkrEnabled: boolean;
+  readonly discountPkrOptionsPaisa: readonly number[];
+  readonly selectedDiscountPkrPaisa: number;
+  readonly onSelectedDiscountPkrPaisaChange: (paisa: number) => void;
+  readonly discountPctEnabled: boolean;
+  readonly discountPctOptions: readonly number[];
+  readonly selectedDiscountPct: number;
+  readonly onSelectedDiscountPctChange: (pct: number) => void;
   readonly paymentMode: PaymentMode;
   readonly onPaymentModeChange: (mode: PaymentMode) => void;
   readonly selectedCustomer: CustomerDto | null;
@@ -65,10 +71,15 @@ export function CheckoutPanel({
   subtotalPaisa,
   discountPaisa,
   totalPaisa,
-  discountPctInput,
-  onDiscountPctChange,
-  discountPkrInput,
-  onDiscountPkrChange,
+  discountApplicable,
+  discountPkrEnabled,
+  discountPkrOptionsPaisa,
+  selectedDiscountPkrPaisa,
+  onSelectedDiscountPkrPaisaChange,
+  discountPctEnabled,
+  discountPctOptions,
+  selectedDiscountPct,
+  onSelectedDiscountPctChange,
   paymentMode,
   onPaymentModeChange,
   selectedCustomer,
@@ -108,29 +119,51 @@ export function CheckoutPanel({
           <MoneyDisplay paisaValue={subtotalPaisa} size="sm" />
         </div>
 
-        <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
-          Discount
-        </p>
-        <div className="mt-1 flex items-center gap-2">
-          <TextInput
-            aria-label="Discount (PKR)"
-            placeholder="PKR"
-            variant="number"
-            value={discountPkrInput}
-            onChange={(e) => {
-              onDiscountPkrChange(e.target.value);
-            }}
-          />
-          <TextInput
-            aria-label="Discount (%)"
-            placeholder="%"
-            variant="number"
-            value={discountPctInput}
-            onChange={(e) => {
-              onDiscountPctChange(e.target.value);
-            }}
-          />
-        </div>
+        {discountApplicable && (discountPkrEnabled || discountPctEnabled) && (
+          <>
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+              Discount
+            </p>
+            <div className="mt-1 flex items-center gap-2">
+              {discountPkrEnabled && (
+                <select
+                  aria-label="Discount (PKR)"
+                  value={selectedDiscountPkrPaisa}
+                  disabled={selectedDiscountPct > 0}
+                  onChange={(e) => {
+                    onSelectedDiscountPkrPaisaChange(Number(e.target.value));
+                  }}
+                  className="h-9 flex-1 rounded-md border border-line bg-surface-input px-2 text-sm disabled:opacity-50"
+                >
+                  <option value={0}>None</option>
+                  {discountPkrOptionsPaisa.map((paisa) => (
+                    <option key={paisa} value={paisa}>
+                      Rs {Money.toRupees(Money.of(paisa))}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {discountPctEnabled && (
+                <select
+                  aria-label="Discount (%)"
+                  value={selectedDiscountPct}
+                  disabled={selectedDiscountPkrPaisa > 0}
+                  onChange={(e) => {
+                    onSelectedDiscountPctChange(Number(e.target.value));
+                  }}
+                  className="h-9 flex-1 rounded-md border border-line bg-surface-input px-2 text-sm disabled:opacity-50"
+                >
+                  <option value={0}>None</option>
+                  {discountPctOptions.map((pct) => (
+                    <option key={pct} value={pct}>
+                      {pct}%
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </>
+        )}
 
         {discountPaisa > 0 && (
           <div className="mt-1 flex items-center justify-between text-xs font-medium text-warning">
