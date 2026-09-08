@@ -29,6 +29,9 @@ export const CreateSaleInput = z.object({
   paidAmountPaisa: z.number().int().nonnegative(),
   notes: z.string().trim().min(1).nullable(),
   lines: z.array(SaleLineInput).min(1),
+  // Sale-level discount off the bill total (not per-line). Deducted from
+  // subtotal before it becomes total_amount — see packages/core/src/sale/sale.ts.
+  discountPaisa: z.number().int().min(0).default(0),
 });
 export type CreateSaleInput = z.infer<typeof CreateSaleInput>;
 
@@ -43,6 +46,7 @@ export const SaleResult = z.object({
   id: z.string().uuid(),
   docNo: z.string(),
   totalAmountPaisa: z.number().int(),
+  discountPaisa: z.number().int(),
   warnings: SaleWarnings,
 });
 export type SaleResult = z.infer<typeof SaleResult>;

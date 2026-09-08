@@ -42,7 +42,13 @@ function UdhaarIcon(): React.JSX.Element {
 }
 
 export interface CheckoutPanelProps {
+  readonly subtotalPaisa: number;
+  readonly discountPaisa: number;
   readonly totalPaisa: number;
+  readonly discountPctInput: string;
+  readonly onDiscountPctChange: (value: string) => void;
+  readonly discountPkrInput: string;
+  readonly onDiscountPkrChange: (value: string) => void;
   readonly paymentMode: PaymentMode;
   readonly onPaymentModeChange: (mode: PaymentMode) => void;
   readonly selectedCustomer: CustomerDto | null;
@@ -54,9 +60,15 @@ export interface CheckoutPanelProps {
   readonly amountPaidRef: React.RefObject<HTMLInputElement>;
 }
 
-/** Right panel: totals, payment mode, amount/change, Complete sale. No cart or customer-search logic — those stay in SalePage/CartTable/CustomerStrip. */
+/** Right panel: totals, discount, payment mode, amount/change, Complete sale. No cart or customer-search logic — those stay in SalePage/CartTable/CustomerStrip. */
 export function CheckoutPanel({
+  subtotalPaisa,
+  discountPaisa,
   totalPaisa,
+  discountPctInput,
+  onDiscountPctChange,
+  discountPkrInput,
+  onDiscountPkrChange,
   paymentMode,
   onPaymentModeChange,
   selectedCustomer,
@@ -93,8 +105,42 @@ export function CheckoutPanel({
       <div>
         <div className="flex items-center justify-between text-xs text-ink-faint">
           <span>Subtotal</span>
-          <MoneyDisplay paisaValue={totalPaisa} size="sm" />
+          <MoneyDisplay paisaValue={subtotalPaisa} size="sm" />
         </div>
+
+        <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+          Discount
+        </p>
+        <div className="mt-1 flex items-center gap-2">
+          <TextInput
+            aria-label="Discount (PKR)"
+            placeholder="PKR"
+            variant="number"
+            value={discountPkrInput}
+            onChange={(e) => {
+              onDiscountPkrChange(e.target.value);
+            }}
+          />
+          <TextInput
+            aria-label="Discount (%)"
+            placeholder="%"
+            variant="number"
+            value={discountPctInput}
+            onChange={(e) => {
+              onDiscountPctChange(e.target.value);
+            }}
+          />
+        </div>
+
+        {discountPaisa > 0 && (
+          <div className="mt-1 flex items-center justify-between text-xs font-medium text-warning">
+            <span>Discount</span>
+            <span>
+              -<MoneyDisplay paisaValue={discountPaisa} size="sm" />
+            </span>
+          </div>
+        )}
+
         <div className="my-2 border-t border-line" />
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">

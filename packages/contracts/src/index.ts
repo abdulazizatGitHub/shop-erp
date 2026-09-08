@@ -101,7 +101,12 @@ export {
   PurchaseListRowDto,
 } from './purchase/purchase.js';
 
-export { SetReceiptPaperSizeInput, SetShopNameInput } from './setting/setting.js';
+export {
+  SetReceiptPaperSizeInput,
+  SetShopNameInput,
+  SetWholesaleDefaultDiscountPctInput,
+  SetWholesaleDefaultDiscountPaisaInput,
+} from './setting/setting.js';
 
 export {
   DailySalesReportInput,

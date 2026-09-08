@@ -195,6 +195,60 @@ describe('KyselySaleRepository.createSale', () => {
     expect(movements[0]?.['quantity']).toBe(-1000);
   });
 
+  it('credit sale with discount posts discounted amount to party_ledger', async () => {
+    // subtotal = 1 x 600000 = 600000 paisa
+    // discount =              20000 paisa
+    // ledger   =            580000 paisa  <- customer owes this
+    // line_total =           600000 paisa <- unchanged
+    const result = await saleRepo.createSale({
+      customerId: retailCustomerId,
+      warehouseId: null,
+      saleDate: '2026-08-26',
+      paymentMode: 'credit',
+      paidAmountPaisa: 0,
+      notes: null,
+      lines: [{ itemId: compressorItemId, quantityMilli: 1000, unitPricePaisa: 600000 }],
+      discountPaisa: 20000,
+    });
+
+    expect(result.totalAmountPaisa).toBe(580000);
+    expect(result.discountPaisa).toBe(20000);
+
+    const ledgerRows = partyLedgerFor(result.id);
+    expect(ledgerRows).toHaveLength(1);
+    expect(ledgerRows[0]?.['amount']).toBe(580000);
+
+    const saleRow = rawDb
+      .prepare(`SELECT discount_amount FROM sale WHERE id = ?`)
+      .get(result.id) as { discount_amount: number };
+    expect(saleRow.discount_amount).toBe(20000);
+
+    const lineRows = rawDb
+      .prepare(`SELECT line_total FROM sale_line WHERE sale_id = ?`)
+      .all(result.id) as Array<{ line_total: number }>;
+    expect(lineRows).toHaveLength(1);
+    expect(lineRows[0]?.line_total).toBe(600000);
+    expect(lineRows.reduce((sum, l) => sum + l.line_total, 0)).toBe(600000);
+  });
+
+  it('discount exceeding subtotal throws DiscountExceedsSubtotalError and posts no sale row', async () => {
+    await expect(
+      saleRepo.createSale({
+        customerId: null,
+        warehouseId: null,
+        saleDate: '2026-08-26',
+        paymentMode: 'cash',
+        paidAmountPaisa: 0,
+        notes: null,
+        lines: [{ itemId: compressorItemId, quantityMilli: 1000, unitPricePaisa: 100000 }],
+        discountPaisa: 150000,
+      }),
+    ).rejects.toThrow('exceeds subtotal');
+
+    const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+    expect(saleCount.n).toBe(0);
+  });
+
   it('test 3 — credit limit exceeded: warning fires, sale still commits', async () => {
     // Pre-existing balance: customer already owes Rs 10,000
     rawDb

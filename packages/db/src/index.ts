@@ -75,6 +75,10 @@ export {
   setReceiptPaperSize,
   getShopName,
   setShopName,
+  getWholesaleDefaultDiscountPct,
+  setWholesaleDefaultDiscountPct,
+  getWholesaleDefaultDiscountPaisa,
+  setWholesaleDefaultDiscountPaisa,
 } from './repositories/setting.repository.js';
 export type { ReceiptPaperSize } from './repositories/setting.repository.js';
 export { getSaleReceiptData } from './repositories/receipt.repository.js';

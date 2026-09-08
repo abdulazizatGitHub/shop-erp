@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 import { formatDisplayDocNumber, Money, newId } from '@shop/shared';
 import {
   computeLineTotalPaisa,
+  DiscountExceedsSubtotalError,
   isCreditLimitExceeded,
   isStockBelowZero,
   resolvePricePaisa,
@@ -234,7 +235,23 @@ export class KyselySaleRepository implements SaleRepositoryPort {
         }
 
         const subtotalPaisa = Money.sum(computedLines.map((l) => Money.of(l.lineTotalPaisa)));
-        const totalAmountPaisa = subtotalPaisa;
+        const discountPaisa = input.discountPaisa ?? 0;
+
+        // Price resolution (above) needs trx reads (item_price rows, customer
+        // price level), so subtotalPaisa can't be known before the transaction
+        // opens without duplicating that logic outside it. Validating here,
+        // before any INSERT in this transaction, gives the same guarantee the
+        // caller needs: a sale is never partially posted, and no sale row is
+        // written when the discount doesn't fit. Kysely rolls back on throw.
+        if (discountPaisa > subtotalPaisa) {
+          throw new DiscountExceedsSubtotalError(discountPaisa, subtotalPaisa);
+        }
+
+        // Ledger posts the discounted amount the customer owes.
+        // Example: subtotal 600000 paisa - discount 20000 paisa
+        //          = ledger 580000 paisa.
+        // sale_line.line_total values are NOT changed by discount.
+        const totalAmountPaisa = subtotalPaisa - discountPaisa;
 
         let creditLimitExceeded = false;
         if (input.paymentMode === 'credit' && input.customerId) {
@@ -269,7 +286,7 @@ export class KyselySaleRepository implements SaleRepositoryPort {
             saleDate: input.saleDate,
             saleType: 'counter',
             subtotal: subtotalPaisa,
-            discountAmount: 0,
+            discountAmount: discountPaisa,
             taxAmount: 0,
             totalAmount: totalAmountPaisa,
             paidAmount: input.paidAmountPaisa,
@@ -406,6 +423,7 @@ export class KyselySaleRepository implements SaleRepositoryPort {
           id: saleId,
           docNo,
           totalAmountPaisa,
+          discountPaisa,
           warnings: { creditLimitExceeded, stockBelowZero, unitCostMissing },
         };
       }),

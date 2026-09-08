@@ -31,6 +31,30 @@ export interface NewSaleInput {
   readonly paidAmountPaisa: number;
   readonly notes: string | null;
   readonly lines: readonly NewSaleLineInput[];
+  /**
+   * Sale-level discount off the bill total. Deducted from subtotal, never
+   * from individual lines. Optional/absent means 0 — matches the
+   * saleUomId/saleToStockFactor precedent above, so existing callers that
+   * predate this field don't need updating.
+   */
+  readonly discountPaisa?: number;
+}
+
+/**
+ * Thrown when a sale's discount exceeds its subtotal — same shape as
+ * SessionAlreadyOpenError (packages/core/src/expense/cash-session.repository.port.ts):
+ * a clean, serializable error crossing the IPC boundary, never a raw
+ * validation string. Must fire before the transaction opens.
+ */
+export class DiscountExceedsSubtotalError extends Error {
+  readonly code = 'DISCOUNT_EXCEEDS_SUBTOTAL';
+
+  constructor(discountPaisa: number, subtotalPaisa: number) {
+    super(
+      `Discount (${String(discountPaisa)} paisa) exceeds subtotal (${String(subtotalPaisa)} paisa)`,
+    );
+    this.name = 'DiscountExceedsSubtotalError';
+  }
 }
 
 export interface SaleWarnings {
@@ -43,6 +67,7 @@ export interface NewSaleResult {
   readonly id: string;
   readonly docNo: string;
   readonly totalAmountPaisa: number;
+  readonly discountPaisa: number;
   readonly warnings: SaleWarnings;
 }
 

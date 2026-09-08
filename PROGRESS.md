@@ -41,6 +41,189 @@
 
 ---
 
+## [2026-09-08] Session 44 — Phase 8 (C): sale-level discount (C-2–C-7, COMPLETE — C-1 dropped)
+
+**Goal:** Add a sale-level discount (fixed PKR or percentage, mutually
+exclusive) to the counter-sale screen, correctly deducted before the
+credit-sale ledger posting, with a configurable wholesale default.
+
+**Pre-check finding, before any code (Golden Rule 5 — stop and
+report):** the brief's C-1 called for a new migration adding
+`sale.discount_paisa`. Reading `0001_init.sql` first showed `sale`
+already has an unused `discount_amount INTEGER NOT NULL DEFAULT 0`
+column (present since Phase 0, hardcoded to `0` everywhere it's
+written — `sale.repository.ts`, `purchase.repository.ts`,
+`job-delivery.repository.ts` — and never read back anywhere). Adding a
+second discount column would have left two overlapping fields on the
+same table. **C-1 was dropped**; the feature reuses the existing
+`discount_amount` column throughout (TS-level field is still
+`discountPaisa`, matching CLAUDE.md's `...Paisa` convention — only the
+DB/kysely column name is the pre-existing `discountAmount`). Owner
+confirmed via AskUserQuestion before proceeding.
+
+**Done:**
+
+- `packages/contracts/src/sale/sale.ts` — `CreateSaleInput.discountPaisa`
+  (`z.number().int().min(0).default(0)`), `SaleResult.discountPaisa`.
+- `packages/core/src/sale/sale.repository.port.ts` — `NewSaleInput.discountPaisa?`
+  (optional, defaults to 0 in the repository — kept optional rather than
+  required to avoid touching the ~27 existing `createSale(...)` call
+  sites across 6 files that predate this field, same precedent as
+  `saleUomId`/`saleToStockFactor`). New `DiscountExceedsSubtotalError`
+  (code `DISCOUNT_EXCEEDS_SUBTOTAL`), wired through
+  `with-error.ts` the same way `SessionAlreadyOpenError` is.
+- `packages/db/src/repositories/sale.repository.ts` — `totalAmountPaisa =
+subtotalPaisa - discountPaisa` (previously `= subtotalPaisa`), computed
+  and validated (`discountPaisa > subtotalPaisa` throws, before any
+  INSERT in the transaction — see note below on why not literally
+  "before the transaction opens") right after `subtotalPaisa` is known;
+  `discount_amount` written on insert; `discountPaisa` returned.
+  `sale_line.line_total` untouched.
+- `packages/db/src/repositories/setting.repository.ts` —
+  `get/setWholesaleDefaultDiscountPct` and `...Paisa` (camelCase keys
+  `wholesaleDefaultDiscountPct`/`...Paisa`, matching this file's existing
+  `shopName`/`receiptPaperSize` convention rather than the brief's
+  snake_case spelling).
+- New IPC channels (`setting.handler.ts`, `channels.ts`, `preload.ts`,
+  `electron-api.d.ts`) for the two new setting getters/setters.
+- `apps/client/src/pages/settings/SettingsPage.tsx` — "Discount
+  defaults" card, two mutually-exclusive numeric fields, matching the
+  existing shopName save pattern.
+- New `apps/client/src/pages/sales/useDiscount.ts` — extracted out of
+  `useSaleFlow.ts` (which would otherwise have grown from 341 to 425
+  lines) rather than left inline: mutually-exclusive PKR/% inputs
+  (clears the other `onChange`, not `onBlur`), `discountPaisa` (half-up
+  rounding via `Math.round`, documented inline), and the
+  wholesale-customer prefill effect.
+- `useSaleFlow.ts` — wires `useDiscount`, computes `totalAmountPaisa`,
+  clamps the cash "amount received" prefill at 0 (see bug below).
+- `CheckoutPanel.tsx` / `SalePage.tsx` — Subtotal / Discount (amber,
+  only when > 0) / Total rows; two discount inputs between them.
+- `packages/db/src/repositories/sale.repository.test.ts` — two new
+  tests: the C-7 hand-calc scenario (subtotal 600000 − discount 20000 =
+  ledger 580000, `line_total` unchanged at 600000) and the
+  discount-exceeds-subtotal guard (throws, zero `sale` rows after).
+
+**Two real bugs found via running-window verification, fixed before
+closing (not deferred — both self-introduced this session, Golden Rule
+8's "unless it blocks the current phase" applies to a bug in the very
+feature being built):**
+
+1. **Money-correctness bug**: `useDiscount`'s wholesale-prefill effect
+   originally cleared the discount fields whenever the selected
+   customer was anything other than a wholesale customer — including
+   switching to a _different_ customer, not just removing one. A
+   salesman who typed a manual Rs 200 discount then picked Ahmad Retail
+   (a retail credit customer) had it silently zeroed, which would have
+   overcharged the customer by Rs 200. Caught by an actual click-through
+   (Test 1 in the running-window pass below), not by reading the code.
+   Fixed: only `selectedCustomer === null` (removal) clears the fields;
+   selecting a non-wholesale customer now leaves a manually-entered
+   discount alone.
+2. A discount temporarily exceeding the subtotal (while the salesman is
+   still typing, before completing the sale) drove `totalAmountPaisa`
+   negative, which the cash "amount received" prefill effect fed
+   straight into `Money.of()` (no non-negative guard) and then
+   `Money.fromRupees()`, producing a negative `paidAmountPaisa` that
+   failed `CreateSaleInput`'s Zod `.nonnegative()` check with a generic
+   "Invalid input" error — masking the real, more useful
+   `DiscountExceedsSubtotalError` message from `packages/core`. Fixed by
+   clamping the prefill at 0 (`Math.max(0, totalAmountPaisa)`); the
+   correctly-worded guard error now surfaces every time (see Test 4
+   below — the pasted error is the exact core message).
+
+**Verified:**
+
+- `npm run verify`: 428/428 (426 baseline + 2 new tests), after every
+  sub-task (C-2 through C-6) and again after the two bugfixes and after
+  session cleanup. `npm run build --workspace=@shop/client` green
+  throughout.
+- Hand-calc vs. `sale.repository.test.ts`: subtotal 600000, discount
+  20000 → ledger 580000, `sale_line.line_total` = 600000 (unchanged) —
+  asserted directly against real SQLite rows, not mocked. Second test:
+  discount 150000 > subtotal 100000 → `DiscountExceedsSubtotalError`
+  thrown, `SELECT COUNT(*) FROM sale` = 0 afterward.
+- **Real running-window verification** (Playwright `_electron`, same
+  session-only `playwright-core` install / not persisted / cleanup
+  confirmed via `git status` afterward, same precedent as Sessions 42–43;
+  `better-sqlite3` rebuilt for Electron via `npm run rebuild:electron`
+  then restored for plain Node via `npm install better-sqlite3 --no-save`
+  before the final `npm run verify`), against the real dev DB
+  (`Compressor` Rs 6,000 retail / Rs 4,500 wholesale, `Ahmad Retail`,
+  `Khan Wholesale` — all pre-existing fixtures from Session 43):
+  - **Test 1** (fixed PKR): added Compressor (subtotal Rs 6,000), PKR
+    discount 200 → Discount row showed `-Rs 200`; selected Ahmad Retail,
+    Udhaar, Complete sale (through the real stock-below-zero warning
+    gate — real dev data, real `Continue` click) → "Sale complete,
+    INV-0063, Rs 5,800, posted to Ahmad". DB: `sale.discount_amount` =
+    20000, `sale.total_amount` = 580000, `party_ledger.amount` = 580000.
+    Matches hand-calc exactly.
+  - **Test 2** (percentage): same cart, 5% → Discount `-Rs 300` → INV-0064,
+    Rs 5,700. DB: `discount_amount` = 30000, `total_amount` =
+    `party_ledger.amount` = 570000. Exact match.
+  - **Test 3** (wholesale default): set "Default wholesale discount (%)"
+    to 5 in Settings (confirmed persisted via direct `setting` table
+    read after — not just the UI's own success message); returned to
+    Sales, selected Khan Wholesale (Compressor now Rs 4,500 wholesale) —
+    % field pre-filled to `5` (read directly off the DOM input's
+    `.value`, not just eyeballed); changed to `3` → field showed `3`;
+    completed → INV-0065, subtotal 450000, discount 13500 (3% of
+    450000), total/ledger 436500. Exact match. (One iteration of this
+    test initially failed because the _test script_ clicked the wrong
+    of two same-labelled "Save" buttons on the Settings page — isolated
+    with a direct `window.api.setting.set...` call proving the IPC/
+    repository layer was correct the whole time, then fixed the script's
+    DOM targeting; not an application bug.)
+  - **Test 4** (guard): Compressor (Rs 6,000), PKR discount 9000 (>
+    subtotal) → Complete sale → error banner: _"Discount (900000 paisa)
+    exceeds subtotal (600000 paisa)"_ — the exact `DiscountExceedsSubtotalError`
+    message, not a generic one. `SELECT doc_no FROM sale ORDER BY
+created_at DESC LIMIT 1` still returned INV-0065 (Test 3's sale) and
+    `COUNT(*)` unchanged — confirmed no sale posted.
+  - Test 1's brief used Rs 1,000/Rs 1,500 as its guard-test amounts;
+    substituted Rs 6,000/Rs 9,000 (the same 3:2 ratio) since no Rs 1,000
+    item exists in this dev DB's fixtures — same guard, same math shape.
+
+**Not done / deferred:**
+
+- C-1 (migration) — dropped, see pre-check finding above; not deferred,
+  intentionally out of scope now that the column already exists.
+- Per-line discounts, discount reporting, BUG-22 (`item_price` ORDER BY),
+  BUG-ADR9 (permission checks) — all explicitly out of scope per the brief.
+
+**Bugs found:** none new logged to PROJECT.md (both bugs found this
+session were fixed same-session, per Golden Rule 8's exception for bugs
+that block the current task — see above). `useSaleFlow.ts` is now 356
+lines (was already 341 before this session, itself over the ~300-line
+cap and previously accepted by explicit owner decision — Session 41);
+this session's net contribution after extracting `useDiscount.ts` is
++15 lines. `SettingsPage.tsx` is 311 lines (+11 over cap). Neither
+re-split this session — logged in PROJECT.md rather than an unplanned
+deeper refactor mid-feature.
+
+**Decisions taken:** drop C-1 (reuse `discount_amount`, owner-approved);
+`discountPaisa` optional (not required) on the core `NewSaleInput` port
+to avoid a ~27-call-site breaking change; settings keys camelCase, not
+snake_case, to match `setting.repository.ts`'s existing convention.
+
+**Blocked on:** nothing.
+
+**Next session should:** if picking up file-size cleanup, `useSaleFlow.ts`
+(356 lines) and `SettingsPage.tsx` (311 lines) are the two over the
+300-line cap; otherwise proceed to the next Phase 8 item.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase (2 found, both fixed same-session)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none outstanding — see above)
+- [x] Test suite passing — 428/428
+
+---
+
 ## [2026-09-08] Session 43 — Phase 8 (B): wholesale price preview in sale-screen cart (B-1–B-4, COMPLETE)
 
 **Goal:** Wire the existing wholesale/retail price-level system into the

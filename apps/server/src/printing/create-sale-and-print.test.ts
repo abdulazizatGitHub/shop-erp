@@ -6,6 +6,7 @@ const KNOWN_SALE_RESULT: SaleResult = {
   id: 'sale-123',
   docNo: 'INV-0009',
   totalAmountPaisa: 500000,
+  discountPaisa: 0,
   warnings: { creditLimitExceeded: false, stockBelowZero: false, unitCostMissing: false },
 };
 

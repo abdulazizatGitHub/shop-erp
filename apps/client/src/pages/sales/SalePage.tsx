@@ -153,7 +153,13 @@ export function SalePage(): React.JSX.Element {
           />
 
           <CheckoutPanel
-            totalPaisa={flow.cartSubtotalPaisa}
+            subtotalPaisa={flow.cartSubtotalPaisa}
+            discountPaisa={flow.discountPaisa}
+            totalPaisa={flow.totalAmountPaisa}
+            discountPctInput={flow.discountPctInput}
+            onDiscountPctChange={flow.setDiscountPctInput}
+            discountPkrInput={flow.discountPkrInput}
+            onDiscountPkrChange={flow.setDiscountPkrInput}
             paymentMode={flow.paymentMode}
             onPaymentModeChange={flow.setPaymentMode}
             selectedCustomer={flow.selectedCustomer}

@@ -44,6 +44,8 @@ import type {
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
+  SetWholesaleDefaultDiscountPaisaInput,
+  SetWholesaleDefaultDiscountPctInput,
   AdvanceDto,
   AttendanceRecordDto,
   CashSessionDto,
@@ -314,5 +316,15 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getShopName) as Promise<string>,
     setShopName: (input: SetShopNameInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setShopName, input) as Promise<void>,
+    getWholesaleDefaultDiscountPct: (): Promise<number> =>
+      ipcRenderer.invoke(channels.setting.getWholesaleDefaultDiscountPct) as Promise<number>,
+    setWholesaleDefaultDiscountPct: (input: SetWholesaleDefaultDiscountPctInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setWholesaleDefaultDiscountPct, input) as Promise<void>,
+    getWholesaleDefaultDiscountPaisa: (): Promise<number> =>
+      ipcRenderer.invoke(channels.setting.getWholesaleDefaultDiscountPaisa) as Promise<number>,
+    setWholesaleDefaultDiscountPaisa: (
+      input: SetWholesaleDefaultDiscountPaisaInput,
+    ): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setWholesaleDefaultDiscountPaisa, input) as Promise<void>,
   },
 });

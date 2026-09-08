@@ -3,7 +3,7 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-08
+**Last updated:** 2026-09-09 (Session 44)
 **Current phase:** Phase 8 — Bug-fix & hardening (P8-0 through P8-7 all
 DONE — P8-1/BUG-ADR9 explicitly deferred by owner decision, everything
 else fixed and verified, including a real running-window click-through
@@ -317,6 +317,18 @@ extracted `finishSuccess`/`handleCancelAfterWarning` path for real, not
 just the happy path. `npm run verify` 422/422 throughout. Every file
 in `apps/client/src/pages/sales/` is now under the 300-line cap.
 
+**Update, 2026-09-09 (Session 44).** `useSaleFlow.ts` grew back over the
+cap (341→425 lines) adding the sale-level discount feature; extracted
+the new logic into `useDiscount.ts` (same pattern as `useCart.ts`/
+`useReceiptPrinting.ts`/`useLastSale.ts`), landing at 356 lines — net
++15 over its pre-session 341, not re-split further this session (a
+deeper extraction of the file's pre-existing content was judged
+out of scope for a discount feature session). `SettingsPage.tsx` is
+also now over the cap at 311 lines (+11, from the new "Discount
+defaults" card). Both logged here rather than silently ignored, per
+CLAUDE.md §9's file-size rule; a follow-up session should decide
+whether/how to split them.
+
 Sale screen uses pos-accent (#2563EB). All other screens use brand
 (#1B5E8C). Full-app colour unification is a separate future session.
 
@@ -447,6 +459,68 @@ theoretically diverge from the cart preview if an item ever gets more
 than one dated price row per level — dormant today since no code path
 creates such a row yet.
 
+**Update, 2026-09-09 (Session 44) — sale-level discount COMPLETE.**
+C-2 through C-7 done (C-1 dropped — see below); a sale-level discount
+(fixed PKR or percentage, mutually exclusive) on the counter-sale
+screen, deducted from subtotal before it becomes `total_amount`, so it
+correctly reaches the credit-sale `party_ledger` posting, the printed
+total, and the credit-limit check. **A real pre-existing schema finding
+changed the plan before any code was written**: `sale.discount_amount`
+has existed, unused, since `0001_init.sql` (hardcoded to `0` in
+`sale.repository.ts`, `purchase.repository.ts`, and
+`job-delivery.repository.ts`; never read back anywhere) — the brief's
+C-1 (`ALTER TABLE sale ADD COLUMN discount_paisa`) would have created a
+second, overlapping discount column. Flagged per CLAUDE.md §2 rule 5,
+owner confirmed, C-1 dropped; the feature reuses `discount_amount`
+throughout (exposed as `discountPaisa` in contracts/core, per this
+codebase's TS naming convention — only the DB/kysely column keeps its
+pre-existing name). New `DiscountExceedsSubtotalError` (core), thrown
+before any `sale` INSERT in `createSale`'s transaction. New Settings
+card ("Discount defaults") for the wholesale default (%/PKR, mutually
+exclusive), new `useDiscount.ts` hook (extracted out of `useSaleFlow.ts`
+to avoid growing it further past the 300-line cap) for the checkout
+inputs and the wholesale-customer prefill. **Two real bugs found via
+running-window verification and fixed same-session** (both
+self-introduced this session, so fixed rather than logged, per
+CLAUDE.md §2 rule 8's "unless it blocks the current phase"): (1) the
+wholesale-prefill effect originally cleared a manually-typed discount
+whenever _any_ non-wholesale customer was selected, not just on
+removal — a salesman typing a discount then picking a retail credit
+customer would have had it silently zeroed, overcharging that customer;
+fixed to only clear on customer removal. (2) a discount temporarily
+exceeding the subtotal drove the cash "amount received" prefill
+negative, which failed `CreateSaleInput`'s Zod check with a generic
+"Invalid input" error instead of the real `DiscountExceedsSubtotalError`
+message; fixed by clamping the prefill at 0. `npm run verify` 426→428
+(two new `sale.repository.test.ts` tests — discounted ledger amount,
+and the exceeds-subtotal guard posting zero sale rows), confirmed after
+every sub-task and again after both bugfixes. **Real running-window
+verification**, not just code-read: launched the actual packaged
+Electron build via a session-only `playwright-core` install (same
+precedent as Sessions 42–43 — not persisted, confirmed via `git status`
+after cleanup; `better-sqlite3` rebuilt for Electron then restored for
+plain Node before the final `npm run verify`). All 4 scenarios from the
+brief run against real dev-DB fixtures (`Compressor` Rs 6,000/Rs 4,500,
+`Ahmad Retail`, `Khan Wholesale`): fixed-PKR discount (INV-0063, Rs
+5,800, `party_ledger.amount` = 580000, matching hand-calc exactly),
+percentage discount (INV-0064, Rs 5,700, ledger 570000), wholesale
+default pre-fill (Settings saved pct=5 confirmed via a direct `setting`
+table read, Sales screen pre-filled `5` on selecting Khan Wholesale
+verified via the DOM input's own `.value`, overridden to `3`, INV-0065
+at Rs 4,365/ledger 436500 matching the override), and the
+discount-exceeds-subtotal guard (error banner showed the exact core
+message "Discount (900000 paisa) exceeds subtotal (600000 paisa)", and
+`sale` row count/latest `doc_no` confirmed unchanged afterward — no
+sale posted). See `PROGRESS.md` Session 44 for the full task-by-task
+record, including one test-script-only false alarm (a duplicate
+"Save" button on the Settings page briefly made Test 3's setting save
+look like it wasn't persisting — isolated with a direct IPC call that
+proved the real save/read plumbing was correct the whole time).
+**Two files now over the 300-line cap, not re-split this session**:
+`useSaleFlow.ts` (356 lines — was already 341 before this session, an
+existing accepted-by-owner state per Session 41; net +15 from this
+session's extraction) and `SettingsPage.tsx` (311 lines, +11).
+
 ---
 
 ## 3. Phase status
@@ -470,6 +544,7 @@ creates such a row yet.
 | 8 (UX) | Sale screen UX improvements (renderer-only)                   | ✅ T1–T7 all DONE — floating search dropdown, customer popover, cart qty steppers, sidebar expand/collapse, help modal, icon/time polish; SalePage.tsx state machine extracted to useCart/useReceiptPrinting/useSaleFlow, every sales/ file now under 300 lines                | Session 41 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 41                                                                  |
 | 8 (A)  | Apple-style redesign, modal, queue, last-sale (renderer-only) | ✅ A-1–A-7 all DONE — pos-accent token, glass topbar, card layout, customer popover arrow-nav, sale-complete modal, last-sale summary, 5-slot sale queue; BUG-UI-1 fixed; 2 new bugs found+fixed via real-running-window verification, every sales/ file still under 300 lines | Session 42 (2026-09-08). 422/422 tests. See `PROGRESS.md` Session 42                                                                  |
 | 8 (B)  | Wholesale price preview in sale-screen cart                   | ✅ B-1–B-4 all DONE — new item:getPrices IPC channel reusing resolvePricePaisa, cart preview + Wholesale/Retail badge, sale:create untouched (already price-authoritative), real-running-window-verified with a direct item_price query match; BUG-22 logged, not fixed        | Session 43 (2026-09-08). 426/426 tests. See `PROGRESS.md` Session 43                                                                  |
+| 8 (C)  | Sale-level discount                                           | ✅ C-2–C-7 all DONE (C-1 dropped — reuses pre-existing unused `discount_amount` column instead of a new one, owner-approved); ledger-correct posting, wholesale default setting, checkout UI; 2 bugs found+fixed via real-running-window verification, no bugs left open       | Session 44 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 44                                                                  |
 
 ---
 

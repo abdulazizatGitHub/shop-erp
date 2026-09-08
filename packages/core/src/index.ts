@@ -144,6 +144,7 @@ export type {
   SaleSearchQuery,
   SaleSummaryRecord,
 } from './sale/sale.repository.port.js';
+export { DiscountExceedsSubtotalError } from './sale/sale.repository.port.js';
 
 export type {
   PaymentMethod,

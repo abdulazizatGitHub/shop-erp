@@ -6,6 +6,7 @@ import type { CartLine } from './CartTable.js';
 import type { LastSaleSummary } from './LastSaleModal.js';
 import type { ConfirmedSale } from './SaleSuccessModal.js';
 import { useCart } from './useCart.js';
+import { useDiscount } from './useDiscount.js';
 import { useLastSale } from './useLastSale.js';
 import { useReceiptPrinting } from './useReceiptPrinting.js';
 
@@ -37,6 +38,12 @@ export interface SaleFlow {
   readonly setPaymentMode: (mode: PaymentMode) => void;
   readonly amountPaidRupees: string;
   readonly setAmountPaidRupees: (value: string) => void;
+  readonly discountPctInput: string;
+  readonly setDiscountPctInput: (value: string) => void;
+  readonly discountPkrInput: string;
+  readonly setDiscountPkrInput: (value: string) => void;
+  readonly discountPaisa: number;
+  readonly totalAmountPaisa: number;
   readonly confirmedSale: ConfirmedSale | null;
   readonly setConfirmedSale: (sale: ConfirmedSale | null) => void;
   readonly error: string | null;
@@ -81,6 +88,15 @@ export function useSaleFlow(): SaleFlow {
     setPrintError,
   );
   const { lastSale, captureLastSale } = useLastSale();
+  const {
+    discountPctInput,
+    setDiscountPctInput,
+    discountPkrInput,
+    setDiscountPkrInput,
+    discountPaisa,
+    reset: resetDiscount,
+  } = useDiscount(cartFlow.cartSubtotalPaisa, selectedCustomer);
+  const totalAmountPaisa = cartFlow.cartSubtotalPaisa - discountPaisa;
 
   const paymentModeRef = useRef<HTMLDivElement>(null);
   const amountPaidRef = useRef<HTMLInputElement>(null);
@@ -91,10 +107,17 @@ export function useSaleFlow(): SaleFlow {
   // response to a payment-mode switch or the subtotal changing, exactly as
   // it did before within the old checkout step.
   useEffect(() => {
+    // Clamp at 0: a discount temporarily exceeding the subtotal while the
+    // salesman is still typing must never prefill a negative "amount
+    // received" — Money.of has no non-negative guard, so an unclamped
+    // negative total here would fail CreateSaleInput's paidAmountPaisa
+    // check with a generic Zod error, masking the real discount-guard
+    // message from packages/core (found in running-window verification).
+    const clampedTotalPaisa = Math.max(0, totalAmountPaisa);
     setAmountPaidRupees(
-      paymentMode === 'cash' ? String(Money.toRupees(Money.of(cartFlow.cartSubtotalPaisa))) : '0',
+      paymentMode === 'cash' ? String(Money.toRupees(Money.of(clampedTotalPaisa))) : '0',
     );
-  }, [paymentMode, cartFlow.cartSubtotalPaisa]);
+  }, [paymentMode, totalAmountPaisa]);
 
   // B-2/B-3: cart price preview. Display only — sale:create always sends
   // unitPricePaisa: null and resolves price itself (see handleCheckout
@@ -174,6 +197,7 @@ export function useSaleFlow(): SaleFlow {
     cartFlow.clearCart();
     setSelectedCustomer(null);
     setPaymentMode('cash');
+    resetDiscount();
     setLastResult(null);
     setStep('search-item');
   }
@@ -204,6 +228,7 @@ export function useSaleFlow(): SaleFlow {
         saleUomId: line.saleUomId,
         saleToStockFactor: line.saleToStockFactor,
       })),
+      discountPaisa,
     };
     try {
       const result = await ipc.sale.create(input);
@@ -314,6 +339,12 @@ export function useSaleFlow(): SaleFlow {
     setPaymentMode,
     amountPaidRupees,
     setAmountPaidRupees,
+    discountPctInput,
+    setDiscountPctInput,
+    discountPkrInput,
+    setDiscountPkrInput,
+    discountPaisa,
+    totalAmountPaisa,
     confirmedSale,
     setConfirmedSale,
     error,

@@ -1,5 +1,5 @@
 import { ZodError } from 'zod';
-import { SessionAlreadyOpenError } from '@shop/core';
+import { DiscountExceedsSubtotalError, SessionAlreadyOpenError } from '@shop/core';
 import { DbBusyError } from '@shop/db';
 import { isRestoreInProgress } from './restore-state.js';
 
@@ -26,6 +26,10 @@ export function toIpcError(error: unknown): IpcError {
 
   if (error instanceof SessionAlreadyOpenError) {
     return { code: 'SESSION_ALREADY_OPEN', message: error.message };
+  }
+
+  if (error instanceof DiscountExceedsSubtotalError) {
+    return { code: 'DISCOUNT_EXCEEDS_SUBTOTAL', message: error.message };
   }
 
   if (error instanceof ZodError) {

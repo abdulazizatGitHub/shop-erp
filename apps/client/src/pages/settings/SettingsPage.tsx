@@ -18,6 +18,14 @@ export function SettingsPage(): React.JSX.Element {
   const [savingPaperSize, setSavingPaperSize] = useState(false);
   const [paperSizeError, setPaperSizeError] = useState<string | null>(null);
 
+  const [wholesalePct, setWholesalePctValue] = useState<number | null>(null);
+  const [wholesalePaisa, setWholesalePaisaValue] = useState<number | null>(null);
+  const [wholesalePctDraft, setWholesalePctDraft] = useState('');
+  const [wholesalePaisaDraft, setWholesalePaisaDraft] = useState('');
+  const [wholesaleDiscountError, setWholesaleDiscountError] = useState<string | null>(null);
+  const [wholesaleDiscountMessage, setWholesaleDiscountMessage] = useState<string | null>(null);
+  const [savingWholesaleDiscount, setSavingWholesaleDiscount] = useState(false);
+
   const [backupError, setBackupError] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState(false);
@@ -41,7 +49,53 @@ export function SettingsPage(): React.JSX.Element {
       .catch((err: unknown) => {
         setShopNameError(err instanceof Error ? err.message : 'Failed to load settings');
       });
+
+    Promise.all([
+      ipc.setting.getWholesaleDefaultDiscountPct(),
+      ipc.setting.getWholesaleDefaultDiscountPaisa(),
+    ])
+      .then(([pct, paisa]) => {
+        setWholesalePctValue(pct);
+        setWholesalePaisaValue(paisa);
+        setWholesalePctDraft(pct > 0 ? String(pct) : '');
+        setWholesalePaisaDraft(paisa > 0 ? String(paisa / 100) : '');
+      })
+      .catch((err: unknown) => {
+        setWholesaleDiscountError(err instanceof Error ? err.message : 'Failed to load settings');
+      });
   }, []);
+
+  function saveWholesaleDiscount(): void {
+    const pctValue = wholesalePctDraft.trim() === '' ? 0 : Number(wholesalePctDraft);
+    const rupeesValue = wholesalePaisaDraft.trim() === '' ? 0 : Number(wholesalePaisaDraft);
+    if (!Number.isFinite(pctValue) || pctValue < 0 || pctValue > 100) {
+      setWholesaleDiscountError('Percentage must be between 0 and 100');
+      return;
+    }
+    if (!Number.isFinite(rupeesValue) || rupeesValue < 0) {
+      setWholesaleDiscountError('PKR amount must be zero or positive');
+      return;
+    }
+    const paisaValue = Math.round(rupeesValue * 100);
+    setSavingWholesaleDiscount(true);
+    setWholesaleDiscountError(null);
+    setWholesaleDiscountMessage(null);
+    Promise.all([
+      ipc.setting.setWholesaleDefaultDiscountPct({ value: pctValue }),
+      ipc.setting.setWholesaleDefaultDiscountPaisa({ value: paisaValue }),
+    ])
+      .then(() => {
+        setWholesalePctValue(pctValue);
+        setWholesalePaisaValue(paisaValue);
+        setWholesaleDiscountMessage('Wholesale discount defaults saved.');
+      })
+      .catch((err: unknown) => {
+        setWholesaleDiscountError(err instanceof Error ? err.message : 'Failed to save setting');
+      })
+      .finally(() => {
+        setSavingWholesaleDiscount(false);
+      });
+  }
 
   function changePaperSize(value: ReceiptPaperSize): void {
     setSavingPaperSize(true);
@@ -143,6 +197,48 @@ export function SettingsPage(): React.JSX.Element {
             variant="primary"
             disabled={shopNameDraft.trim() === shopName || savingShopName}
             onClick={saveShopName}
+          >
+            Save
+          </Button>
+        </div>
+      </Card>
+
+      <Card title="Discount defaults">
+        {wholesaleDiscountError && <Alert variant="danger">{wholesaleDiscountError}</Alert>}
+        {wholesaleDiscountMessage && <Alert variant="success">{wholesaleDiscountMessage}</Alert>}
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <TextInput
+              label="Default wholesale discount (%)"
+              variant="number"
+              value={wholesalePctDraft}
+              disabled={wholesalePct === null || savingWholesaleDiscount}
+              onChange={(e) => {
+                setWholesalePctDraft(e.target.value);
+                if (e.target.value.trim() !== '' && Number(e.target.value) > 0) {
+                  setWholesalePaisaDraft('');
+                }
+              }}
+            />
+          </div>
+          <div className="flex-1">
+            <TextInput
+              label="Default wholesale discount (PKR)"
+              variant="number"
+              value={wholesalePaisaDraft}
+              disabled={wholesalePaisa === null || savingWholesaleDiscount}
+              onChange={(e) => {
+                setWholesalePaisaDraft(e.target.value);
+                if (e.target.value.trim() !== '' && Number(e.target.value) > 0) {
+                  setWholesalePctDraft('');
+                }
+              }}
+            />
+          </div>
+          <Button
+            variant="primary"
+            disabled={savingWholesaleDiscount || wholesalePct === null || wholesalePaisa === null}
+            onClick={saveWholesaleDiscount}
           >
             Save
           </Button>

@@ -185,6 +185,14 @@ export interface SetShopNameInput {
   readonly value: string;
 }
 
+export interface SetWholesaleDefaultDiscountPctInput {
+  readonly value: number;
+}
+
+export interface SetWholesaleDefaultDiscountPaisaInput {
+  readonly value: number;
+}
+
 export interface CreateSaleAndPrintResult extends SaleResult {
   readonly printError: string | null;
 }
@@ -317,6 +325,14 @@ export interface ElectronApi {
     readonly setReceiptPaperSize: (input: SetReceiptPaperSizeInput) => Promise<void>;
     readonly getShopName: () => Promise<string>;
     readonly setShopName: (input: SetShopNameInput) => Promise<void>;
+    readonly getWholesaleDefaultDiscountPct: () => Promise<number>;
+    readonly setWholesaleDefaultDiscountPct: (
+      input: SetWholesaleDefaultDiscountPctInput,
+    ) => Promise<void>;
+    readonly getWholesaleDefaultDiscountPaisa: () => Promise<number>;
+    readonly setWholesaleDefaultDiscountPaisa: (
+      input: SetWholesaleDefaultDiscountPaisaInput,
+    ) => Promise<void>;
   };
   readonly report: {
     readonly stockValuation: () => Promise<StockValuationReportDto>;

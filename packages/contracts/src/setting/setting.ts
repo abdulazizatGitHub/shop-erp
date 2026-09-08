@@ -11,3 +11,18 @@ export const SetShopNameInput = z.object({
   value: z.string().trim().min(1),
 });
 export type SetShopNameInput = z.infer<typeof SetShopNameInput>;
+
+/** Sale-level wholesale discount defaults (C-5). Two mutually exclusive forms. */
+export const SetWholesaleDefaultDiscountPctInput = z.object({
+  value: z.number().min(0).max(100),
+});
+export type SetWholesaleDefaultDiscountPctInput = z.infer<
+  typeof SetWholesaleDefaultDiscountPctInput
+>;
+
+export const SetWholesaleDefaultDiscountPaisaInput = z.object({
+  value: z.number().int().min(0),
+});
+export type SetWholesaleDefaultDiscountPaisaInput = z.infer<
+  typeof SetWholesaleDefaultDiscountPaisaInput
+>;
