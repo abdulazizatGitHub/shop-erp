@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { TextInput } from '@shop/ui';
 import { debounce } from '../../lib/debounce.js';
+import { SearchSelectResults } from './SearchSelectResults.js';
 
 /**
  * Generic keyboard-navigable type-ahead select. Shared between item
@@ -40,6 +41,20 @@ export interface SearchSelectProps<T> {
   readonly belowInput?: React.ReactNode;
   /** Forwarded to the search TextInput's `tone` — 'accent' only for the Sale screen's A-1 redesign; other callers (Jobs, Purchases) keep the default. */
   readonly inputTone?: 'default' | 'accent';
+  /**
+   * Shown in place of an empty query's usual "nothing" (E-4, POS card
+   * grid) — e.g. the sale screen's top-selling items on load. Ignored
+   * once the salesman types a query; every other caller omits this and
+   * keeps the original empty-query-shows-nothing behavior.
+   */
+  readonly initialResults?: readonly T[];
+  /**
+   * 'list' (default): the original absolute-positioned floating dropdown,
+   * unchanged for every caller but the sale screen. 'grid': a static
+   * in-flow CSS grid (no floating/overlay, no scroll — E-4's product
+   * card grid) instead of the bordered row list.
+   */
+  readonly resultsLayout?: 'list' | 'grid';
 }
 
 export interface SearchSelectHandle {
@@ -64,12 +79,18 @@ function SearchSelectInner<T>(
     holdSelection,
     belowInput,
     inputTone = 'default',
+    initialResults,
+    resultsLayout = 'list',
   }: SearchSelectProps<T>,
   ref: React.Ref<SearchSelectHandle>,
 ): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly T[]>([]);
   const [highlighted, setHighlighted] = useState(0);
+  // At an empty query, show initialResults (E-4's top-selling grid) rather
+  // than nothing — but only while nothing has been typed; a search that
+  // genuinely returns zero rows must still show renderEmpty, not fall back.
+  const effectiveResults = query.trim().length === 0 ? (initialResults ?? []) : results;
   const [heldItem, setHeldItem] = useState<T | null>(null);
   const ownRef = useRef<HTMLInputElement>(null);
   const effectiveRef = inputRef ?? ownRef;
@@ -151,10 +172,11 @@ function SearchSelectInner<T>(
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    const isEmptyQuery = query.trim().length === 0;
     if (event.key === 'ArrowDown') {
       if (heldItem) return; // nav disabled while a row is held
       event.preventDefault();
-      setHighlighted((h) => Math.min(h + 1, results.length - 1));
+      setHighlighted((h) => Math.min(h + 1, effectiveResults.length - 1));
     } else if (event.key === 'ArrowUp') {
       if (heldItem) return;
       event.preventDefault();
@@ -175,12 +197,15 @@ function SearchSelectInner<T>(
       // silently submit the sale instead of moving focus to the next
       // field, which conflicts with normal tab-order navigation through
       // the checkout panel. Enter alone keeps that shortcut; Tab falls
-      // through to the browser's default focus movement.
-      const picked = results[highlighted];
+      // through to the browser's default focus movement — including when
+      // initialResults (E-4's grid) are showing at an empty query; Tab
+      // must never select a card, only Enter does.
+      if (event.key === 'Tab' && isEmptyQuery) return;
+      const picked = effectiveResults[highlighted];
       if (picked) {
         event.preventDefault();
         chooseItem(picked);
-      } else if (query.trim().length === 0) {
+      } else if (isEmptyQuery) {
         if (event.key === 'Enter') {
           event.preventDefault();
           onEmptyEnter?.();
@@ -228,60 +253,18 @@ function SearchSelectInner<T>(
         onKeyDown={handleKeyDown}
       />
       {belowInput}
-      {results.length > 0 && (
-        <ul
-          className={`absolute left-0 right-0 top-full z-40 mt-1 max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface shadow-lg ${
-            inputTone === 'accent' ? 'flex flex-col gap-1 p-1' : ''
-          }`}
-        >
-          {results.map((item, index) => {
-            const isHeld = heldItem !== null && getKey(item) === getKey(heldItem);
-            const isHighlighted = isHeld || (heldItem === null && index === highlighted);
-            const content = renderItem ? renderItem(item, isHighlighted) : getLabel(item);
-            const rowClass =
-              inputTone === 'accent'
-                ? `block w-full rounded-[10px] border-[1.5px] px-3 py-2 text-left text-sm ${
-                    isHighlighted
-                      ? 'border-pos-accent-border bg-pos-accent-subtle'
-                      : 'border-transparent hover:bg-surface-input'
-                  }`
-                : `block w-full border-b border-line px-3 py-2 text-left text-sm last:border-b-0 ${
-                    isHighlighted ? 'bg-brand-subtle' : 'hover:bg-surface-sunken'
-                  }`;
-
-            // Held row: a plain container, not a <button> — it may contain
-            // a live focusable input (e.g. the inline qty field), and
-            // interactive elements can't legally nest inside a <button>.
-            if (isHeld) {
-              return (
-                <li key={getKey(item)}>
-                  <div aria-selected="true" className={rowClass}>
-                    {content}
-                  </div>
-                </li>
-              );
-            }
-
-            return (
-              <li key={getKey(item)}>
-                <button
-                  type="button"
-                  aria-selected={isHighlighted}
-                  onMouseEnter={() => {
-                    if (heldItem === null) setHighlighted(index);
-                  }}
-                  onClick={() => {
-                    chooseItem(item);
-                  }}
-                  className={rowClass}
-                >
-                  {content}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <SearchSelectResults
+        results={effectiveResults}
+        resultsLayout={resultsLayout}
+        inputTone={inputTone}
+        heldItem={heldItem}
+        highlighted={highlighted}
+        getKey={getKey}
+        renderItem={renderItem}
+        getLabel={getLabel}
+        onHoverItem={setHighlighted}
+        onClickItem={chooseItem}
+      />
       {results.length === 0 && query.trim().length > 0 && renderEmpty && (
         <div className="absolute left-0 right-0 top-full z-40 mt-1 rounded-md border border-line bg-surface shadow-lg">
           {renderEmpty()}

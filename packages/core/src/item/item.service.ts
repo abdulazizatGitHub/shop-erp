@@ -33,3 +33,10 @@ export async function searchItems(
 ): Promise<readonly ItemRecord[]> {
   return repo.searchItems(query);
 }
+
+export async function topSellingItems(
+  repo: ItemRepositoryPort,
+  limit: number,
+): Promise<readonly ItemRecord[]> {
+  return repo.topSellingItems(limit);
+}

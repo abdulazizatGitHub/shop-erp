@@ -1,4 +1,4 @@
-export { createItem, getItem, searchItems } from './item/item.service.js';
+export { createItem, getItem, searchItems, topSellingItems } from './item/item.service.js';
 export type {
   ItemRepositoryPort,
   NewItemInput,

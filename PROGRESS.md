@@ -41,6 +41,211 @@
 
 ---
 
+## [2026-09-09] Session 46 — Phase 8 (E): POS card grid, top-selling items, queue strip (E-1–E-5, COMPLETE)
+
+**Goal:** Two-part session — E-1/E-2/E-3 add `stockOnHandMilli` to
+`item:search` results and a new `item:topSelling` IPC channel
+(backend); E-4/E-5 redesign the sale screen's left panel from a
+search-results list into a POS product-card grid, moving the held-sale
+queue from the topbar to a strip at the bottom of that panel
+(renderer).
+
+**Done:**
+
+- Health check: `npm run verify` was 211/428 (documented BUG-7 ABI
+  mismatch) before any code; fixed with `npm install better-sqlite3
+--no-save`, confirmed 428/428, then proceeded.
+- Read every file the brief listed plus the live schema
+  (`0001_init.sql`'s `item`/`sale_line`/`v_stock_on_hand`) and found
+  three real problems with the brief's own literal SQL before writing
+  any code (Golden Rule 5 — flagged, owner approved corrections):
+  1. `v_stock_on_hand` is `GROUP BY (tenant_id, item_id,
+warehouse_id)` — this shop has multiple warehouses (confirmed via
+     `warehouse` table + Phase 6/7 technician custody warehouses), so
+     a plain `LEFT JOIN` as the brief specified would silently
+     duplicate search result rows for any item moved across more than
+     one warehouse. Used a scalar subquery instead (`SUM(qty_milli)`
+     correlated by item+tenant — SQLite `SUM` over zero rows is
+     already `NULL`, giving the "no movements = null" semantics the
+     brief itself asked for, no `COALESCE`), same
+     aggregate-all-warehouses approach `report.repository.ts`'s
+     `getStockValuationReport` already established.
+  2. The brief's `topSellingItems` SQL used `item.status = 'active'`
+     — that column doesn't exist. Real column: `item.is_active`
+     (integer 1/0).
+  3. The brief's SQL had no join to `sale`/no status filter — but
+     `cancelSale` (`sale.repository.ts`) flips `sale.status` to
+     `'cancelled'` without deleting `sale_line` rows, so an unfiltered
+     `SUM` would count a cancelled sale's quantity as "sold". Added
+     `JOIN sale ... WHERE sale.status = 'confirmed'`, plus a dedicated
+     test proving a cancelled-only item is excluded.
+- Found `channels.item.stockOnHand = 'item:stockOnHand'` already
+  existed with zero handler/preload/client wiring anywhere — an
+  orphaned channel from an earlier phase, confirmed by grep across the
+  whole repo. Not touched or reused; logged as BUG-23 (LOW) in
+  `PROJECT.md` instead.
+- Two owner decisions made before writing the affected code, since the
+  brief's own text conflicted with either the live code or its own
+  stated constraints:
+  1. Cards show `retailPricePaisa` only, never a wholesale-resolved
+     price — the brief wanted wholesale prices on cards for a selected
+     customer "without a new IPC call," but no such per-item resolved
+     price exists until an item is actually in the cart
+     (`item:getPrices` is cart-line-scoped, called by
+     `usePricePreview.ts`). Owner chose to honor the no-new-call
+     constraint over the visual-intent line.
+  2. `CartTable` stays in the LEFT panel (below the new grid) — the
+     brief said "cart stays on the right panel — unchanged," but the
+     live code has always rendered `CartTable` in the left panel, not
+     the right (right panel is customer+checkout only). CLAUDE.md rule
+     6: live code is the truth. Owner confirmed this is a wording
+     error in the brief, not an instruction to relocate `CartTable`.
+- **E-1** — `packages/contracts/src/item/item.ts`'s `ItemDto` +
+  `packages/core/src/item/item.repository.port.ts`'s `ItemRecord` gain
+  `stockOnHandMilli: number | null`. `item.repository.ts`'s
+  `searchItems()` adds the scalar-subquery column (see correction #1
+  above), gated to `null` when `!trackStock`. `getItemById()` gets
+  `stockOnHandMilli: null` added to its return literal only to satisfy
+  the shared `ItemRecord` type — confirmed dead code, zero callers,
+  not a behavior change. Updated that method's existing round-trip
+  test's `.toEqual()` expectation for the new field.
+- **E-3** (tests, before E-2's IPC wiring per the brief's own
+  ordering) — 6 new tests in `item.repository.test.ts`:
+  `stockOnHandMilli` sums real `stock_movement` rows across
+  warehouses / returns `null` with zero movements / returns `null` for
+  a non-stock-tracked item even with movements; `topSellingItems`
+  orders by total confirmed-sale quantity (A×5/B×3/C×1, 1000 milli
+  each → hand-calculated 5000/3000/1000, exact order asserted) /
+  excludes a never-sold item / excludes a cancelled-sale-only item.
+- **E-2** — `ItemTopSellingInput` (contracts, `limit` 1-50 default 12),
+  `ItemRepositoryPort.topSellingItems`/service wrapper (core),
+  `item.repository.ts`'s `topSellingItems()` (raw `sql`, same
+  view-reading precedent as `sale.repository.ts`/
+  `report.repository.ts`), wired through `channels.ts` →
+  `item.handler.ts` (Zod-validated) → `preload.ts` →
+  `electron-api.d.ts`. Both `preload.ts` (351→354) and
+  `electron-api.d.ts` (386→388 lines) were already over the 300-line
+  cap before this session touched them; owner chose to add the small
+  wiring as-is rather than treat sharding either file as a
+  prerequisite — logged in `PROJECT.md`, not addressed this session.
+- **E-4** — new `ItemProductCard.tsx` (placeholder package/wrench
+  icon by business-unit code, 2-line-clamp name + title tooltip, item
+  code, green/amber/red stock badge via `Math.floor(stockOnHandMilli/
+1000)`, retail price, P/R pill reusing `CartLineRow`'s convention).
+  `SearchSelect.tsx` gained two purely-additive optional props —
+  `initialResults` (shown at an empty query instead of nothing) and
+  `resultsLayout: 'list' | 'grid'` (static in-flow CSS grid instead of
+  the absolute-positioned floating dropdown) — both default to the
+  prior behavior; verified zero impact on the other 4 callers
+  (`CustomerPopover`, `PurchasePage`, `JobIssuePartForm`,
+  `DeliveryPartLines`) by grep, none of which pass either prop. Tab-
+  on-empty-query still falls through to default browser focus
+  movement even with the grid showing (K-15 audit behavior preserved
+  explicitly). `ItemSearchPanel.tsx` fetches `item:topSelling({limit:
+12})` on mount, falls back to `item:search({query:'',categoryId:null})`
+  when empty (new shop, no sales yet), applies the existing
+  `itemMatchesTab` filter to both; `renderItem` now renders
+  `ItemProductCard` (held/selected item still swaps to the inline qty
+  editor, restyled to fit inside a card). `ItemResultRow.tsx` deleted
+  — confirmed zero remaining references by grep.
+- **E-5** — new `QueueStrip.tsx` (bottom of the left panel, not a
+  popover: empty state "No held sales" + right-aligned "Hold sale"
+  when cart non-empty; populated state: horizontal `overflow-x-auto`
+  chip row + trailing "Hold sale" button). `SalesTopbar.tsx` lost the
+  Hold button, "N held" badge, and `HeldSalesPopover` usage entirely.
+  `HeldSalesPopover.tsx` deleted — confirmed zero remaining references
+  by grep. `SalePage.tsx`'s left panel restructured so `QueueStrip`
+  sits flush against the card's bottom edge (padding moved to an inner
+  wrapper around `ItemSearchPanel`+`CartTable`, not the card itself).
+- File-cap fallout from this session's own additions, both split
+  before commit: `item.repository.ts` (304→299, comments trimmed) and
+  `SearchSelect.tsx` (326→279, its results rendering extracted to new
+  `SearchSelectResults.tsx`, 93 lines).
+
+**Verified:**
+
+- `npm run typecheck`/`npm run lint` — exit 0 after every sub-task.
+- `npm run verify` — 428→434 (6 new tests), confirmed after every
+  sub-task (E-1 through E-5), pasted each time.
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — clean after every sub-task.
+- File caps: every touched file confirmed under 300 lines via `wc -l`
+  after the two splits above.
+- **Real running-window verification**, not just code-read:
+  session-only `playwright-core` dev install (same precedent as prior
+  sessions, not persisted — `git status --short` after cleanup showed
+  no `package.json`/`package-lock.json` change), `better-sqlite3`
+  rebuilt for Electron then restored to the system-Node build
+  afterward. `_electron.launch`'s own launch-line detection failed in
+  this sandbox (Electron rejected Playwright's injected
+  `--remote-debugging-port=0` as "bad option" — not further diagnosed);
+  worked around by manually spawning `electron.exe` with a fixed
+  `--remote-debugging-port` and attaching via `chromium.connectOverCDP`,
+  which worked cleanly — logged as a fallback for a future session
+  hitting the same issue. All 7 brief scenarios run against real
+  dev-DB fixtures (`Compressor` Rs 6,000, `Compressor 2 Ton` Rs 9,000,
+  `Khan Wholesale`):
+  1. Grid on load: 2 cards (this dev DB's only 2 items) —
+     package-icon placeholders, item codes, "Out of stock" red badges
+     (real dev-DB stock is depleted from prior sessions' test sales),
+     prices, "P" pills all rendered correctly; `Compressor 2 Ton` first
+     (matches its real higher total-sold quantity).
+  2. Typing "comp" then "Compressor 2": grid filtered correctly via
+     the same `item:search` call, narrowing to the exact match.
+  3. Clicking a card: inline qty editor appeared inside the card,
+     `document.activeElement` confirmed as the qty `<input>` with value
+     "1" pre-selected (autofocus + select, matching the prior list
+     behavior).
+  4. Typing "2" + Enter: card deselected, cart showed "Compressor 2
+     Ton, 2 Centimeter × Rs 9,000 = Rs 18,000" (hand-calc: 2 × 9000 =
+     18000, exact match), search box cleared, grid reappeared.
+  5. Alt+H: queue strip showed the chip "Walk-in · 1 item · Rs 18,000 ·
+     Resume" at the bottom of the left panel, cart cleared.
+  6. Resume: cart restored exactly (same line, same qty, same total).
+  7. Selected Khan Wholesale: cart's own line price correctly
+     recalculated via the existing per-line price preview; the grid
+     cards' displayed prices correctly stayed at retail (Rs 9,000/Rs
+     6,000, no wholesale `item_price` row exists for this item at
+     this price level) — matches the approved retail-only-on-cards
+     decision.
+  - Final query (`sale_line` grouped by `item_id`, `ORDER BY
+SUM(quantity) DESC LIMIT 5`) pasted and confirmed: top result
+    `Compressor 2 Ton` (item_id `01a07cd1-...`) matches the first card
+    shown in the grid throughout the whole walkthrough.
+
+**Not done / deferred:** nothing from this session's own scope.
+`preload.ts`/`electron-api.d.ts` splitting deferred per owner decision
+(see Done above). BUG-23 (dead `item:stockOnHand` channel) logged, not
+fixed.
+
+**Bugs found:** BUG-23 (LOW, pre-existing, not introduced this
+session — see `PROJECT.md`).
+
+**Decisions taken:** two scoped owner corrections to the brief (retail-
+price-only cards; cart stays in the left panel) — see Done above, not
+formal ADRs.
+
+**Blocked on:** nothing.
+
+**Next session should:** nothing specific to this feature — it is
+complete end-to-end. A future session could decide whether/how to
+shard `preload.ts`/`electron-api.d.ts` (both over cap, growing with
+every new IPC channel), and whether BUG-23's dead channel should be
+wired up or removed.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — n/a, standalone UI/backend
+      feature, complete end-to-end
+- [x] Any new bugs documented in PROJECT.md — BUG-23 logged
+- [x] Test suite passing (`npm run verify` 434/434)
+
+---
+
 ## [2026-09-09] Session 45 — Phase 8 (D): discount presets, owner-configured (D-1–D-4, COMPLETE)
 
 **Goal:** Replace Session 44's free-form PKR/% discount text inputs on the

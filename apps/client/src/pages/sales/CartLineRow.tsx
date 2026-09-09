@@ -3,7 +3,7 @@ import { MoneyDisplay, QuantityDisplay } from '@shop/ui';
 import type { CartLine } from './CartTable.js';
 import { lineTotalPaisa } from './CartTable.js';
 
-/** Same Parts/Repair color convention as ItemResultRow.tsx — resolved client-side, no new IPC. */
+/** Same Parts/Repair color convention as ItemProductCard.tsx — resolved client-side, no new IPC. */
 function resolveTypePill(
   businessUnitId: string | null,
   lookups: ItemLookups | null,

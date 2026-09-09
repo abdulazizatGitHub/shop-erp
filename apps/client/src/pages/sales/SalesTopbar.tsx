@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react';
-import { HeldSalesPopover } from './HeldSalesPopover.js';
-import type { QueuedSale } from './useSaleQueue.js';
 
 function formatClock(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -39,25 +37,15 @@ export interface SalesTopbarProps {
   /** Only rendered once a sale has completed this session (A-5). */
   readonly hasLastSale: boolean;
   readonly onLastSaleClick: () => void;
-  /** Hold-sale button (A-4) — only rendered when the cart has at least one item. */
-  readonly cartHasItems: boolean;
-  readonly onHoldClick: () => void;
-  readonly heldSales: readonly QueuedSale[];
-  readonly onResumeHeldSale: (id: string) => void;
 }
 
-/** 52px topbar for the sale screen: title, session pill, Hold/Last sale/Help buttons, live clock. Visual only — no IPC. */
+/** 52px topbar for the sale screen: title, session pill, Last sale/Help buttons, live clock. Visual only — no IPC. Hold-sale + the held-sale queue moved to QueueStrip.tsx at the bottom of the left panel (E-5). */
 export function SalesTopbar({
   onHelpClick,
   hasLastSale,
   onLastSaleClick,
-  cartHasItems,
-  onHoldClick,
-  heldSales,
-  onResumeHeldSale,
 }: SalesTopbarProps): React.JSX.Element {
   const [now, setNow] = useState(() => new Date());
-  const [queueOpen, setQueueOpen] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -83,46 +71,6 @@ export function SalesTopbar({
       </div>
 
       <div className="flex items-center gap-3 text-xs text-ink-faint">
-        {cartHasItems && (
-          <button
-            type="button"
-            onClick={onHoldClick}
-            title="Hold sale (Alt+H)"
-            className="shrink-0 whitespace-nowrap rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
-          >
-            Hold sale
-          </button>
-        )}
-        {heldSales.length > 0 && (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setQueueOpen((open) => !open);
-              }}
-              className="shrink-0 whitespace-nowrap rounded-full bg-warning-subtle px-2.5 py-1 text-xs font-medium text-warning hover:opacity-80"
-            >
-              {heldSales.length} held
-            </button>
-            {queueOpen && (
-              <HeldSalesPopover
-                queue={heldSales}
-                onResume={(id) => {
-                  onResumeHeldSale(id);
-                  setQueueOpen(false);
-                }}
-                onClose={() => {
-                  setQueueOpen(false);
-                }}
-              />
-            )}
-          </div>
-        )}
-        {(cartHasItems || heldSales.length > 0) && (
-          <span className="text-line" aria-hidden="true">
-            |
-          </span>
-        )}
         {hasLastSale && (
           <>
             <button

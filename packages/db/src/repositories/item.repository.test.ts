@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { newId } from '@shop/shared';
 import { openDatabase } from '../connection.js';
 import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
@@ -19,6 +20,8 @@ let rawDb: Database.Database;
 let repo: KyselyItemRepository;
 let businessUnitId: string;
 let stockUomId: string;
+let warehouseId: string;
+let priceLevelId: string;
 
 beforeEach(() => {
   workDir = mkdtempSync(path.join(tmpdir(), 'shop-erp-item-repo-test-'));
@@ -42,12 +45,67 @@ beforeEach(() => {
       id: string;
     }
   ).id;
+  warehouseId = (
+    rawDb
+      .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND is_default = 1`)
+      .get(TENANT_ID) as { id: string }
+  ).id;
+  priceLevelId = (
+    rawDb
+      .prepare(`SELECT id FROM price_level WHERE tenant_id = ? AND is_default = 1`)
+      .get(TENANT_ID) as { id: string }
+  ).id;
 });
 
 afterEach(() => {
   rawDb.close();
   rmSync(workDir, { recursive: true, force: true });
 });
+
+function insertStockMovement(itemId: string, quantityMilli: number, warehouse = warehouseId): void {
+  const now = new Date().toISOString();
+  rawDb
+    .prepare(
+      `INSERT INTO stock_movement (id, tenant_id, item_id, warehouse_id, movement_date, movement_type, quantity, unit_cost, source_type, source_id, reason, reversed_by_id, created_at, created_by, business_unit_id)
+       VALUES (?, ?, ?, ?, ?, 'opening', ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL)`,
+    )
+    .run(newId(), TENANT_ID, itemId, warehouse, now, quantityMilli, now);
+}
+
+/** Minimal confirmed sale + one sale_line, for topSellingItems fixtures — not a full createSale round-trip (no stock/ledger side effects needed for this query). */
+function insertConfirmedSaleLine(itemId: string, quantityMilli: number): void {
+  const now = new Date().toISOString();
+  const saleId = newId();
+  rawDb
+    .prepare(
+      `INSERT INTO sale (id, tenant_id, doc_no, customer_id, warehouse_id, price_level_id, sale_date, subtotal, total_amount, status, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 0, 'confirmed', ?, ?)`,
+    )
+    .run(saleId, TENANT_ID, `TEST-${saleId}`, warehouseId, priceLevelId, now, now, now);
+  rawDb
+    .prepare(
+      `INSERT INTO sale_line (id, tenant_id, sale_id, line_no, item_id, quantity, unit_price, line_total)
+       VALUES (?, ?, ?, 1, ?, ?, 0, 0)`,
+    )
+    .run(newId(), TENANT_ID, saleId, itemId, quantityMilli);
+}
+
+function insertCancelledSaleLine(itemId: string, quantityMilli: number): void {
+  const now = new Date().toISOString();
+  const saleId = newId();
+  rawDb
+    .prepare(
+      `INSERT INTO sale (id, tenant_id, doc_no, customer_id, warehouse_id, price_level_id, sale_date, subtotal, total_amount, status, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 0, 'cancelled', ?, ?)`,
+    )
+    .run(saleId, TENANT_ID, `TEST-CANCELLED-${saleId}`, warehouseId, priceLevelId, now, now, now);
+  rawDb
+    .prepare(
+      `INSERT INTO sale_line (id, tenant_id, sale_id, line_no, item_id, quantity, unit_price, line_total)
+       VALUES (?, ?, ?, 1, ?, ?, 0, 0)`,
+    )
+    .run(newId(), TENANT_ID, saleId, itemId, quantityMilli);
+}
 
 describe('KyselyItemRepository.createItem', () => {
   it('auto-generates an item code when none is given, format ITM-A-000001', async () => {
@@ -178,6 +236,7 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
       trackStock: false,
       altUomId: null,
       altUomFactorMilli: null,
+      stockOnHandMilli: null,
     });
   });
 
@@ -298,5 +357,165 @@ describe('KyselyItemRepository — alt unit', () => {
     >;
     expect(row['alt_uom_id']).toBeNull();
     expect(row['alt_uom_factor_milli']).toBeNull();
+  });
+});
+
+describe('KyselyItemRepository.searchItems — stockOnHandMilli (E-1)', () => {
+  it('sums stock_movement rows across warehouses for a stock-tracked item', async () => {
+    const item = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Tracked Compressor',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    // Two movements, possibly different warehouses in a real shop — here
+    // both in the default one is enough to prove the SUM, since the
+    // duplication risk this subquery avoids is about JOIN shape, not
+    // warehouse count. 3000 + 2000 = 5000 milli, hand-calculated.
+    insertStockMovement(item.id, 3000);
+    insertStockMovement(item.id, 2000);
+
+    const results = await repo.searchItems({ query: 'Tracked Compressor', categoryId: null });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.stockOnHandMilli).toBe(5000);
+  });
+
+  it('returns null, not 0, for an item with zero stock_movement rows', async () => {
+    await repo.createItem({
+      itemCode: null,
+      nameEn: 'Never Moved Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+
+    const results = await repo.searchItems({ query: 'Never Moved Item', categoryId: null });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.stockOnHandMilli).toBeNull();
+  });
+
+  it('returns null for a non-stock-tracked item even if movements exist', async () => {
+    const item = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Service Line Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: false,
+      retailPricePaisa: 100,
+    });
+    // Shouldn't happen in practice for a non-stock-tracked item, but proves
+    // the trackStock gate, not just the subquery's own NULL behavior.
+    insertStockMovement(item.id, 1000);
+
+    const results = await repo.searchItems({ query: 'Service Line Item', categoryId: null });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.stockOnHandMilli).toBeNull();
+  });
+});
+
+describe('KyselyItemRepository.topSellingItems (E-2/E-3)', () => {
+  it('orders items by total confirmed-sale quantity, most-sold first', async () => {
+    const itemA = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Item A',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    const itemB = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Item B',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    const itemC = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Item C',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+
+    // A sold 5 times, B sold 3 times, C sold 1 time — 1000 milli/line.
+    // Hand-calculated totals: A = 5000, B = 3000, C = 1000.
+    for (let i = 0; i < 5; i++) insertConfirmedSaleLine(itemA.id, 1000);
+    for (let i = 0; i < 3; i++) insertConfirmedSaleLine(itemB.id, 1000);
+    insertConfirmedSaleLine(itemC.id, 1000);
+
+    const results = await repo.topSellingItems(12);
+    expect(results.map((r) => r.id)).toEqual([itemA.id, itemB.id, itemC.id]);
+
+    const byId = new Map(results.map((r) => [r.id, r]));
+    // total_sold_milli isn't returned on ItemRecord itself (it's a ranking
+    // input, not a display field per E-2's spec) — the order assertion
+    // above already proves the SUM; this re-derives the same numbers from
+    // the raw table directly as an independent check.
+    function totalSoldMilli(itemId: string): number {
+      const row = rawDb
+        .prepare(
+          `SELECT COALESCE(SUM(sl.quantity), 0) AS total FROM sale_line sl JOIN sale ON sale.id = sl.sale_id WHERE sl.item_id = ? AND sale.status = 'confirmed'`,
+        )
+        .get(itemId) as { total: number };
+      return row.total;
+    }
+    expect(totalSoldMilli(itemA.id)).toBe(5000);
+    expect(totalSoldMilli(itemB.id)).toBe(3000);
+    expect(totalSoldMilli(itemC.id)).toBe(1000);
+    expect(byId.has(itemA.id)).toBe(true);
+  });
+
+  it('excludes an item with no sale_line rows', async () => {
+    const sold = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Sold Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    const neverSold = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Never Sold Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    insertConfirmedSaleLine(sold.id, 1000);
+
+    const results = await repo.topSellingItems(12);
+    expect(results.map((r) => r.id)).toContain(sold.id);
+    expect(results.map((r) => r.id)).not.toContain(neverSold.id);
+  });
+
+  it('excludes cancelled sales from the ranking', async () => {
+    const cancelledOnly = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Cancelled Sale Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    insertCancelledSaleLine(cancelledOnly.id, 5000);
+
+    const results = await repo.topSellingItems(12);
+    expect(results.map((r) => r.id)).not.toContain(cancelledOnly.id);
   });
 });

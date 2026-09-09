@@ -83,8 +83,18 @@ export const ItemDto = z.object({
   // denormalized here.
   altUomId: z.string().uuid().nullable(),
   altUomFactorMilli: z.number().int().nullable(),
+  // E-1: total stock on hand across all warehouses, milli-units. Null when
+  // the item is not stock-tracked, or has never had a stock_movement row —
+  // never 0 for "no movements yet" (see item.repository.ts's searchItems).
+  stockOnHandMilli: z.number().int().nullable(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
+
+/** E-2: sale screen's initial product grid — top N items by total quantity sold. */
+export const ItemTopSellingInput = z.object({
+  limit: z.number().int().min(1).max(50).default(12),
+});
+export type ItemTopSellingInput = z.infer<typeof ItemTopSellingInput>;
 
 /** Reference-data options for populating the item form's dropdowns. */
 export interface ItemLookups {

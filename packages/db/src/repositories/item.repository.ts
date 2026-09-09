@@ -1,4 +1,4 @@
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { formatDocNumber, newId } from '@shop/shared';
 import type {
   ItemRecord,
@@ -165,6 +165,10 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       trackStock: row.trackStock === 1,
       altUomId: row.altUomId,
       altUomFactorMilli: row.altUomFactorMilli,
+      // getItemById has zero callers today (no channel wires it up) — this
+      // field is supplied only to satisfy the shared ItemRecord shape, not
+      // a real stock lookup for this method.
+      stockOnHandMilli: null,
     };
   }
 
@@ -195,6 +199,17 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         'itemPrice.price as retailPricePaisa',
         'item.altUomId',
         'item.altUomFactorMilli',
+        // Scalar subquery, not a row-level LEFT JOIN: v_stock_on_hand is
+        // GROUP BY (tenant_id, item_id, warehouse_id), so a plain JOIN
+        // would duplicate rows for any item moved in >1 warehouse. SUM()
+        // over zero rows is SQLite NULL — matches "no movements" (no
+        // COALESCE). Same aggregate-all-warehouses approach as
+        // report.repository.ts's getStockValuationReport.
+        sql<
+          number | null
+        >`(SELECT SUM(qty_milli) FROM v_stock_on_hand WHERE item_id = item.id AND tenant_id = item.tenant_id)`.as(
+          'stockOnHandMilli',
+        ),
       ])
       .where('item.tenantId', '=', this.tenantId)
       .where('item.deletedAt', 'is', null);
@@ -218,6 +233,69 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       trackStock: row.trackStock === 1,
       altUomId: row.altUomId,
       altUomFactorMilli: row.altUomFactorMilli,
+      stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
+    }));
+  }
+
+  async topSellingItems(limit: number): Promise<readonly ItemRecord[]> {
+    // Raw sql — view precedent, same as searchItems above. sale.status =
+    // 'confirmed' excludes cancelled sales (cancelSale flips status but
+    // never deletes sale_line rows), which an unfiltered SUM would
+    // otherwise wrongly count as "sold".
+    const result = await sql<{
+      id: string;
+      itemCode: string;
+      nameEn: string;
+      nameUr: string | null;
+      businessUnitId: string | null;
+      stockUomId: string;
+      retailPricePaisa: number | null;
+      trackStock: number;
+      altUomId: string | null;
+      altUomFactorMilli: number | null;
+      stockOnHandMilli: number | null;
+    }>`
+      SELECT
+        item.id                      AS id,
+        item.item_code                AS itemCode,
+        item.name_en                  AS nameEn,
+        item.name_ur                  AS nameUr,
+        item.business_unit_id         AS businessUnitId,
+        item.stock_uom_id             AS stockUomId,
+        item_price.price               AS retailPricePaisa,
+        item.track_stock              AS trackStock,
+        item.alt_uom_id               AS altUomId,
+        item.alt_uom_factor_milli     AS altUomFactorMilli,
+        (SELECT SUM(qty_milli) FROM v_stock_on_hand WHERE item_id = item.id AND tenant_id = item.tenant_id) AS stockOnHandMilli
+      FROM sale_line sl
+      JOIN sale ON sale.id = sl.sale_id
+      JOIN item ON item.id = sl.item_id
+      LEFT JOIN item_price ON item_price.item_id = item.id
+        AND item_price.price_level_id = (
+          SELECT id FROM price_level WHERE tenant_id = ${this.tenantId} AND is_default = 1
+        )
+      WHERE sl.tenant_id = ${this.tenantId}
+        AND sl.item_id IS NOT NULL
+        AND sale.status = 'confirmed'
+        AND item.is_active = 1
+        AND item.deleted_at IS NULL
+      GROUP BY sl.item_id
+      ORDER BY SUM(sl.quantity) DESC
+      LIMIT ${limit}
+    `.execute(this.db);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      itemCode: row.itemCode,
+      nameEn: row.nameEn,
+      nameUr: row.nameUr,
+      businessUnitId: row.businessUnitId,
+      stockUomId: row.stockUomId,
+      retailPricePaisa: row.retailPricePaisa,
+      trackStock: row.trackStock === 1,
+      altUomId: row.altUomId,
+      altUomFactorMilli: row.altUomFactorMilli,
+      stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
     }));
   }
 }

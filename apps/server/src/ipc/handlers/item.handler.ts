@@ -3,10 +3,12 @@ import {
   CreateItemInput,
   ItemGetPricesInput,
   ItemSearchInput,
+  ItemTopSellingInput,
+  type ItemDto,
   type ItemLookups,
   type ItemPricesDto,
 } from '@shop/contracts';
-import { createItem, searchItems } from '@shop/core';
+import { createItem, searchItems, topSellingItems } from '@shop/core';
 import {
   createKyselyDb,
   getItemPrices,
@@ -49,6 +51,20 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
       db.close();
     }
   });
+
+  ipcMain.handle(
+    channels.item.topSelling,
+    async (_event, raw: unknown): Promise<readonly ItemDto[]> => {
+      const input = ItemTopSellingInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyItemRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
+        return await topSellingItems(repo, input.limit);
+      } finally {
+        db.close();
+      }
+    },
+  );
 
   ipcMain.handle(channels.item.getPrices, async (_event, raw: unknown): Promise<ItemPricesDto> => {
     const input = ItemGetPricesInput.parse(raw);

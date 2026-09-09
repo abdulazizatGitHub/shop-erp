@@ -16,6 +16,7 @@ export const channels = {
     stockOnHand: 'item:stockOnHand',
     lookups: 'item:lookups',
     getPrices: 'item:getPrices',
+    topSelling: 'item:topSelling',
   },
   party: {
     create: 'party:create',

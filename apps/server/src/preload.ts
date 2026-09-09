@@ -26,6 +26,7 @@ import type {
   ItemLookups,
   ItemPricesDto,
   ItemSearchInput,
+  ItemTopSellingInput,
   JobDto,
   JobIdInput,
   JobSearchInput,
@@ -124,6 +125,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.item.lookups) as Promise<ItemLookups>,
     getPrices: (input: ItemGetPricesInput): Promise<ItemPricesDto> =>
       ipcRenderer.invoke(channels.item.getPrices, input) as Promise<ItemPricesDto>,
+    topSelling: (input: ItemTopSellingInput): Promise<readonly ItemDto[]> =>
+      ipcRenderer.invoke(channels.item.topSelling, input) as Promise<readonly ItemDto[]>,
   },
   customer: {
     create: (input: CreateCustomerInput): Promise<CreateCustomerResult> =>

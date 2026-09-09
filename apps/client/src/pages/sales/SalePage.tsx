@@ -6,6 +6,7 @@ import { CustomerSearchSlot } from './CustomerSearchSlot.js';
 import { HelpShortcutsModal } from './HelpShortcutsModal.js';
 import { ItemSearchPanel } from './ItemSearchPanel.js';
 import { LastSaleModal } from './LastSaleModal.js';
+import { QueueStrip } from './QueueStrip.js';
 import { SaleAlerts } from './SaleAlerts.js';
 import { SaleSuccessModal } from './SaleSuccessModal.js';
 import { SalesTopbar } from './SalesTopbar.js';
@@ -98,10 +99,6 @@ export function SalePage(): React.JSX.Element {
         onLastSaleClick={() => {
           setLastSaleOpen(true);
         }}
-        cartHasItems={flow.cart.length > 0}
-        onHoldClick={holdCurrentSale}
-        heldSales={queue.queue}
-        onResumeHeldSale={resumeHeldSale}
       />
 
       <SaleAlerts
@@ -117,26 +114,35 @@ export function SalePage(): React.JSX.Element {
       />
 
       <div className="flex min-h-0 flex-1 gap-3 p-4">
-        {/* Left panel — 58%: item search, cart. One white card; scrolls independently. */}
-        <div className="flex w-3/5 flex-col gap-4 overflow-y-auto rounded-2xl bg-surface p-4 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
-          <ItemSearchPanel
-            lookups={flow.lookups}
-            uomName={flow.uomName}
-            onConfirmLine={flow.confirmLine}
-            onCheckoutTrigger={() => {
-              if (flow.cart.length > 0) void flow.handleCheckout();
-            }}
-            onError={flow.setError}
-          />
+        {/* Left panel — 58%: item search/grid, cart, queue strip. One white card. QueueStrip sits flush against the card's bottom edge (E-5), so padding lives on an inner wrapper, not the card itself. */}
+        <div className="flex w-3/5 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <ItemSearchPanel
+              lookups={flow.lookups}
+              uomName={flow.uomName}
+              onConfirmLine={flow.confirmLine}
+              onCheckoutTrigger={() => {
+                if (flow.cart.length > 0) void flow.handleCheckout();
+              }}
+              onError={flow.setError}
+            />
 
-          <CartTable
-            cart={flow.cart}
-            subtotalPaisa={flow.cartSubtotalPaisa}
-            lookups={flow.lookups}
-            onRemove={flow.removeLine}
-            onClear={flow.clearCart}
-            onQuantityChange={flow.adjustQuantity}
-            chrome="flat"
+            <CartTable
+              cart={flow.cart}
+              subtotalPaisa={flow.cartSubtotalPaisa}
+              lookups={flow.lookups}
+              onRemove={flow.removeLine}
+              onClear={flow.clearCart}
+              onQuantityChange={flow.adjustQuantity}
+              chrome="flat"
+            />
+          </div>
+
+          <QueueStrip
+            queue={queue.queue}
+            cartHasItems={flow.cart.length > 0}
+            onHoldClick={holdCurrentSale}
+            onResume={resumeHeldSale}
           />
         </div>
 

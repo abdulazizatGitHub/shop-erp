@@ -36,6 +36,8 @@ export interface ItemRecord {
   readonly trackStock: boolean;
   readonly altUomId: string | null;
   readonly altUomFactorMilli: number | null;
+  /** E-1: total across all warehouses, milli-units. Null = not stock-tracked, or no movements yet. */
+  readonly stockOnHandMilli: number | null;
 }
 
 export interface ItemSearchQuery {
@@ -52,4 +54,6 @@ export interface ItemRepositoryPort {
   createItem(input: NewItemInput): Promise<NewItemResult>;
   getItemById(id: string): Promise<ItemRecord | null>;
   searchItems(query: ItemSearchQuery): Promise<readonly ItemRecord[]>;
+  /** E-2: top N items by total confirmed-sale quantity, most-sold first. [] when no sales exist yet. */
+  topSellingItems(limit: number): Promise<readonly ItemRecord[]>;
 }

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemDto, ItemLookups } from '@shop/contracts';
 import { Qty } from '@shop/shared';
 import { EmptyState } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
-import { ItemResultRow } from './ItemResultRow.js';
+import { ItemProductCard } from './ItemProductCard.js';
 import { SearchSelect, type SearchSelectHandle } from './SearchSelect.js';
 
 type FilterTab = 'all' | 'parts' | 'repair';
@@ -31,7 +31,7 @@ export interface ItemSearchPanelProps {
   readonly onError: (message: string) => void;
 }
 
-/** Left-panel item search: filter tabs, keyboard-navigable results, and the inline qty step. No cart/checkout logic — that stays in SalePage. */
+/** Left-panel item search: filter tabs, POS product card grid (E-4), and the inline qty step. No cart/checkout logic — that stays in SalePage. */
 export function ItemSearchPanel({
   lookups,
   uomName,
@@ -43,9 +43,35 @@ export function ItemSearchPanel({
   const [pendingItem, setPendingItem] = useState<ItemDto | null>(null);
   const [qtyInput, setQtyInput] = useState('1');
   const [saleUnit, setSaleUnit] = useState<SaleUnit>('stock');
+  const [gridItems, setGridItems] = useState<readonly ItemDto[]>([]);
 
   const searchSelectRef = useRef<SearchSelectHandle>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
+
+  // E-4: populate the grid on load — top-selling items, falling back to
+  // "every item" (item:search with an empty query) for a brand-new shop
+  // with no sales yet. One-time fetch; filterTab re-filters client-side
+  // below rather than re-fetching.
+  useEffect(() => {
+    let cancelled = false;
+    ipc.item
+      .topSelling({ limit: 12 })
+      .then((rows) => (rows.length > 0 ? rows : ipc.item.search({ query: '', categoryId: null })))
+      .then((rows) => {
+        if (!cancelled) setGridItems(rows);
+      })
+      .catch(() => {
+        // Grid stays empty — the search box still works independently.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const initialResults = useMemo(
+    () => gridItems.filter((item) => itemMatchesTab(item, filterTab, lookups)),
+    [gridItems, filterTab, lookups],
+  );
 
   // Stable identity across re-renders (e.g. every keystroke in the inline
   // qty input, which re-renders this component while a row is held).
@@ -99,8 +125,10 @@ export function ItemSearchPanel({
       ref={searchSelectRef}
       autoFocus
       inputTone="accent"
+      resultsLayout="grid"
       placeholder="Search items (Enter on empty to confirm line)"
       search={searchItems}
+      initialResults={initialResults}
       getKey={(item) => item.id}
       getLabel={(item) => `${item.nameEn} (${item.itemCode})`}
       holdSelection={() => true}
@@ -132,15 +160,12 @@ export function ItemSearchPanel({
         setSaleUnit('stock');
       }}
       onEmptyEnter={onCheckoutTrigger}
-      renderItem={(item) =>
+      renderItem={(item, highlighted) =>
         item.id === pendingItem?.id ? (
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="truncate font-medium text-ink">{item.nameEn}</p>
-              <span className="shrink-0 text-xs text-ink-faint">{item.itemCode}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-ink-muted">Qty:</span>
+          <div className="flex h-full flex-col gap-1.5 rounded-xl border-[1.5px] border-pos-accent bg-pos-accent-subtle p-2.5">
+            <p className="truncate text-[12px] font-semibold text-ink">{item.nameEn}</p>
+            <span className="truncate font-mono text-[10px] text-ink-faint">{item.itemCode}</span>
+            <div className="flex items-center gap-1">
               <input
                 ref={qtyInputRef}
                 inputMode="decimal"
@@ -149,7 +174,7 @@ export function ItemSearchPanel({
                   setQtyInput(e.target.value);
                 }}
                 onClick={(e) => {
-                  // Row click-through would otherwise re-trigger row selection.
+                  // Card click-through would otherwise re-trigger card selection.
                   e.stopPropagation();
                 }}
                 onKeyDown={(e) => {
@@ -167,31 +192,24 @@ export function ItemSearchPanel({
                     setSaleUnit((u) => (u === 'stock' ? 'alt' : 'stock'));
                   }
                 }}
-                className="w-24 rounded-md border border-line bg-surface px-2 py-1 font-mono text-base text-ink focus:border-pos-accent focus:outline-none focus:ring-[3px] focus:ring-pos-accent/10"
+                className="w-full min-w-0 rounded-md border border-line bg-surface px-2 py-1 font-mono text-sm text-ink focus:border-pos-accent focus:outline-none focus:ring-[3px] focus:ring-pos-accent/10"
               />
-              <span className="text-sm text-ink-muted">
-                {saleUnit === 'alt' && pendingItem.altUomId !== null
-                  ? uomName(pendingItem.altUomId)
-                  : uomName(pendingItem.stockUomId)}
-              </span>
-              <span className="ml-auto flex items-center gap-1 text-xs text-ink-faint">
-                <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
-                  Enter
-                </kbd>
-                to add
-              </span>
             </div>
-            {pendingItem.altUomId !== null && (
-              <p className="mt-1 text-xs text-ink-faint">
-                {saleUnit === 'stock' ? '● ' : '○ '}
-                {uomName(pendingItem.stockUomId)} (Stock)&nbsp;&nbsp;
-                {saleUnit === 'alt' ? '● ' : '○ '}
-                {uomName(pendingItem.altUomId)} (Alt) — ←/→ to switch
-              </p>
-            )}
+            <p className="truncate text-[10px] text-ink-muted">
+              {saleUnit === 'alt' && pendingItem.altUomId !== null
+                ? uomName(pendingItem.altUomId)
+                : uomName(pendingItem.stockUomId)}
+              {pendingItem.altUomId !== null && ' — ←/→'}
+            </p>
+            <span className="mt-auto flex items-center gap-1 text-[10px] text-ink-faint">
+              <kbd className="rounded border border-line-strong bg-surface-page px-1 py-0.5 font-mono text-[9px]">
+                Enter
+              </kbd>
+              to add
+            </span>
           </div>
         ) : (
-          <ItemResultRow item={item} lookups={lookups} uomName={uomName} />
+          <ItemProductCard item={item} lookups={lookups} selected={highlighted} />
         )
       }
       renderEmpty={() => <EmptyState message="No items found" />}

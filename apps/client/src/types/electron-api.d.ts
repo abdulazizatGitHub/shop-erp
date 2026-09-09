@@ -25,6 +25,7 @@ import type {
   ItemLookups,
   ItemPricesDto,
   ItemSearchInput,
+  ItemTopSellingInput,
   JobDto,
   JobIdInput,
   JobSearchInput,
@@ -246,6 +247,7 @@ export interface ElectronApi {
     readonly search: (input: ItemSearchInput) => Promise<readonly ItemDto[]>;
     readonly lookups: () => Promise<ItemLookups>;
     readonly getPrices: (input: ItemGetPricesInput) => Promise<ItemPricesDto>;
+    readonly topSelling: (input: ItemTopSellingInput) => Promise<readonly ItemDto[]>;
   };
   readonly customer: {
     readonly create: (input: CreateCustomerInput) => Promise<{ id: string; partyCode: string }>;
