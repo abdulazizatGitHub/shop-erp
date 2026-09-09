@@ -613,6 +613,104 @@ restored to the system-Node build before the final `npm run verify`;
 before commit — confirmed via `git status --short` showing only the
 intended source-file changes.
 
+**Update, 2026-09-09 (Session 47) — POS layout v2: cart moved to right
+panel, new checkout modal COMPLETE.** Renderer-only, P1–P7. This session's
+own brief largely re-described work already built in Sessions 42–46
+(queue-out-of-topbar, card grid, discount dropdowns, cart steppers already
+existed under different file names than the brief assumed —
+`ItemProductCard.tsx`/`QueueStrip.tsx`/`SaleSuccessModal.tsx` already
+superseded the brief's `ItemResultRow.tsx`/`HeldSalesPopover.tsx`/
+`SaleSuccessCard.tsx`). Flagged per CLAUDE.md rule 5 before writing code;
+owner made three explicit calls before the plan was approved: (1) move
+`CartTable` from the left panel to the right panel, **reversing Session
+46's own explicit decision** to keep it left; (2) build a new pre-submit
+`CheckoutModal.tsx` (order summary, payment method, amount received,
+confirm) — previously checkout was fully inline in the right-panel footer
+with no modal until after the sale; (3) let F10 open that modal too, which
+required a small, mechanical, explicitly-approved edit to `useSaleFlow.ts`
+(threading an optional `onRequestCheckout` callback into
+`useSaleKeyboardShortcuts.ts` — no other logic in either file touched) —
+the one file the brief itself had marked "DO NOT touch."
+**Two new deliberate deviations, both following existing precedent, not
+new decisions**: no Tabler icons (would need a new npm dependency or
+vendored webfont — same reasoning as the A-4 session's inline-SVG
+choice) — hand-authored inline SVGs added instead (search/package/wrench
+already existed; cash/udhaar/receipt/pause new this session, same 24×24
+viewBox/currentColor-stroke convention throughout); no new raw hex colors
+— `colors.ts` says "never use a raw hex in a component," so every color
+in the brief's pixel spec was mapped onto the nearest existing token
+(`pos-accent`, `line`, `surface.page`, `success`, `warning`, `danger`,
+`ink.faint`) rather than hardcoded literals or edits to
+`colors.ts`/`tailwind.config.js` (neither on the allowed-files list).
+New files: `CheckoutModal.tsx` (200 lines), `CheckoutOrderSummary.tsx`
+(74 lines), `CheckoutPaymentMethod.tsx` (103 lines) — `CheckoutModal.tsx`
+was split into the latter two mid-session after landing at 326 lines on
+first pass, per the file-cap rule, before any verification ran.
+**One real bug found via real-running-window verification and fixed,
+not just eyeballed**: at the app's actual 800×600 default window, the
+right panel's cart-empty placeholder (icon + two lines of text, `py-8`
+padding, ~144px tall) needed more vertical room than the flex layout
+actually gave it (~92px) once the now-taller footer (customer, discount,
+calc block, and button) claimed its share, and — since nothing clipped
+the overflow — it painted over the "Customer" label below it. Root-caused
+via `getBoundingClientRect()` on both elements (not guessed from a
+screenshot): the "Cart is empty" text and the "Customer" label computed
+to nearly identical y-ranges (153–175px vs 150–172px). Fixed by adding
+`overflow-hidden` to `CartTable`'s root and to the empty-state block
+itself, and shrinking the placeholder's padding (`py-8`→`py-2`, icon
+28px→24px) so it actually fits the space this layout leaves it at the
+shop's real default window size. `CartTable.tsx` also gained a
+`showSubtotal` prop (default `true`, preserving `PurchasePage`'s
+existing footer) since the sale screen's own new calculation block
+would otherwise show the subtotal twice.
+**Real running-window verification — COMPLETE across two sessions.**
+Session 47 itself ran the complete scenario successfully once, against
+real dev-DB fixtures, before its own sandbox's Electron GUI stopped
+launching mid-session (`crashpad_client_win.cc: not connected` on every
+relaunch attempt, reproduced with `--disable-gpu`/a fresh
+`--user-data-dir`/a cleared `GPUCache`/Playwright's own `_electron.launch`
+— diagnosed, not given up on blindly: isolated `migrate()`/`seed()` both
+ran to completion correctly under Electron's own Node runtime via `tsx`,
+proving the crash is in Electron's window/GPU-process startup itself,
+not in this session's code): card grid load, "comp" filter, inline qty
+row, cart update (Compressor ×2 = Rs 12,000, right-panel order confirmed
+top-to-bottom exactly as Cart → Customer → Discount →
+Total/Tax/Subtotal → Complete-sale button), a 5% discount preset (Rs
+600 off, Rs 11,400 subtotal — hand-calc match), F10 opening the new
+modal, an amount greater than the subtotal producing an exact
+Rs 8,000/Rs 8,600 change-due bar (hand-calc match both times), Confirm
+sale correctly closing the modal and handing off to the pre-existing
+stock-below-zero warning gate. The three paths that specific sandbox
+crash prevented from being re-confirmed after the BUG-24 fix — the fix
+itself, Alt+H hold/resume, and the Udhaar path through the modal — were
+**re-verified on the owner's own machine in the following session
+(Session 48)**: cart-empty state shows cleanly with no overlap; Alt+H
+produces a queue chip with correct customer/item-count/total, Resume
+restores the cart correctly; and the full flow (card grid → cart line
+with steppers → Customer/Discount/calc block/Complete-sale button in
+order → F10 modal with ORDER ITEMS/Total/Discount/Tax/Subtotal exactly
+matching the footer's numbers, Cash/Udhaar buttons, autofocused amount
+input, Confirm sale) was confirmed via screenshots. This phase's
+verification is now closed — see Session 48 in `PROGRESS.md`. Going
+forward, this sandbox's own Electron GUI launch remains unreliable
+(confirmed broken again at the start of Session 48, same signature,
+under a fresh shell — not fixed by any flag tried); the automated suite
+(434/434) is this sandbox's standard, and the owner performs the actual
+running-window check on their own machine after each UI session.
+**Three real dev-DB sale rows were posted during verification**
+(same precedent as prior sessions — logged, not cleaned up): INV-0068
+(Rs 12,000, no discount), INV-0069/INV-0070 (Rs 11,400 each, Rs 600
+discount) — all `status='confirmed'`, all matching their on-screen
+hand-calculated totals exactly.
+`npm run verify` 434/434 throughout (baseline was already 434/434, not
+428/428 as the brief's own stale baseline said — CLAUDE.md rule 6, live
+code is the truth). `npm run build --workspace=@shop/client` and
+`--workspace=@shop/server` both clean after every step. `better-sqlite3`
+rebuilt for Electron then restored to the Node build before the final
+verify; `playwright-core` uninstalled; confirmed via `git status
+--short` that only the intended `apps/client/src/pages/sales/*` files
+changed — no `package.json`/lockfile diffs.
+
 **Update, 2026-09-09 (Session 46) — POS card grid redesign COMPLETE.**
 Two-part session: E-1/E-2/E-3 (backend — stock-on-hand field + a new
 top-selling IPC channel) then E-4/E-5 (renderer — the sale screen's
@@ -736,6 +834,27 @@ this session's scope.
 Status: UNFIXED — waiting for a future session that needs single-item
 stock lookup, or a cleanup pass.
 
+### BUG-24: Sale-screen cart-empty placeholder overlapped the Customer label at the app's default window size — MEDIUM, FIXED
+
+Found in: Session 47 (POS layout v2), 2026-09-09, during real-running-window
+verification.
+Description: With an empty cart, `CartTable`'s placeholder (icon + two
+lines of text, `py-8` padding) needed ~144px but the flex layout only
+gave it ~92px at the app's actual 800×600 default window, once the new,
+taller right-panel footer (customer + discount + calc block + button)
+claimed its share. Nothing clipped the overflow, so the placeholder
+painted over the "Customer" label beneath it. Confirmed via
+`getBoundingClientRect()` on both elements (not eyeballed from a
+screenshot) before writing the fix.
+Impact: Cosmetic but genuinely confusing — a first-time walk-in flow
+(empty cart, about to pick a customer) showed overlapping text.
+Fix: `overflow-hidden` on `CartTable`'s root and on the empty-state
+block itself; padding/icon size reduced (`py-8`→`py-2`, 28px→24px icon)
+so the placeholder actually fits the space this layout leaves it.
+Status: FIXED, Session 47 — **re-confirmed in a running window on the
+owner's own machine, Session 48**: cart-empty state renders cleanly
+with no overlap against the Customer strip below it. Closed.
+
 ## 3. Phase status
 
 | Phase  | Name                                                          | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Completed                                                                                                                             |
@@ -760,6 +879,7 @@ stock lookup, or a cleanup pass.
 | 8 (C)  | Sale-level discount                                           | ✅ C-2–C-7 all DONE (C-1 dropped — reuses pre-existing unused `discount_amount` column instead of a new one, owner-approved); ledger-correct posting, wholesale default setting, checkout UI; 2 bugs found+fixed via real-running-window verification, no bugs left open                                                                                                                                                                                                                                                                                 | Session 44 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 44                                                                  |
 | 8 (D)  | Discount presets (owner-configured, replaces free-form entry) | ✅ D-1–D-4 all DONE — Settings "Discount presets" card, combined `settings:getDiscountConfig` IPC, checkout dropdowns replace Session 44's free-form inputs; Session 44's "Discount defaults" card removed entirely (owner-directed, zero grep hits after removal); `useSaleFlow.ts`/`SettingsPage.tsx` both split under cap first; real-running-window-verified, zero bugs found                                                                                                                                                                        | Session 45 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 45                                                                  |
 | 8 (E)  | POS card grid — top-selling items, stock badges, queue strip  | ✅ E-1–E-5 all DONE — `item:search`/new `item:topSelling` carry `stockOnHandMilli` (scalar-subquery, all-warehouses-summed, corrected from the brief's row-duplicating literal JOIN); sale screen's left panel is now a product-card grid (falls back to all-items when no sales exist yet) with the held-sale queue moved from the topbar to a strip at the bottom; `ItemResultRow.tsx`/`HeldSalesPopover.tsx` deleted, superseded; real-running-window-verified against real dev-DB fixtures, zero bugs found (BUG-23 logged, pre-existing, not fixed) | Session 46 (2026-09-09). 434/434 tests. See `PROGRESS.md` Session 46                                                                  |
+| 8 (F)  | POS layout v2 — cart to right panel, new checkout modal       | ✅ P1–P7 all DONE — cart moved left→right panel (reversing Session 46), new `CheckoutModal.tsx` (+`CheckoutOrderSummary`/`CheckoutPaymentMethod`), F10 threaded through an approved `useSaleFlow.ts` edit; BUG-24 found+fixed and re-confirmed on the owner's own machine (Session 48) after this sandbox's Electron GUI stopped launching mid-Session-47; fully closed                                                                                                                                                                                  | Sessions 47–48 (2026-09-09). 434/434 tests. See `PROGRESS.md` Sessions 47/48                                                          |
 
 ---
 

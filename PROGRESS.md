@@ -41,6 +41,219 @@
 
 ---
 
+## [2026-09-09] Session 48 — Phase 8 (F) close-out: owner-machine visual recheck + cart-reset report (no code change needed)
+
+**Goal:** Close Session 47's visual-verification gap (BUG-24 fix, Alt+H
+hold/resume, Udhaar path through the checkout modal — all blocked last
+session by this sandbox's Electron GPU crash), then investigate a
+cart-not-resetting-after-sale report.
+
+**Done:**
+
+- Before touching any code, per the session's own required protocol:
+  ran `npm run verify` (434/434 after the routine BUG-7 ABI fix — same
+  as every prior session, not a new issue), then attempted to launch
+  the app in this sandbox four different ways (manual `electron.exe`
+  spawn with `--remote-debugging-port`, with `--disable-gpu`, with
+  `ELECTRON_DISABLE_GPU=1`, and Playwright's own `_electron.launch`
+  with `--disable-gpu`). All four failed identically to Session 47's
+  end-of-session crash (`crashpad_client_win.cc: not connected`, no
+  window ever reachable) — confirmed this is a standing sandbox
+  limitation, not something that clears on a fresh shell. Stopped and
+  reported per instruction, without touching any code, exactly as
+  directed.
+- Owner then ran the same three checks (BUG-24 fix, hold/resume,
+  Udhaar-through-modal) on their own machine and confirmed all three
+  pass, with screenshots — see PROJECT.md's Session 47 Update
+  (amended, not the immutable Session 47 log entry above) and the
+  BUG-24 entry, both now marked closed.
+- Investigated a report that the cart doesn't reset after a sale
+  completes and the receipt prints. Read `finishSuccess()` in
+  `useSaleFlow.ts` end to end: it already clears the cart, the selected
+  customer, payment mode, and discount synchronously on every success
+  path (direct confirm and the "Continue past warning gate" path), and
+  `useReceiptPrinting.ts`'s print actions touch nothing cart-related.
+  Found no bug in the code as it stands. Asked the owner for the exact
+  repro rather than guess and risk touching already-correct reset
+  logic; owner confirmed it is **now working** — the report did not
+  reproduce, no fix was needed or made.
+
+**Verified:**
+
+- `npm run verify` 434/434 (this sandbox's standard, confirmed at
+  session start).
+- Owner-machine screenshots: cart-empty state (no overlap with the
+  Customer strip), a queue chip after Alt+H with correct customer/item-
+  count/total and a working Resume, and the full add-to-cart → F10 →
+  checkout-modal flow (ORDER ITEMS, Total Rs 9,000 / Discount -Rs 450 /
+  Tax Rs 0 / Subtotal Rs 8,550, Cash/Udhaar buttons, autofocused amount
+  input, Confirm sale) all matching the built spec.
+
+**Not done / deferred:**
+
+- Items screen redesign — owner explicitly wants this in a new session,
+  not appended here.
+
+**Bugs found:** none (BUG-24 closed; cart-reset report did not
+reproduce)
+
+**Decisions taken:** none
+
+**Blocked on:** this sandbox's Electron GUI launch remains broken for
+any future in-sandbox visual check — the owner will keep doing that
+step on their own machine until/unless this environment issue is
+otherwise resolved.
+
+**Next session should:** start the Items screen redesign fresh, per the
+owner's own instruction — a new phase/brief, not a continuation of
+Phase 8 (F).
+
+**Checklist:**
+
+- [x] All verification checks passed (434/434; visual check completed
+      on the owner's machine, not in-sandbox)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none this session)
+- [x] Test suite passing (434/434)
+
+---
+
+## [2026-09-09] Session 47 — Phase 8 (F): POS layout v2 — cart to right panel, checkout modal (P1–P7, COMPLETE with a re-verification gap)
+
+**Goal:** Renderer-only redesign of the sale screen: 57/43 panel split,
+product-card-grid left panel restyle, cart moved to the right panel with
+a new footer (customer → discount → calc → button), and a new pre-submit
+checkout modal (order summary, payment method, amount received, confirm)
+replacing the previously-inline payment UI.
+
+**Done:**
+
+- Pre-check found the brief's assumed file set didn't match live code:
+  `ItemResultRow.tsx`/`HeldSalesPopover.tsx`/`SaleSuccessCard.tsx` were
+  already superseded by `ItemProductCard.tsx`/`QueueStrip.tsx`/
+  `SaleSuccessModal.tsx` in Sessions 42/46; the held-sale queue was
+  already out of the topbar. Flagged per CLAUDE.md rule 5 before writing
+  any plan section — owner made three explicit calls before approving
+  the plan: move cart left→right panel (reversing Session 46's own
+  decision), build the new checkout modal, and let F10 open it too
+  (requiring an approved edit to the one file the brief marked
+  "DO NOT touch" — `useSaleFlow.ts`).
+- P1: no file splits needed — every `sales/` file already under the
+  300-line cap.
+- P2: `SalesTopbar.tsx` restyled (48px, tokenized colors) and moved to
+  sit above the left card only, not spanning the full page; search
+  placeholder/filter-tab colors updated; `ItemProductCard.tsx` icon
+  tile 60px→44px, padding tightened to match spec; `QueueStrip.tsx`
+  gained a header row (pause icon + "Held sales" label, "Alt+H Hold"
+  button) and square-ish (80px) chips with a "Resume →" link.
+- P3: `CartTable`/`CartLineRow` moved into the right panel (`SalePage.tsx`
+  restructure); qty steppers resized 16px→18px; `CartTable.tsx` gained a
+  `showSubtotal` prop (default `true`, so `PurchasePage` is unaffected)
+  since the new calculation block would otherwise duplicate the number.
+- P4: `CheckoutPanel.tsx` stripped down to discount dropdowns + calc
+  block (Total/Discount/Tax placeholder/Subtotal) + a button that now
+  opens the modal instead of calling checkout directly — payment
+  mode/amount/change-due moved out.
+- P5: new `CheckoutModal.tsx`, split into `CheckoutOrderSummary.tsx` and
+  `CheckoutPaymentMethod.tsx` after the first pass landed at 326 lines
+  (over cap) — done before any verification ran, per CLAUDE.md's
+  file-cap rule. No new npm dependency for icons (Tabler would have
+  needed one) — inline SVGs matching the existing hand-authored
+  convention, same reasoning as the A-4 session. No new raw hex colors
+  either — every value in the brief's pixel spec mapped onto the
+  nearest existing token instead of touching `colors.ts`/
+  `tailwind.config.js` (neither on the allowed-files list).
+- P6: `SalePage.tsx` wired the new `checkoutModalOpen` state; F10 and
+  Complete-sale both open the modal; Confirm-inside-modal calls the
+  unchanged `flow.handleCheckout()`. `useSaleFlow.ts` gained one
+  optional param, `onRequestCheckout`, threaded mechanically through
+  `useSaleKeyboardShortcuts.ts` — no other logic in either file
+  changed (confirmed by reading both before and after).
+- Autofocus addition (per user instruction mid-session, before P5's
+  code was written): `CheckoutModal.tsx`'s `useEffect` keyed on
+  `[open, paymentMode]` focuses the amount input in cash mode, the
+  Confirm button in credit mode — same ref+useEffect pattern already
+  used elsewhere (`ItemSearchPanel.tsx`'s pending-qty autofocus).
+- **One real bug found via real-running-window verification, root-caused
+  via `getBoundingClientRect()` (not eyeballed), and fixed same
+  session — BUG-24 (see PROJECT.md)**: the cart-empty placeholder
+  overlapped the "Customer" label at the app's actual 800×600 default
+  window, since the new right-panel footer left it only ~92px against
+  its own ~144px content height with nothing clipping the overflow.
+  Fixed with `overflow-hidden` + reduced padding/icon size.
+
+**Verified:**
+
+- `npm run verify` 434/434 after every step (baseline was already
+  434/434, not 428/428 as the brief's own stale note said).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` both clean after every step.
+- Real running-window pass #1 (session-only `playwright-core` over CDP,
+  same precedent as Sessions 42–46): card grid loaded, "comp" filter
+  worked, inline qty row opened, `2`+Enter added Compressor×2 = Rs
+  12,000 to the cart, right-panel order confirmed top-to-bottom exactly
+  as Cart → Customer → Discount → Total/Tax/Subtotal → Complete-sale;
+  a 5% discount preset produced Rs 600 off / Rs 11,400 subtotal
+  (hand-calc match); F10 opened the modal with the order summary
+  showing the real line and the same calc numbers as the footer;
+  entering an amount above the subtotal produced an exact Rs 8,000 (and
+  separately Rs 8,600) change-due bar (hand-calc match both times);
+  Confirm sale closed the modal and correctly handed off to the
+  pre-existing stock-below-zero warning gate, observed layering
+  correctly over the closed modal (unchanged behavior).
+- After fixing BUG-24, Electron's GUI process stopped launching in this
+  sandbox for the rest of the session — every relaunch crashed silently
+  at startup (`crashpad_client_win.cc: not connected`, no further JS
+  log line), regardless of `--disable-gpu`, a fresh `--user-data-dir`,
+  or a cleared `GPUCache`. Diagnosed rather than given up on: isolated
+  `migrate()` and `seed()` — the two functions whose log lines bracket
+  the crash point — both ran to completion with correct results when
+  invoked directly under Electron's own Node runtime via `tsx`,
+  proving the crash is in Electron's window/GPU-process startup itself,
+  not in this session's code, the better-sqlite3 rebuild, or a
+  regression from the fix (the successful pass above happened after
+  most of this session's edits were already in place).
+
+**Not done / deferred:**
+
+- The BUG-24 fix, Alt+H hold/resume, the "New sale" success-modal reset,
+  and the credit/Udhaar path through the modal were **not re-confirmed
+  in a running window** — only reasoned through against the DOM
+  measurements and the automated suite. Next session should relaunch
+  once (fresh shell if possible) and re-run the click-through before
+  treating Phase 8 (F) as fully closed.
+
+**Bugs found:** BUG-24 (see PROJECT.md) — fixed, re-verification pending
+
+**Decisions taken:** none new (ADR) — three explicit owner calls this
+session are documented in PROJECT.md's Session 47 Update, not separate
+ADRs.
+
+**Blocked on:** nothing for the code itself; the one open item is the
+re-verification gap above.
+
+**Next session should:** relaunch the app once in a clean shell, redo
+the P7 click-through (especially the cart-empty state, Alt+H hold/
+resume, and the credit path through the checkout modal), and only then
+close this phase's verification checkbox.
+
+**Checklist:**
+
+- [x] All verification checks passed (automated suite; running-window
+      pass was partial — see above)
+- [x] No unresolved bugs introduced by this phase (BUG-24 found and
+      fixed same session)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (434/434)
+
+---
+
 ## [2026-09-09] Session 46 — Phase 8 (E): POS card grid, top-selling items, queue strip (E-1–E-5, COMPLETE)
 
 **Goal:** Two-part session — E-1/E-2/E-3 add `stockOnHandMilli` to
