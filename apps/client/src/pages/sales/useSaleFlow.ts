@@ -76,7 +76,8 @@ export interface SaleFlow {
   readonly handleCancelAfterWarning: (saleId: string) => Promise<void>;
 }
 
-export function useSaleFlow(): SaleFlow {
+/** onRequestCheckout: when supplied, F10 opens the checkout modal instead of submitting directly — threaded through unchanged to useSaleKeyboardShortcuts. */
+export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
   const cartFlow = useCart();
   const [step, setStep] = useState<Step>('search-item');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(null);
@@ -234,6 +235,7 @@ export function useSaleFlow(): SaleFlow {
     confirmedSale,
     setConfirmedSale,
     handleCheckout,
+    onRequestCheckout,
     selectedCustomer,
     paymentMode,
     amountPaidRupees,

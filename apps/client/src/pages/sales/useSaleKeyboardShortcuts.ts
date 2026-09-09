@@ -17,6 +17,14 @@ export function useSaleKeyboardShortcuts(params: {
   readonly confirmedSale: ConfirmedSale | null;
   readonly setConfirmedSale: (sale: ConfirmedSale | null) => void;
   readonly handleCheckout: () => Promise<void>;
+  /**
+   * When supplied, F10 calls this instead of submitting the sale directly
+   * (renderer-only checkout-modal redesign) — the modal's own Confirm
+   * button is what actually calls handleCheckout. Falls back to the prior
+   * direct-submit behavior when omitted, so no other caller of this hook
+   * breaks.
+   */
+  readonly onRequestCheckout?: (() => void) | undefined;
   readonly selectedCustomer: CustomerDto | null;
   readonly paymentMode: PaymentMode;
   readonly amountPaidRupees: string;
@@ -28,6 +36,7 @@ export function useSaleKeyboardShortcuts(params: {
     confirmedSale,
     setConfirmedSale,
     handleCheckout,
+    onRequestCheckout,
     selectedCustomer,
     paymentMode,
     amountPaidRupees,
@@ -55,14 +64,27 @@ export function useSaleKeyboardShortcuts(params: {
         confirmedSale === null
       ) {
         event.preventDefault();
-        void handleCheckout();
+        if (onRequestCheckout) {
+          onRequestCheckout();
+        } else {
+          void handleCheckout();
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [cart, step, confirmedSale, selectedCustomer, paymentMode, amountPaidRupees]);
+  }, [
+    cart,
+    step,
+    confirmedSale,
+    selectedCustomer,
+    paymentMode,
+    amountPaidRupees,
+    onRequestCheckout,
+    handleCheckout,
+  ]);
 
   // C/U payment-mode shortcuts — work from anywhere on screen, except while
   // a text input/textarea has focus (so typing a customer name or a

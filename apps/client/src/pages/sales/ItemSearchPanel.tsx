@@ -126,7 +126,7 @@ export function ItemSearchPanel({
       autoFocus
       inputTone="accent"
       resultsLayout="grid"
-      placeholder="Search items (Enter on empty to confirm line)"
+      placeholder="Search items — name or code"
       search={searchItems}
       initialResults={initialResults}
       getKey={(item) => item.id}
@@ -143,10 +143,10 @@ export function ItemSearchPanel({
               onClick={() => {
                 setFilterTab(tab.key);
               }}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
                 filterTab === tab.key
-                  ? 'bg-pos-accent text-white'
-                  : 'bg-surface-input text-ink-muted hover:text-ink'
+                  ? 'border-pos-accent-border bg-pos-accent-subtle text-pos-accent'
+                  : 'border-transparent bg-surface-input text-ink-muted hover:text-ink'
               }`}
             >
               {tab.label}

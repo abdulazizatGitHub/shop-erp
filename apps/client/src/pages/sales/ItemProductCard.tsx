@@ -79,12 +79,12 @@ export function ItemProductCard({
 
   return (
     <div
-      className={`flex h-full flex-col gap-1.5 rounded-xl border bg-surface p-3 shadow-[0_1px_3px_rgba(0,0,0,.06)] transition-colors hover:border-pos-accent-border hover:bg-pos-accent-subtle ${
+      className={`flex h-full flex-col gap-1.5 rounded-xl border bg-surface px-[7px] py-[9px] transition-colors hover:border-pos-accent-border hover:bg-pos-accent-subtle ${
         selected ? 'border-[1.5px] border-pos-accent bg-pos-accent-subtle' : 'border-line'
       }`}
       title={item.nameEn}
     >
-      <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center self-center rounded-lg bg-surface-input">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-surface-input">
         {isRepair ? <WrenchIcon /> : <PackageIcon />}
       </div>
       <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-ink">{item.nameEn}</p>

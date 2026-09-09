@@ -57,9 +57,9 @@ export function SalesTopbar({
   }, []);
 
   return (
-    <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-white/60 bg-white/80 px-4 backdrop-blur-[12px] backdrop-saturate-[1.8]">
+    <div className="flex h-12 shrink-0 items-center justify-between rounded-2xl border border-line bg-surface px-4">
       <div className="flex shrink-0 items-center gap-3">
-        <span className="whitespace-nowrap text-[15px] font-bold text-ink">Counter sale</span>
+        <span className="whitespace-nowrap text-[14px] font-semibold text-ink">Counter sale</span>
         <span className="text-line" aria-hidden="true">
           |
         </span>
@@ -99,7 +99,7 @@ export function SalesTopbar({
           |
         </span>
         <span
-          className="whitespace-nowrap text-[13px] font-semibold text-ink-muted"
+          className="whitespace-nowrap text-[12px] text-ink-faint"
           aria-label="Current date and time"
         >
           {formatDate(now)}

@@ -79,6 +79,13 @@ export interface CartTableProps {
    * double border.
    */
   readonly chrome?: 'card' | 'flat';
+  /**
+   * Default true: PurchasePage still wants the built-in Subtotal footer.
+   * The sale screen's right-panel redesign passes false — its own
+   * calculation block (Total/Discount/Tax/Subtotal) below covers it, and
+   * showing both would duplicate the number.
+   */
+  readonly showSubtotal?: boolean;
 }
 
 export function CartTable({
@@ -89,12 +96,13 @@ export function CartTable({
   onClear,
   onQuantityChange,
   chrome = 'card',
+  showSubtotal = true,
 }: CartTableProps): React.JSX.Element {
   return (
     <div
-      className={`flex flex-1 flex-col p-3 ${chrome === 'card' ? 'rounded-lg border border-line bg-surface' : ''}`}
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden ${chrome === 'card' ? 'rounded-lg border border-line bg-surface p-3' : 'p-4'}`}
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex shrink-0 items-center gap-2">
         <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
           Cart
         </span>
@@ -113,26 +121,26 @@ export function CartTable({
       </div>
 
       {cart.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-1 py-8 text-center">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden py-2 text-center">
           <svg
             viewBox="0 0 24 24"
-            width="28"
-            height="28"
+            width="24"
+            height="24"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
-            className="mb-1 text-ink-faint"
+            className="text-ink-faint"
           >
             <path d="M3 4h2l2 10h10l2-8H6" />
             <circle cx="9" cy="20" r="1" />
             <circle cx="17" cy="20" r="1" />
           </svg>
           <p className="text-sm font-medium text-ink-muted">Cart is empty</p>
-          <p className="text-xs text-ink-faint">Search an item and press Enter to add</p>
+          <p className="text-xs text-ink-faint">Select an item from the grid</p>
         </div>
       ) : (
         <>
-          <div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {cart.map((line, index) => (
               <CartLineRow
                 key={`${line.itemId}-${String(index)}`}
@@ -151,10 +159,12 @@ export function CartTable({
               />
             ))}
           </div>
-          <div className="mt-3 flex items-center justify-end gap-3 border-t border-line pt-3">
-            <span className="text-lg font-semibold text-ink">Subtotal</span>
-            <MoneyDisplay paisaValue={subtotalPaisa} size="xl" />
-          </div>
+          {showSubtotal && (
+            <div className="mt-3 flex shrink-0 items-center justify-end gap-3 border-t border-line pt-3">
+              <span className="text-lg font-semibold text-ink">Subtotal</span>
+              <MoneyDisplay paisaValue={subtotalPaisa} size="xl" />
+            </div>
+          )}
         </>
       )}
     </div>

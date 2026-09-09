@@ -69,7 +69,7 @@ export function CartLineRow({
   const atMinimum = line.quantityMilli <= minStepMilli;
 
   return (
-    <div className="flex items-center gap-2 border-b border-line px-1 py-2 last:border-b-0">
+    <div className="flex items-center gap-2 border-b border-surface-input px-1 py-2 last:border-b-0">
       <span
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold ${
           pill ? pill.className : 'bg-surface-input text-ink-faint'
@@ -90,7 +90,7 @@ export function CartLineRow({
               onClick={() => {
                 onQuantityChange(-1);
               }}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-danger hover:text-danger disabled:pointer-events-none disabled:opacity-40"
+              className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-danger hover:text-danger disabled:pointer-events-none disabled:opacity-40"
             >
               <MinusIcon />
             </button>
@@ -105,7 +105,7 @@ export function CartLineRow({
               onClick={() => {
                 onQuantityChange(1);
               }}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-brand hover:text-brand"
+              className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-line text-ink-faint hover:border-brand hover:text-brand"
             >
               <PlusIcon />
             </button>
