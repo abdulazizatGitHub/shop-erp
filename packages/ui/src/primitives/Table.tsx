@@ -23,8 +23,23 @@ export function TableBody({ children }: { readonly children: ReactNode }): React
   return <tbody className="divide-y divide-line">{children}</tbody>;
 }
 
-export function TableRow({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  return <tr className="even:bg-surface-sunken hover:bg-brand-subtle">{children}</tr>;
+export interface TableRowProps {
+  readonly children: ReactNode;
+  /** Even-row shading. Defaults to true — every existing caller keeps its current look. */
+  readonly zebra?: boolean;
+  /** Row hover tint. 'accent' (default) matches every existing caller; 'neutral' is for
+   *  screens that don't want a brand-colored hover (e.g. a plain management table). */
+  readonly hover?: 'accent' | 'neutral';
+}
+
+export function TableRow({
+  children,
+  zebra = true,
+  hover = 'accent',
+}: TableRowProps): React.JSX.Element {
+  const zebraClass = zebra ? 'even:bg-surface-sunken' : '';
+  const hoverClass = hover === 'accent' ? 'hover:bg-brand-subtle' : 'hover:bg-surface-page';
+  return <tr className={`${zebraClass} ${hoverClass}`}>{children}</tr>;
 }
 
 export function TableHeaderCell({

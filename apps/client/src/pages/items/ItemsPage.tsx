@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Package, Search } from 'lucide-react';
 import type { ItemDto, ItemLookups } from '@shop/contracts';
 import {
   Alert,
   Button,
-  Card,
   EmptyState,
   MoneyDisplay,
   PageHeader,
@@ -15,6 +15,8 @@ import {
   TableRow,
   TextInput,
 } from '@shop/ui';
+import { BusinessUnitPill } from '../../components/shared/BusinessUnitPill.js';
+import { resolveStockBadge } from '../../components/shared/StockBadge.js';
 import { ipc } from '../../lib/ipc.js';
 import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
@@ -57,12 +59,10 @@ export function ItemsPage(): React.JSX.Element {
     );
   }, [items, searchQuery]);
 
-  const businessUnitName = (id: string): string =>
-    lookups?.businessUnits.find((bu) => bu.id === id)?.name ?? id;
   const uomName = (id: string): string => lookups?.uoms.find((u) => u.id === id)?.name ?? id;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6 bg-surface-page">
       <PageHeader
         title="Items"
         actions={
@@ -90,10 +90,15 @@ export function ItemsPage(): React.JSX.Element {
       {error && <Alert variant="danger">{error}</Alert>}
       {message && <Alert variant="success">{message}</Alert>}
 
-      <Card title="Item catalogue">
+      {/* I-1: plain div, not the shared Card primitive — Card has no className
+          override and is used by 11 other screens, so restyling it here would
+          have changed their look too. See PROJECT.md §2.5. */}
+      <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+        <h2 className="mb-3 text-lg font-semibold text-ink">Item catalogue</h2>
         <TextInput
           variant="search"
-          placeholder="Search items by name or code"
+          icon={<Search size={16} strokeWidth={1.5} />}
+          placeholder="Search by name or code…"
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
@@ -101,48 +106,78 @@ export function ItemsPage(): React.JSX.Element {
         />
         <div className="mt-4">
           {items.length === 0 ? (
-            <EmptyState
-              message="No items yet."
-              hint='Click "Import Items" above, or "Add Item" to create one.'
-            />
+            <div className="flex items-center justify-center py-16">
+              <EmptyState
+                icon={<Package size={40} strokeWidth={1.5} />}
+                message="No items yet"
+                hint="Add your first item or import from a CSV file."
+              />
+            </div>
           ) : filteredItems.length === 0 ? (
             <EmptyState message={`No items match "${searchQuery}".`} />
           ) : (
             <Table>
               <TableHead>
-                <TableRow>
-                  <TableHeaderCell>Code</TableHeaderCell>
-                  <TableHeaderCell>Name</TableHeaderCell>
-                  <TableHeaderCell>Business Unit</TableHeaderCell>
-                  <TableHeaderCell>Stock UoM</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Retail Price</TableHeaderCell>
-                  <TableHeaderCell>Alt Unit</TableHeaderCell>
+                <TableRow zebra={false} hover="neutral">
+                  <TableHeaderCell className="tracking-wide text-ink-faint">Code</TableHeaderCell>
+                  <TableHeaderCell className="tracking-wide text-ink-faint">Name</TableHeaderCell>
+                  <TableHeaderCell className="tracking-wide text-ink-faint">
+                    Business Unit
+                  </TableHeaderCell>
+                  <TableHeaderCell className="tracking-wide text-ink-faint">
+                    Stock UoM
+                  </TableHeaderCell>
+                  <TableHeaderCell className="tracking-wide text-ink-faint">Stock</TableHeaderCell>
+                  <TableHeaderCell className="text-right tracking-wide text-ink-faint">
+                    Retail Price
+                  </TableHeaderCell>
+                  <TableHeaderCell className="tracking-wide text-ink-faint">
+                    Alt Unit
+                  </TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.itemCode}</TableCell>
-                    <TableCell>{item.nameEn}</TableCell>
-                    <TableCell>
-                      {item.businessUnitId ? businessUnitName(item.businessUnitId) : '—'}
-                    </TableCell>
-                    <TableCell>{uomName(item.stockUomId)}</TableCell>
-                    <TableCell className="text-right">
-                      {item.retailPricePaisa !== null ? (
-                        <MoneyDisplay paisaValue={item.retailPricePaisa} />
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell>{item.altUomId ? uomName(item.altUomId) : '—'}</TableCell>
-                  </TableRow>
-                ))}
+                {filteredItems.map((item) => {
+                  const stockBadge = resolveStockBadge(item.stockOnHandMilli, item.trackStock);
+                  return (
+                    <TableRow key={item.id} zebra={false} hover="neutral">
+                      <TableCell className="py-3">
+                        <span className="inline-flex items-center rounded border border-line bg-surface-page px-2 py-0.5 font-mono text-xs text-ink-faint">
+                          {item.itemCode}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-3">{item.nameEn}</TableCell>
+                      <TableCell className="py-3">
+                        <BusinessUnitPill businessUnitId={item.businessUnitId} lookups={lookups} />
+                      </TableCell>
+                      <TableCell className="py-3">{uomName(item.stockUomId)}</TableCell>
+                      <TableCell className="py-3">
+                        {stockBadge ? (
+                          <span className={`text-sm font-medium ${stockBadge.className}`}>
+                            {stockBadge.label}
+                          </span>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 text-right">
+                        {item.retailPricePaisa !== null ? (
+                          <MoneyDisplay paisaValue={item.retailPricePaisa} />
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        {item.altUomId ? uomName(item.altUomId) : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </div>
-      </Card>
+      </div>
 
       <AddItemModal
         open={addItemOpen}

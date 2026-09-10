@@ -1,17 +1,10 @@
 import type { ItemDto, ItemLookups } from '@shop/contracts';
 import { MoneyDisplay } from '@shop/ui';
-
-/** Same Parts/Repair color convention as CartLineRow.tsx — resolved client-side, no new IPC. */
-function resolveUnitPill(
-  item: ItemDto,
-  lookups: ItemLookups | null,
-): { letter: string; className: string } | null {
-  const unit = lookups?.businessUnits.find((u) => u.id === item.businessUnitId);
-  if (!unit) return null;
-  if (unit.code === 'PARTS') return { letter: 'P', className: 'bg-brand-subtle text-brand' };
-  if (unit.code === 'REPAIR') return { letter: 'R', className: 'bg-warning-subtle text-warning' };
-  return null;
-}
+import {
+  BusinessUnitPill,
+  resolveBusinessUnitPill,
+} from '../../components/shared/BusinessUnitPill.js';
+import { resolveStockBadge } from '../../components/shared/StockBadge.js';
 
 function PackageIcon(): React.JSX.Element {
   return (
@@ -47,19 +40,6 @@ function WrenchIcon(): React.JSX.Element {
   );
 }
 
-/** Stock badge thresholds — Math.floor to whole units, no decimal display. */
-function stockBadge(
-  stockOnHandMilli: number | null,
-  trackStock: boolean,
-): { label: string; className: string } | null {
-  if (!trackStock || stockOnHandMilli === null) return null;
-  const units = Math.floor(stockOnHandMilli / 1000);
-  if (units <= 0) return { label: 'Out of stock', className: 'text-danger' };
-  if (stockOnHandMilli <= 5000)
-    return { label: `Low: ${String(units)}`, className: 'text-warning' };
-  return { label: `${String(units)} in stock`, className: 'text-success' };
-}
-
 export interface ItemProductCardProps {
   readonly item: ItemDto;
   readonly lookups: ItemLookups | null;
@@ -73,8 +53,8 @@ export function ItemProductCard({
   lookups,
   selected,
 }: ItemProductCardProps): React.JSX.Element {
-  const pill = resolveUnitPill(item, lookups);
-  const badge = stockBadge(item.stockOnHandMilli, item.trackStock);
+  const pill = resolveBusinessUnitPill(item.businessUnitId, lookups);
+  const badge = resolveStockBadge(item.stockOnHandMilli, item.trackStock);
   const isRepair = pill?.letter === 'R';
 
   return (
@@ -96,13 +76,7 @@ export function ItemProductCard({
         ) : (
           <span className="text-xs text-ink-faint">—</span>
         )}
-        {pill && (
-          <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase ${pill.className}`}
-          >
-            {pill.letter}
-          </span>
-        )}
+        <BusinessUnitPill businessUnitId={item.businessUnitId} lookups={lookups} />
       </div>
     </div>
   );

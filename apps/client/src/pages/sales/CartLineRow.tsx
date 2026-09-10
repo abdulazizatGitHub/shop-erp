@@ -1,19 +1,8 @@
 import type { ItemLookups } from '@shop/contracts';
 import { MoneyDisplay, QuantityDisplay } from '@shop/ui';
+import { resolveBusinessUnitPill } from '../../components/shared/BusinessUnitPill.js';
 import type { CartLine } from './CartTable.js';
 import { lineTotalPaisa } from './CartTable.js';
-
-/** Same Parts/Repair color convention as ItemProductCard.tsx — resolved client-side, no new IPC. */
-function resolveTypePill(
-  businessUnitId: string | null,
-  lookups: ItemLookups | null,
-): { letter: string; className: string } | null {
-  const unit = lookups?.businessUnits.find((u) => u.id === businessUnitId);
-  if (!unit) return null;
-  if (unit.code === 'PARTS') return { letter: 'P', className: 'bg-brand-subtle text-brand' };
-  if (unit.code === 'REPAIR') return { letter: 'R', className: 'bg-warning-subtle text-warning' };
-  return null;
-}
 
 function MinusIcon(): React.JSX.Element {
   return (
@@ -64,7 +53,7 @@ export function CartLineRow({
   onQuantityChange,
 }: CartLineRowProps): React.JSX.Element {
   const totalPaisa = lineTotalPaisa(line);
-  const pill = resolveTypePill(line.businessUnitId ?? null, lookups);
+  const pill = resolveBusinessUnitPill(line.businessUnitId ?? null, lookups);
   const minStepMilli = line.saleToStockFactor ?? 1000;
   const atMinimum = line.quantityMilli <= minStepMilli;
 

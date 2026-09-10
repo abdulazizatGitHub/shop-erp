@@ -41,6 +41,130 @@
 
 ---
 
+## [2026-09-10] Session 49 — Items screen redesign (I-0 through I-13, COMPLETE)
+
+**Goal:** Redesign the Items screen (page view, Add Item modal both
+steps, Import Items modal both steps) to match the sale screen's
+design language, per an owner-approved brief. Renderer-only.
+
+**Done:**
+
+- I-0 — `AddItemModal.tsx` (311 lines, over the 280-line pre-split
+  gate) split into `AddItemModal.tsx` (182, shell), `AddItemStep1.tsx`
+  (116), `AddItemStep2.tsx` (110) — mechanical move, no logic change.
+- I-1 — page background `bg-surface-page`; content wrapped in a plain
+  `<div>` (rounded-2xl, dual shadow) instead of restyling the shared
+  `Card` primitive, which has no `className` override and is used by
+  11 other screens.
+- I-2 — item code rendered as a monospace chip `<span>`; `Badge`
+  primitive not used (no `className`, wrong shape — rounded-full pill
+  vs. the spec's rectangular chip).
+- I-3 — new `apps/client/src/components/shared/BusinessUnitPill.tsx`,
+  extracting the identical PARTS/REPAIR resolution logic duplicated in
+  `ItemProductCard.tsx`/`CartLineRow.tsx`. Found their JSX wrappers
+  differ (CartLineRow always reserves a fixed box; ItemProductCard
+  renders nothing on no-match) — stopped and asked before extracting;
+  resolved by exporting both a resolver function and a component
+  rather than blending the two behaviors.
+- I-4 — new Stock On Hand column using a new shared
+  `StockBadge.tsx` (same duplication-avoidance reasoning as I-3).
+  Found two brief/live-code mismatches before writing code: the real
+  badge is colored text, not a filled pill, and `QuantityDisplay`
+  hardcodes `text-ink` so it can't be recolored by a wrapper — flagged
+  and resolved by owner decision (match live `ItemProductCard` exactly).
+- I-5 — table header/cell/row styling, search icon. Found `TableRow`
+  hardcodes zebra striping + brand hover with no override (19 other
+  callers) and no search icon exists anywhere in the app (TextInput
+  can't take a className either) — both flagged before proceeding.
+  Owner approved additive `TableRow` props (`zebra`, `hover`) and an
+  additive `TextInput` `icon` prop. **Owner then explicitly overrode
+  this session's own "no new npm dependencies" rule** to install
+  `lucide-react`, after being told this reverses two prior sessions'
+  explicit rejections of the same ask (Tabler Icons) — see the
+  DEPENDENCY entry added to PROJECT.md mid-session, before I-7 started.
+- I-7 — new `ItemStepIndicator.tsx` (45 lines), wired into
+  `AddItemModal.tsx` with `size="wide"` (confirmed `max-w-4xl`, not
+  the brief's assumed `max-w-2xl` — noted as a docs/live-code
+  discrepancy in PROJECT.md, not a bug).
+- I-8 — Step 1 fields reflowed (two-column name grid, section divider
+  before item code). No logic change.
+- I-9 — Step 2 fields reflowed (two-column grid); Track stock replaced
+  with a CSS-only `peer`/`peer-checked:` toggle switch over the
+  unchanged `checked`/`onChange` binding (copied byte-for-byte).
+- I-10 — Import modal Step 1: two file-type cards + a "Before you
+  import" checklist, inside `ImportItemsModal.tsx`'s own `instructions`
+  slot. `ImportModal.tsx` (shared shell, 2 other callers) not edited —
+  confirmed via `git diff` after the subtask.
+- I-11 — Import modal Step 2: dashed-border upload-zone illustration
+  around the real Dry run/Commit buttons — purely visual per CF-10;
+  file selection stays 100% server-side. Both `onClick` handlers
+  copied byte-for-byte.
+- I-12 — empty state gets a `Package` icon via a new additive
+  `icon?: ReactNode` prop on `EmptyState` (`packages/ui/src/patterns/`,
+  not `primitives/` as the brief assumed). 18 files / 25 call sites
+  grepped, none pass `icon`, verified zero-impact before first real use.
+- I-13 — this entry; final audit below.
+
+**Deliberate scope drop:** I-6 (row-action three-dot menu) dropped by
+explicit owner decision before starting — `item:update` is a dead IPC
+channel constant with no handler/preload wiring (same class of finding
+as Session 46's BUG-23), so there was nothing to wire safely.
+
+**Verified:**
+
+- `npm run verify` — 434/434, confirmed after every one of the 13
+  subtasks, not just at the end.
+- `npm run build --workspace=@shop/client` — exit 0, confirmed after
+  every subtask.
+- File-cap audit (I-13): every touched file under 300 lines, largest
+  is `ImportItemsModal.tsx` at 262. Full `wc -l` list in PROJECT.md
+  §2.5.
+- Owner visually verified each subtask on their own machine as it
+  landed (sandbox Electron GUI remains broken per Session 48) —
+  confirmed working through I-9's Create-item end-to-end check and
+  I-10/I-11's Download/Dry-run/Commit-import checks before the next
+  subtask started, per the session's own gating instruction.
+
+**Not done / deferred:**
+
+- I-6 (row-action edit) — waiting on `item:update` IPC being built in
+  a future session.
+- PurchasePage's own redesign — still out of scope, unchanged, per
+  the pre-existing note in PROJECT.md §2.5.
+
+**Bugs found:** none new. One pre-existing dead-channel finding
+(`item:update`) reconfirmed, already logged as the same class as
+BUG-23 — not re-logged as a new bug number.
+
+**Decisions taken:** `lucide-react` added to `@shop/client` (owner
+override of the session's own no-new-deps rule); additive `zebra`/
+`hover` props on `TableRow`; additive `icon` prop on `TextInput` and
+`EmptyState`. All logged in PROJECT.md, the dependency one immediately
+mid-session per explicit owner instruction, not deferred to close-out.
+
+**Blocked on:** nothing — I-6 is deferred, not blocked, pending a
+future `item:update` IPC session.
+
+**Next session should:** if the owner wants row-level edit actions on
+the Items table, build `item:update` (handler + preload exposure) as
+its own backend task first, then revisit I-6 as a small follow-up
+wiring the three-dot menu to it.
+
+**Checklist:**
+
+- [x] All verification checks passed (434/434 + clean build after
+      every subtask, pasted each time)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (§2.5, plus the DEPENDENCY
+      entry added mid-session before I-7)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met (I-6 is a clean, well-scoped
+      follow-up once its IPC gap is closed)
+- [x] Any new bugs documented in PROJECT.md (none new this session)
+- [x] Test suite passing (434/434)
+
+---
+
 ## [2026-09-09] Session 48 — Phase 8 (F) close-out: owner-machine visual recheck + cart-reset report (no code change needed)
 
 **Goal:** Close Session 47's visual-verification gap (BUG-24 fix, Alt+H

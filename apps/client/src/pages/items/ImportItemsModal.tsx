@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CheckCircle, Download, FileText, UploadCloud } from 'lucide-react';
 import { Alert, Button, ImportModal } from '@shop/ui';
 import { downloadCsv } from '../../lib/downloadCsv.js';
 import { ipc } from '../../lib/ipc.js';
@@ -130,76 +131,133 @@ export function ImportItemsModal({
       title="Import Items"
       onClose={onClose}
       instructions={
-        <>
-          <p className="text-sm text-ink">
-            Column headers must match exactly — download a sample below to see the expected format.
-            Opening stock is optional and imported separately from the same CSV pair.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                downloadCsv('items-sample.csv', ITEM_SAMPLE_HEADERS, ITEM_SAMPLE_ROW);
-              }}
-            >
-              Download Items sample CSV
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                downloadCsv(
-                  'opening-stock-sample.csv',
-                  OPENING_STOCK_SAMPLE_HEADERS,
-                  OPENING_STOCK_SAMPLE_ROW,
-                );
-              }}
-            >
-              Download Opening Stock sample CSV
-            </Button>
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="mb-3 text-sm font-medium text-ink">Download sample files</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-page px-4 py-3">
+                <FileText size={20} strokeWidth={1.5} className="shrink-0 text-brand" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">Items CSV</p>
+                  <p className="text-xs text-ink-faint">Required — defines all item fields</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadCsv('items-sample.csv', ITEM_SAMPLE_HEADERS, ITEM_SAMPLE_ROW);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-page"
+                >
+                  <Download size={14} strokeWidth={1.5} />
+                  Download
+                </button>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-page px-4 py-3">
+                <FileText size={20} strokeWidth={1.5} className="shrink-0 text-brand" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">Opening Stock CSV</p>
+                  <p className="text-xs text-ink-faint">
+                    Optional — import initial stock quantities
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadCsv(
+                      'opening-stock-sample.csv',
+                      OPENING_STOCK_SAMPLE_HEADERS,
+                      OPENING_STOCK_SAMPLE_ROW,
+                    );
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-page"
+                >
+                  <Download size={14} strokeWidth={1.5} />
+                  Download
+                </button>
+              </div>
+            </div>
           </div>
-        </>
+
+          <div className="border-t border-line" />
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-ink">Before you import</p>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-start gap-2">
+                <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
+                <span className="text-xs text-ink-faint">
+                  Column headers must match exactly (case-sensitive)
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
+                <span className="text-xs text-ink-faint">
+                  Opening stock is optional and imported separately
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
+                <span className="text-xs text-ink-faint">
+                  Duplicate item codes will be skipped automatically
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       }
     >
-      {error && <Alert variant="danger">{error}</Alert>}
-      <p className="text-sm text-ink">
-        Dry run or Commit will open a file picker — choose the Items CSV first, and optionally
-        Ctrl/Cmd-select the Opening Stock CSV too.
-      </p>
-      <div className="flex gap-3">
-        <Button
-          variant="secondary"
-          disabled={importBusy}
-          onClick={() => {
-            runImport(false);
-          }}
-        >
-          Dry run (no changes saved)
-        </Button>
-        <Button
-          variant="primary"
-          disabled={importBusy}
-          onClick={() => {
-            runImport(true);
-          }}
-        >
-          Commit import
-        </Button>
-      </div>
-      {importResult && (
-        <div role="status" className="flex flex-col gap-1 text-sm text-ink">
-          <p>
-            Items: {importResult.itemsAccepted} accepted, {importResult.itemsRejected} rejected,{' '}
-            {importResult.itemsSkipped} skipped. Report: {importResult.itemsReportPath}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-brand/30 bg-surface-page px-6 py-10 text-center">
+          <UploadCloud size={40} strokeWidth={1.5} className="mb-3 text-brand/50" />
+          <p className="mb-1 text-sm font-medium text-ink">Select files to import</p>
+          <p className="mb-4 text-xs text-ink-faint">
+            Click Dry run or Commit import below to open the file picker. Select your Items CSV
+            first, then Ctrl/Cmd-click to also select the Opening Stock CSV.
           </p>
-          {importResult.openingStockReportPath !== null && (
-            <p>
-              Opening stock: {importResult.openingStockAccepted} accepted,{' '}
-              {importResult.openingStockRejected} rejected, {importResult.openingStockSkipped}{' '}
-              skipped. Report: {importResult.openingStockReportPath}
-            </p>
-          )}
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              disabled={importBusy}
+              onClick={() => {
+                runImport(false);
+              }}
+            >
+              Dry run
+            </Button>
+            <Button
+              variant="primary"
+              disabled={importBusy}
+              onClick={() => {
+                runImport(true);
+              }}
+            >
+              Commit import
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-ink-faint">
+            Dry run checks for errors without saving anything.
+          </p>
         </div>
-      )}
+
+        {error && <Alert variant="danger">{error}</Alert>}
+        {importResult && (
+          <Alert variant="success">
+            <div className="flex flex-col gap-1">
+              <p>
+                Items: {importResult.itemsAccepted} accepted, {importResult.itemsRejected} rejected,{' '}
+                {importResult.itemsSkipped} skipped. Report: {importResult.itemsReportPath}
+              </p>
+              {importResult.openingStockReportPath !== null && (
+                <p>
+                  Opening stock: {importResult.openingStockAccepted} accepted,{' '}
+                  {importResult.openingStockRejected} rejected, {importResult.openingStockSkipped}{' '}
+                  skipped. Report: {importResult.openingStockReportPath}
+                </p>
+              )}
+            </div>
+          </Alert>
+        )}
+      </div>
     </ImportModal>
   );
 }

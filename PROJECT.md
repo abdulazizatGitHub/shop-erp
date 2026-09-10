@@ -289,6 +289,86 @@ this setting.
 
 ## 2.5 UI Redesign State
 
+**Update, 2026-09-10 — Items screen redesign COMPLETE.** I-0 through
+I-13 done (I-6, row-action three-dot menu, dropped by explicit owner
+decision — `item:update` has no handler/preload wiring, a dead channel
+constant only, same class of finding as Session 46's BUG-23; deferred
+to whenever that IPC gets built). Page background now `surface-page`
+with a white rounded-2xl/dual-shadow card (the shared `Card` primitive
+was NOT restyled — no `className` override and used by 11 other
+screens, so Items uses a plain `<div>` instead). Item code rendered as
+a monospace chip (plain `<span>`, not the shared `Badge` primitive —
+`Badge` has no `className` and is a rounded-full pill shape, not the
+rectangular chip the spec wanted). Business Unit column now a P/R
+pill via a new shared `apps/client/src/components/shared/
+BusinessUnitPill.tsx` (extracted from near-identical logic in
+`ItemProductCard.tsx`/`CartLineRow.tsx` — the _resolution_ logic was
+identical but the two callers' JSX wrappers were not: `CartLineRow`
+always reserves a fixed-size box, `ItemProductCard` renders nothing on
+no-match — resolved by exporting a resolver function plus a component,
+per owner decision, not blended). New Stock On Hand column, same
+pattern (`StockBadge.tsx` shared resolver) — colored plain text, not a
+filled pill, since `QuantityDisplay` (packages/ui) hardcodes its own
+`text-ink` class and can't be recolored by a wrapper — a real
+constraint, not a style choice, confirmed by reading its source before
+building the column.
+`AddItemModal.tsx` (311 lines pre-session) was split before any visual
+work: `AddItemModal.tsx` (182, orchestrating shell) +
+`AddItemStep1.tsx` (116) + `AddItemStep2.tsx` (110), mechanical move,
+no logic change. New `ItemStepIndicator.tsx` (45 lines) — two-dot
+step progress, replacing the modal's plain "step N of 2" title text;
+`Modal.tsx`'s `size="wide"` maps to `max-w-4xl` (not `max-w-2xl` as
+the original brief assumed — noted here as a docs-vs-code discrepancy,
+not a bug, per CLAUDE.md rule 6). Step 1/Step 2 fields reflowed into
+two-column grids; Track stock is now a CSS-only toggle switch
+(`peer`/`peer-checked:` — Tailwind core variants, no config needed,
+confirmed explicitly before use) over the same unchanged
+`checked`/`onChange` binding. Import modal Step 1 redesigned into two
+file-type cards + a "Before you import" checklist (`ImportModal.tsx`,
+the shared two-page shell, was **not** edited — confirmed via `git
+diff` after every subtask; only `ImportItemsModal.tsx`'s own
+`instructions`/children slots changed). Import modal Step 2 gained a
+dashed-border upload-zone illustration — purely visual, per CF-10
+(`docs/phases/PHASE_4_5.md`): file selection stays 100% server-side
+(`dialog.showOpenDialog` inside the existing `ipc.importData.dryRun()`/
+`commit()`), the zone is a plain `<div>` around the real Dry
+run/Commit buttons, not a functional file input — both `onClick`
+handlers copied byte-for-byte, never retyped. Empty state (`items.length
+=== 0`) now shows a `Package` icon via a new additive `icon?: ReactNode`
+prop on the shared `EmptyState` (`packages/ui/src/patterns/
+EmptyState.tsx` — **not** `primitives/` as the brief assumed, another
+docs-vs-code correction) — 18 files / 25 existing call sites grepped,
+none pass `icon`, verified zero-impact via a full build+test pass
+before wiring the first real usage into `ItemsPage.tsx`.
+**Two shared `packages/ui` primitives gained purely-additive opt-in
+props this session, following the same pattern as prior sessions'
+`Button`/`CartTable` changes** — grepped every caller first, pasted
+the grep output, confirmed the default preserves prior behavior
+exactly: `TableRow` gained `zebra?: boolean` (default `true`) and
+`hover?: 'accent' | 'neutral'` (default `'accent'`) since it
+previously hardcoded zebra striping + brand-colored hover with zero
+override, used by 19 other pages, none of which pass either prop;
+`TextInput` gained `icon?: ReactNode` (default `undefined`) — its
+internal `SIZE_CLASSES` was split into separate `pl`/`pr` so an icon's
+`pl-9` override doesn't race a combined `px-*` utility of equal
+Tailwind specificity, verified against 24 existing callers, none pass
+`icon`.
+**Dependency deviation, owner-approved override of this session's own
+"no new npm dependencies" rule** — see the DEPENDENCY entry above (§3
+Phase status header) for `lucide-react`: no search icon existed
+anywhere in this codebase (sale screen included) before this session,
+and `TextInput` explicitly omits `className` from its props, so an
+inline-SVG icon had no way to reach the input; the owner explicitly
+chose the library after two prior sessions had rejected the same ask
+(Tabler Icons) for the same offline-app reasoning — flagged twice
+before proceeding.
+`npm run verify` 434/434 confirmed after every one of the 13 subtasks;
+`npm run build --workspace=@shop/client` clean after every subtask
+too. Sandbox Electron GUI launch remains broken in this environment
+(per Session 48) — visual verification for each subtask was handed to
+the owner with an explicit "what to click" instruction rather than
+attempted in-sandbox.
+
 CartTable.tsx (compact row style) is now shared between SalePage and
 PurchasePage. PurchasePage renders the new compact cart rows but has
 not been otherwise redesigned. This is intentional — the PurchasePage
@@ -854,6 +934,21 @@ so the placeholder actually fits the space this layout leaves it.
 Status: FIXED, Session 47 — **re-confirmed in a running window on the
 owner's own machine, Session 48**: cart-empty state renders cleanly
 with no overlap against the Customer strip below it. Closed.
+
+### DEPENDENCY: lucide-react added to @shop/client (I-5, Items redesign)
+
+Added: 2026-09-10 (Items screen redesign session)
+Reason: No search icon existed anywhere in the codebase. TextInput's
+icon prop required a ReactNode. Inline SVG approach was rejected by
+the owner in favour of the library.
+Rule broken: "No new npm dependencies" (CLAUDE.md session constraint).
+Decision was the owner's explicit override, not agent initiative.
+Impact: +6KB gzip. "use client" warnings in build (benign).
+Future sessions: lucide-react is now available in @shop/client.
+Use it for icons in client-side components only. Do NOT add it to
+packages/ui or apps/server. Do NOT add a second icon library.
+Prefer the already-installed lucide-react over hand-rolled SVGs
+for any new icon need in apps/client going forward.
 
 ## 3. Phase status
 

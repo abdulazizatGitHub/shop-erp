@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { ItemLookups } from '@shop/contracts';
 import { Money } from '@shop/shared';
-import { Alert, Button, Modal, Select, TextInput } from '@shop/ui';
+import { Alert, Modal } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { AddItemStep1 } from './AddItemStep1.js';
+import { AddItemStep2 } from './AddItemStep2.js';
+import { ItemStepIndicator } from './ItemStepIndicator.js';
 
-type ItemCodeMode = 'auto' | 'manual';
+const STEPS = [{ label: 'Identity' }, { label: 'Pricing' }];
 
-interface FormState {
+export type ItemCodeMode = 'auto' | 'manual';
+
+export interface FormState {
   itemCode: string;
   nameEn: string;
   nameUr: string;
@@ -47,6 +52,10 @@ export interface AddItemModalProps {
  * step 2 = pricing/units — the exact split the old two Cards already
  * used), plus an explicit Auto-generate / Enter manually toggle for the
  * item code instead of "blank means auto".
+ *
+ * I-0 (Items redesign session): orchestrating shell only — step JSX
+ * lives in AddItemStep1.tsx/AddItemStep2.tsx, extracted mechanically to
+ * clear the 280-line pre-split gate. No logic changes from that split.
  */
 export function AddItemModal({
   open,
@@ -141,169 +150,31 @@ export function AddItemModal({
   }
 
   return (
-    <Modal open={open} title={`Add item — step ${String(step)} of 2`} onClose={onClose}>
+    <Modal open={open} title="Add Item" size="wide" onClose={onClose}>
       <div className="flex flex-col gap-4">
+        <ItemStepIndicator currentStep={step} steps={STEPS} />
         {error && <Alert variant="danger">{error}</Alert>}
 
         {step === 1 ? (
-          <>
-            <TextInput
-              label="Name (English)"
-              autoFocus
-              required
-              value={form.nameEn}
-              onChange={(e) => {
-                setForm({ ...form, nameEn: e.target.value });
-              }}
-            />
-            <TextInput
-              label="Name (Urdu)"
-              value={form.nameUr}
-              onChange={(e) => {
-                setForm({ ...form, nameUr: e.target.value });
-              }}
-            />
-            <div>
-              <p className="mb-1 text-sm font-medium text-ink-muted">Item code</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setItemCodeMode('auto');
-                    setForm((f) => ({ ...f, itemCode: '' }));
-                  }}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    itemCodeMode === 'auto'
-                      ? 'border-brand bg-brand text-white'
-                      : 'border-line bg-surface text-ink hover:bg-surface-sunken'
-                  }`}
-                >
-                  Auto-generate
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setItemCodeMode('manual');
-                  }}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    itemCodeMode === 'manual'
-                      ? 'border-brand bg-brand text-white'
-                      : 'border-line bg-surface text-ink hover:bg-surface-sunken'
-                  }`}
-                >
-                  Enter manually
-                </button>
-              </div>
-              {itemCodeMode === 'manual' && (
-                <div className="mt-2">
-                  <TextInput
-                    label="Item code"
-                    required
-                    value={form.itemCode}
-                    onChange={(e) => {
-                      setForm({ ...form, itemCode: e.target.value });
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-            <Select
-              label="Business unit"
-              required
-              value={form.businessUnitId}
-              onChange={(e) => {
-                setForm({ ...form, businessUnitId: e.target.value });
-              }}
-            >
-              {lookups?.businessUnits.map((bu) => (
-                <option key={bu.id} value={bu.id}>
-                  {bu.name}
-                </option>
-              ))}
-            </Select>
-            <div className="flex justify-end gap-3">
-              <Button variant="secondary" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={goNext}>
-                Next
-              </Button>
-            </div>
-          </>
+          <AddItemStep1
+            lookups={lookups}
+            form={form}
+            setForm={setForm}
+            itemCodeMode={itemCodeMode}
+            setItemCodeMode={setItemCodeMode}
+            onCancel={onClose}
+            onNext={goNext}
+          />
         ) : (
-          <>
-            <Select
-              label="Stock UoM"
-              required
-              value={form.stockUomId}
-              onChange={(e) => {
-                setForm({ ...form, stockUomId: e.target.value });
-              }}
-            >
-              {lookups?.uoms.map((uom) => (
-                <option key={uom.id} value={uom.id}>
-                  {uom.name}
-                </option>
-              ))}
-            </Select>
-            <TextInput
-              label="Retail price (Rs)"
-              required
-              variant="number"
-              value={form.retailPriceRupees}
-              onChange={(e) => {
-                setForm({ ...form, retailPriceRupees: e.target.value });
-              }}
-            />
-            <Select
-              label="Alt selling unit (optional)"
-              value={form.altUomId}
-              onChange={(e) => {
-                setForm({ ...form, altUomId: e.target.value, altUomFactor: '' });
-              }}
-            >
-              <option value="">None — sells in stock unit only</option>
-              {lookups?.uoms.map((uom) => (
-                <option key={uom.id} value={uom.id}>
-                  {uom.name}
-                </option>
-              ))}
-            </Select>
-            {form.altUomId.length > 0 && (
-              <TextInput
-                label="Alt Factor (units per 1 alt unit)"
-                required
-                variant="number"
-                value={form.altUomFactor}
-                onChange={(e) => {
-                  setForm({ ...form, altUomFactor: e.target.value });
-                }}
-              />
-            )}
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={form.trackStock}
-                onChange={(e) => {
-                  setForm({ ...form, trackStock: e.target.checked });
-                }}
-              />
-              Track stock
-            </label>
-            <div className="flex justify-between gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setStep(1);
-                }}
-              >
-                Back
-              </Button>
-              <Button variant="primary" onClick={handleCreate}>
-                Create item
-              </Button>
-            </div>
-          </>
+          <AddItemStep2
+            lookups={lookups}
+            form={form}
+            setForm={setForm}
+            onBack={() => {
+              setStep(1);
+            }}
+            onCreate={handleCreate}
+          />
         )}
       </div>
     </Modal>

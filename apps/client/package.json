@@ -10,10 +10,11 @@
   },
   "dependencies": {
     "@shop/contracts": "*",
+    "@shop/i18n": "*",
     "@shop/shared": "*",
     "@shop/ui": "*",
-    "@shop/i18n": "*",
     "@tanstack/react-query": "^5.59.0",
+    "lucide-react": "^1.44.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",
