@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ToastProvider } from '@shop/ui';
 import { ItemsPage } from '../pages/items/ItemsPage.js';
 import JobsPage from '../pages/jobs/JobsPage.js';
 import TechnicianCustodyPage from '../pages/jobs/TechnicianCustodyPage.js';
@@ -35,23 +36,25 @@ export function App(): React.JSX.Element {
   }, []);
 
   return (
-    <div className="flex h-screen bg-surface-sunken">
-      <Sidebar activeTab={tab} onSelectTab={setTab} />
-      <main className="flex-1 overflow-y-auto p-6">
-        {tab === 'sales' && <SalePage />}
-        {tab === 'items' && <ItemsPage />}
-        {tab === 'suppliers' && <SuppliersPage />}
-        {tab === 'purchases' && <PurchasePage />}
-        {tab === 'jobs' && <JobsPage />}
-        {tab === 'technician-custody' && <TechnicianCustodyPage />}
-        {tab === 'reports' && <ReportsPage />}
-        {tab === 'customers' && <CustomersPage />}
-        {tab === 'settings' && <SettingsPage />}
-        {tab === 'staff' && <StaffPage />}
-        {tab === 'expenses' && <ExpensesPage />}
-        {tab === 'dashboard' && <DashboardPage />}
-        {tab === 'attendance' && <AttendancePage />}
-      </main>
-    </div>
+    <ToastProvider>
+      <div className="flex h-screen bg-surface-sunken">
+        <Sidebar activeTab={tab} onSelectTab={setTab} />
+        <main className="flex-1 overflow-y-auto p-6">
+          {tab === 'sales' && <SalePage />}
+          {tab === 'items' && <ItemsPage />}
+          {tab === 'suppliers' && <SuppliersPage />}
+          {tab === 'purchases' && <PurchasePage />}
+          {tab === 'jobs' && <JobsPage />}
+          {tab === 'technician-custody' && <TechnicianCustodyPage />}
+          {tab === 'reports' && <ReportsPage />}
+          {tab === 'customers' && <CustomersPage />}
+          {tab === 'settings' && <SettingsPage />}
+          {tab === 'staff' && <StaffPage />}
+          {tab === 'expenses' && <ExpensesPage />}
+          {tab === 'dashboard' && <DashboardPage />}
+          {tab === 'attendance' && <AttendancePage />}
+        </main>
+      </div>
+    </ToastProvider>
   );
 }

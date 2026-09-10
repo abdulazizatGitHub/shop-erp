@@ -41,6 +41,125 @@
 
 ---
 
+## [2026-09-10] Session 50 — Global toast notification system; Items migrated off inline alerts (T-0 through T-5, COMPLETE)
+
+**Goal:** Build a global toast notification system from scratch (React
+context + portal, no new npm dependency) and migrate the Items
+screen's inline `<Alert>` success/error strips to it. Every other
+screen keeps its existing inline pattern, migrated one at a time as
+each gets redesigned.
+
+**Done:**
+
+- T-0 — skipped; no touched file was at or above 280 lines.
+- T-1 — three new `packages/ui/src/primitives/` files:
+  `ToastContext.tsx` (26, context/types only), `ToastProvider.tsx`
+  (62, `showToast`/`dismiss`/`useToast`, portals to `document.body`),
+  `ToastContainer.tsx` (95, fixed bottom-right stack + the `Toast`
+  item with slide/fade enter and a 200ms-delayed slide/fade exit).
+  Barrel exports added. Found and fixed a real `exactOptionalPropertyTypes`
+  type error (`title: options.title` isn't assignable when the
+  property is optional-not-nullable) before this task could verify
+  clean. Added `react-dom` to `packages/ui`'s `peerDependencies` (it
+  was dev-only before; `ToastProvider` now imports `createPortal` at
+  runtime) — no new install.
+- **Mid-T-1 incident, not this session's own bug**: the owner's own
+  concurrent IDE session (editing 9 sale-screen files +
+  `tailwind.config.js` live) left `CheckoutModal.tsx` with two
+  unused-declaration typecheck errors, breaking `npm run verify` for
+  the whole repo. Per CLAUDE.md rule 5, stopped and reported instead
+  of touching/reverting any of those files; confirmed the 3 new toast
+  files were clean via an ephemeral, non-repo tsconfig (deleted
+  immediately after) rather than running the blocked full-repo check.
+  The owner's work landed as commit `d3586d3` shortly after;
+  `npm run verify` was green again before resuming T-2.
+- T-2 — `App.tsx` now wraps its whole existing return in
+  `<ToastProvider>` — its only change, no other restructuring.
+- T-3 — migrated `ItemsPage.tsx` (removed `error`/`message` state and
+  both `<Alert>`s; `loadItems()`'s catch, the lookups-load catch, and
+  `AddItemModal`'s `onCreated` now call `showToast`).
+  `AddItemModal.tsx`'s own in-modal validation `<Alert>` was left
+  untouched by explicit owner decision (in-modal errors belong next
+  to the form fields). `ImportItemsModal.tsx` was also migrated
+  (owner-approved) — with one real finding first: its `importResult`
+  `<Alert>` was never the only place the detailed per-row CSV errors
+  live (the result always carries a report-file path), so it was
+  removed entirely in favor of a toast; its `error` `<Alert>` (a
+  thrown exception, e.g. header mismatch) _is_ the only place that
+  text exists, so it was kept inline with a toast added alongside,
+  per the owner's explicit rule for exactly that case. Toast wording
+  for the import-result case is a flagged, not-yet-confirmed judgment
+  call — the owner's literal templates have no slot for
+  `itemsRejected` or the separate opening-stock counts.
+- T-4 — `ToastProvider.test.tsx`, 5 tests, matching the existing
+  `packages/ui/src/primitives/*.test.tsx` pattern exactly. One fix
+  mid-task: a raw `.click()` needed explicit `act()` wrapping here
+  (unlike `Modal.test.tsx`'s precedent, whose click-driven assertions
+  only checked mock-function calls, not re-rendered DOM content).
+  Exported a new `TOAST_DURATION_MS` constant specifically for direct
+  unit testing of the two duration-mapping tests, rather than a
+  fragile fake-timer DOM-timing proxy — flagged as an addition beyond
+  the original architecture spec. `npm run verify` 434→439.
+- T-5 — this entry; final audit below.
+
+**Verified:**
+
+- `npm run verify` — 439/439 at session close; confirmed green after
+  every subtask (T-1 through T-4), with the one mid-session interruption
+  above documented, not silently worked around.
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both exit 0.
+- File-cap audit (T-5): every touched/created file under 300 lines,
+  largest is `ImportItemsModal.tsx` at 257. Full `wc -l` list in
+  PROJECT.md §2.5.
+- Owner visual check for T-3 (Add Item success toast, Import Items
+  result toast) — pending owner confirmation on their machine per the
+  session's own gating instruction; not yet reported back as of this
+  entry.
+
+**Not done / deferred:**
+
+- Every other screen (Suppliers, Purchases, Customers, Reports,
+  Settings, Expenses, Jobs) keeps its existing inline `<Alert>`
+  pattern — migrated one at a time as each gets its own redesign
+  session, per this session's explicit scope.
+- The import-result toast wording (accepted/skipped/OK/issues
+  phrasing) is a flagged judgment call, not yet confirmed by the
+  owner as correct.
+
+**Bugs found:** none new in this session's own code. The mid-session
+`CheckoutModal.tsx` typecheck break was the owner's own concurrent
+in-progress work, resolved by their own commit — not logged as a
+project bug.
+
+**Decisions taken:** additive `TOAST_DURATION_MS` export (testability);
+`react-dom` promoted from `packages/ui` devDependency to
+peerDependency; `AddItemModal`'s in-modal alert stays out of scope
+(owner decision); `ImportItemsModal` migrated in full (owner decision).
+
+**Blocked on:** owner visual confirmation of T-3's toast behavior
+(Create Item success toast, Import Items result/error toasts) and of
+the import-toast wording specifically.
+
+**Next session should:** once the owner confirms T-3's visual check,
+pick the next screen for its own redesign + alert-to-toast migration
+(Suppliers/Purchases/Customers/Reports/Settings/Expenses/Jobs, owner's
+choice) — the toast infrastructure itself needs no further work.
+
+**Checklist:**
+
+- [x] All verification checks passed (439/439 + both builds clean,
+      pasted after every subtask)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (§2.5)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met (toast infra is reusable as-is
+      by any future screen migration)
+- [x] Any new bugs documented in PROJECT.md (none new this session)
+- [x] Test suite passing (439/439)
+
+---
+
 ## [2026-09-10] Session 49 — Items screen redesign (I-0 through I-13, COMPLETE)
 
 **Goal:** Redesign the Items screen (page view, Add Item modal both

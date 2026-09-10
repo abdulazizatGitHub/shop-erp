@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { CheckCircle, Download, FileText, UploadCloud } from 'lucide-react';
-import { Alert, Button, ImportModal } from '@shop/ui';
+import { Alert, Button, ImportModal, useToast } from '@shop/ui';
 import { downloadCsv } from '../../lib/downloadCsv.js';
 import { ipc } from '../../lib/ipc.js';
-import type { ImportResult } from '../../types/electron-api.js';
 
 // Mirrors packages/core/src/import/item-columns.ts's ITEM_COLUMNS /
 // OPENING_STOCK_COLUMNS exactly. apps/client may never import @shop/core
@@ -102,26 +101,38 @@ export function ImportItemsModal({
   onClose,
   onImported,
 }: ImportItemsModalProps): React.JSX.Element | null {
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
   const runImport = (commit: boolean): void => {
     setError(null);
-    setImportResult(null);
     setImportBusy(true);
     const call = commit ? ipc.importData.commit() : ipc.importData.dryRun();
     call
       .then((result) => {
         setImportBusy(false);
         if (result) {
-          setImportResult(result);
-          if (commit) onImported();
+          if (commit) {
+            showToast({
+              variant: 'success',
+              message: `Import complete: ${String(result.itemsAccepted)} accepted, ${String(result.itemsSkipped)} skipped`,
+            });
+            onImported();
+          } else {
+            const issues = result.itemsRejected + result.itemsSkipped;
+            showToast({
+              variant: 'success',
+              message: `Dry run complete: ${String(result.itemsAccepted)} items OK, ${String(issues)} issues`,
+            });
+          }
         }
       })
       .catch((err: unknown) => {
         setImportBusy(false);
-        setError(err instanceof Error ? err.message : 'Import failed');
+        const message = err instanceof Error ? err.message : 'Import failed';
+        setError(message);
+        showToast({ variant: 'error', message: 'Import failed: 1 error — no data saved' });
       });
   };
 
@@ -240,23 +251,6 @@ export function ImportItemsModal({
         </div>
 
         {error && <Alert variant="danger">{error}</Alert>}
-        {importResult && (
-          <Alert variant="success">
-            <div className="flex flex-col gap-1">
-              <p>
-                Items: {importResult.itemsAccepted} accepted, {importResult.itemsRejected} rejected,{' '}
-                {importResult.itemsSkipped} skipped. Report: {importResult.itemsReportPath}
-              </p>
-              {importResult.openingStockReportPath !== null && (
-                <p>
-                  Opening stock: {importResult.openingStockAccepted} accepted,{' '}
-                  {importResult.openingStockRejected} rejected, {importResult.openingStockSkipped}{' '}
-                  skipped. Report: {importResult.openingStockReportPath}
-                </p>
-              )}
-            </div>
-          </Alert>
-        )}
       </div>
     </ImportModal>
   );

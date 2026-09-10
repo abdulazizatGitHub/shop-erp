@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Package, Search } from 'lucide-react';
 import type { ItemDto, ItemLookups } from '@shop/contracts';
 import {
-  Alert,
   Button,
   EmptyState,
   MoneyDisplay,
@@ -14,6 +13,7 @@ import {
   TableHeaderCell,
   TableRow,
   TextInput,
+  useToast,
 } from '@shop/ui';
 import { BusinessUnitPill } from '../../components/shared/BusinessUnitPill.js';
 import { resolveStockBadge } from '../../components/shared/StockBadge.js';
@@ -22,11 +22,10 @@ import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
 
 export function ItemsPage(): React.JSX.Element {
+  const { showToast } = useToast();
   const [lookups, setLookups] = useState<ItemLookups | null>(null);
   const [items, setItems] = useState<readonly ItemDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -37,7 +36,10 @@ export function ItemsPage(): React.JSX.Element {
       .search({ query: '', categoryId: null })
       .then(setItems)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load items');
+        showToast({
+          variant: 'error',
+          message: err instanceof Error ? err.message : 'Failed to load items',
+        });
       });
   };
 
@@ -46,7 +48,10 @@ export function ItemsPage(): React.JSX.Element {
       .lookups()
       .then(setLookups)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load lookups');
+        showToast({
+          variant: 'error',
+          message: err instanceof Error ? err.message : 'Failed to load lookups',
+        });
       });
     loadItems();
   }, []);
@@ -86,9 +91,6 @@ export function ItemsPage(): React.JSX.Element {
           </>
         }
       />
-
-      {error && <Alert variant="danger">{error}</Alert>}
-      {message && <Alert variant="success">{message}</Alert>}
 
       {/* I-1: plain div, not the shared Card primitive — Card has no className
           override and is used by 11 other screens, so restyling it here would
@@ -187,7 +189,7 @@ export function ItemsPage(): React.JSX.Element {
         }}
         onCreated={(itemCode) => {
           setAddItemOpen(false);
-          setMessage(`Created ${itemCode}`);
+          showToast({ variant: 'success', message: `Created ${itemCode}` });
           loadItems();
         }}
       />

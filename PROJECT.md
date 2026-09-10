@@ -289,6 +289,82 @@ this setting.
 
 ## 2.5 UI Redesign State
 
+**Update, 2026-09-10 — global toast notification system LIVE; Items
+screen migrated off inline alert strips.** T-0 through T-5 done,
+renderer-only, no new IPC/schema/business-logic changes. Three new
+`packages/ui/src/primitives/` files (`ToastContext.tsx` 26 lines —
+context/types only, no rendering; `ToastProvider.tsx` 62 lines — holds
+the toast list, `showToast`/`dismiss`, portals `ToastContainer` to
+`document.body`, exports the `useToast()` hook; `ToastContainer.tsx`
+95 lines — the fixed bottom-right stack plus the `Toast` item
+component, slide-in/fade-in on mount and slide-out/fade-out before
+removal via a 200ms-delayed dismiss, matching the existing hand-built
+CSS-transition convention rather than a library). `App.tsx` now wraps
+its entire existing return in `<ToastProvider>` — the only change to
+that file; nothing else reordered. Max 3 toasts visible at once (a
+4th drops the oldest immediately); auto-dismiss timing is
+success/info 3000ms, warning 4000ms, error 6000ms.
+**Real mid-session incident, not this task's own bug**: a concurrent
+IDE session (the owner's own, editing 9 sale-screen files +
+`tailwind.config.js` live) briefly broke `npm run verify` for the
+whole repo (`CheckoutModal.tsx` had two unused-declaration typecheck
+errors) while this session had already built its 3 new toast files.
+Per CLAUDE.md rule 5, stopped and reported rather than touching or
+reverting any of those 9 files; confirmed clean via an ephemeral,
+non-repo tsconfig scoped to just the new toast files (deleted
+immediately after use) instead of running the blocked full-repo
+check. The owner's session committed as `d3586d3` shortly after;
+`npm run verify` was green again (439/439 including this session's
+own new tests) before T-2 resumed.
+**Migration scope, exactly as decided before any code was written**:
+`AddItemModal.tsx`'s own in-modal validation `<Alert>` was explicitly
+left untouched — in-modal errors belong next to the form fields, not
+in a toast; only `ItemsPage.tsx`'s page-level success/error strip
+became toasts (`error`/`message` state and both `<Alert>`s removed).
+`ImportItemsModal.tsx` was also migrated (owner-approved, since its
+result was already the brief's own explicit toast target), with one
+real distinction found before writing any migration code: the
+`importResult` `<Alert>` was never the sole place the detailed
+per-row CSV errors live — the result always carries a
+`itemsReportPath`/`openingStockReportPath` to a server-written report
+file, so that `<Alert>` (an aggregate-counts summary) was removed
+entirely in favor of a toast. The `error` `<Alert>` (a thrown
+exception, e.g. a header-mismatch validation error) **is** the only
+place that text exists — no report file is written for that path — so
+it was kept inline, with a toast added alongside it, per the owner's
+explicit rule for that exact scenario. Toast wording for the
+import-result case involved a judgment call flagged to the owner
+(the literal `"N accepted, N skipped"`/`"N items OK, N issues"`
+templates don't have a slot for `itemsRejected` or the separate
+opening-stock counts) — not yet confirmed correct by the owner.
+**One real TypeScript-strictness finding, fixed before T-1 could pass**:
+this repo's `tsconfig.json` has `exactOptionalPropertyTypes: true` —
+assigning `title: options.title` (`string | undefined`) directly into
+`ToastItem.title` (`string?`) is a type error under that setting,
+since an optional property means "may be absent," not "may be
+`undefined`." Fixed by only spreading `title` into the constructed
+object when actually provided.
+**One package.json correction**: `packages/ui`'s `react-dom` was only
+a `devDependency` (used for tests) before this session; `ToastProvider`
+now imports `createPortal` from it at runtime, so it was added to
+`peerDependencies` too — no new install, `react-dom` was already
+present via `apps/client`'s own dependency and workspace hoisting.
+**Testing**: `ToastProvider.test.tsx` (5 tests, same
+`@testing-library/react`/vitest pattern as every other
+`packages/ui/src/primitives/*.test.tsx` file) — `showToast` adds a
+toast, `dismiss` removes one by id (via the real 200ms exit-animation
+delay, using fake timers), and the two duration-mapping tests assert
+against a new `TOAST_DURATION_MS` constant exported specifically for
+direct unit testing rather than a fragile fake-timer DOM-timing proxy
+— a small, deliberate addition to the module's public surface beyond
+what the original architecture spec listed, flagged to the owner.
+`npm run verify` 434→439 after T-4.
+**Not done this session, by explicit scope**: every other screen
+(Suppliers, Purchases, Customers, Reports, Settings, Expenses, Jobs)
+keeps its existing inline `<Alert>` pattern untouched — they migrate
+one at a time as each screen gets its own redesign session, per the
+brief's own stated scope.
+
 **Update, 2026-09-10 — Items screen redesign COMPLETE.** I-0 through
 I-13 done (I-6, row-action three-dot menu, dropped by explicit owner
 decision — `item:update` has no handler/preload wiring, a dead channel
