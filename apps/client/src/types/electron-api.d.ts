@@ -18,6 +18,7 @@ import type {
   DailySalesReportRowDto,
   DeliverJobInput,
   DeliverJobResult,
+  ImportItemsInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
   ItemDto,
@@ -333,8 +334,8 @@ export interface ElectronApi {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;
   };
   readonly importData: {
-    readonly dryRun: () => Promise<ImportResult | null>;
-    readonly commit: () => Promise<ImportResult | null>;
+    readonly dryRun: (input: ImportItemsInput) => Promise<ImportResult>;
+    readonly commit: (input: ImportItemsInput) => Promise<ImportResult>;
   };
   readonly importSupplierBalance: {
     readonly dryRun: () => Promise<SupplierBalanceImportResult | null>;

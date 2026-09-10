@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dialog, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
+import { ImportItemsInput } from '@shop/contracts';
 import {
   formatItemImportReport,
   formatOpeningStockImportReport,
@@ -33,22 +33,21 @@ export interface ImportResult {
   readonly openingStockSkipped: number | null;
 }
 
-async function runImport(
+export async function runImport(
   deps: ImportHandlerDeps,
-  itemsFilePath: string,
-  openingStockFilePath: string | null,
+  itemsCsv: string,
+  openingStockCsv: string | null,
   commit: boolean,
 ): Promise<ImportResult> {
   const db = openDatabase(deps.dbPath);
   try {
     const repo = new KyselyImportRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
 
-    const itemsCsv = readFileSync(itemsFilePath, 'utf8');
     const { rows: itemRows } = parseCsv(itemsCsv, ITEM_COLUMNS);
     const itemLookups = await repo.getItemImportLookups();
     const itemResults = validateItemRows(itemRows, itemLookups);
     const itemReportPaths = writeReportDual(
-      itemsFilePath,
+      null,
       deps.logDir,
       formatItemImportReport(itemResults),
       'items',
@@ -65,9 +64,8 @@ async function runImport(
     let openingStockRejected: number | null = null;
     let openingStockSkipped: number | null = null;
 
-    if (openingStockFilePath) {
-      const osCsv = readFileSync(openingStockFilePath, 'utf8');
-      const { rows: osRows } = parseCsv(osCsv, OPENING_STOCK_COLUMNS);
+    if (openingStockCsv) {
+      const { rows: osRows } = parseCsv(openingStockCsv, OPENING_STOCK_COLUMNS);
       // Matches against items already committed to the DB. On a dry run
       // ahead of committing the Items sheet in the same pass, an item
       // that would be newly created won't be found yet — a real
@@ -76,7 +74,7 @@ async function runImport(
       const osLookups = await repo.getOpeningStockLookups();
       const osResults = validateOpeningStockRows(osRows, osLookups);
       const osReportPaths = writeReportDual(
-        openingStockFilePath,
+        null,
         deps.logDir,
         formatOpeningStockImportReport(osResults),
         'opening-stock',
@@ -112,23 +110,13 @@ async function runImport(
   }
 }
 
-async function pickFilesAndRun(
-  deps: ImportHandlerDeps,
-  commit: boolean,
-): Promise<ImportResult | null> {
-  const picked = await dialog.showOpenDialog({
-    title: 'Select Items CSV, then (optionally, Ctrl/Cmd-select) the Opening Stock CSV',
-    properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'CSV', extensions: ['csv'] }],
-  });
-  if (picked.canceled || picked.filePaths.length === 0) return null;
-
-  const [itemsFilePath, openingStockFilePath] = picked.filePaths;
-  if (!itemsFilePath) return null;
-  return runImport(deps, itemsFilePath, openingStockFilePath ?? null, commit);
-}
-
 export function registerImportHandlers(deps: ImportHandlerDeps): void {
-  ipcMain.handle(channels.importData.dryRun, () => pickFilesAndRun(deps, false));
-  ipcMain.handle(channels.importData.commit, () => pickFilesAndRun(deps, true));
+  ipcMain.handle(channels.importData.dryRun, (_event, raw: unknown) => {
+    const input = ImportItemsInput.parse(raw);
+    return runImport(deps, input.itemsCsv, input.openingStockCsv ?? null, false);
+  });
+  ipcMain.handle(channels.importData.commit, (_event, raw: unknown) => {
+    const input = ImportItemsInput.parse(raw);
+    return runImport(deps, input.itemsCsv, input.openingStockCsv ?? null, true);
+  });
 }

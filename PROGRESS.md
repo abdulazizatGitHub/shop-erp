@@ -41,6 +41,156 @@
 
 ---
 
+## [2026-09-10] Session 51 — Import Items modal: dry-run label fix + full Option B (renderer-side) import redesign (COMPLETE)
+
+**Goal:** Part 1 — remove the "Dry run" button from ImportItemsModal.tsx,
+rename "Commit import" to "Import". Part 2 — full redesign so the
+renderer picks the file, reads it via the browser File API, validates
+headers client-side, and sends CSV content (not a path) over IPC, with
+six explicit UI states (idle/validating/valid/invalid/importing/failed).
+
+**Done:**
+
+- Part 1 — Dry run button, its onClick, and its hint text all removed;
+  "Commit import" renamed to "Import". `runImport`'s underlying
+  function kept, per instruction, only its now-dead `false`-argument
+  call site removed. Committed separately as `9655ec8` before Part 2
+  began (439/439, both builds clean).
+- P2-1 (read-and-report) surfaced three real gaps between the session
+  brief and live code, all confirmed with the owner before writing any
+  code: import handlers live in `import.handler.ts` not
+  `item.handler.ts`; there was no `ImportItemsInput` schema because the
+  old IPC calls took zero arguments (main process opened the file
+  itself via `dialog.showOpenDialog`); `writeReportDual()` wrote one
+  report copy next to the source file **by path**, which Option B has
+  no path for. Owner decision: drop that copy, keep only the log-dir
+  one — `sourceFilePath` param became `string | null`.
+  `REQUIRED_COLUMNS`/`ITEM_COLUMNS` confirmed duplicated client-side
+  (apps/client cannot import `@shop/core`, `eslint.config.js:59`) —
+  matches the file's pre-existing pattern.
+- P2-2 — new `ImportItemsInput` Zod schema
+  (`{ itemsCsv, openingStockCsv? }`) in `packages/contracts`;
+  `import.handler.ts`'s `runImport` now takes CSV content directly
+  (`readFileSync`/`dialog.showOpenDialog` removed entirely); preload +
+  `electron-api.d.ts` updated to
+  `(input: ImportItemsInput) => Promise<ImportResult>` (no more
+  `| null` — there's no dialog left to cancel). New
+  `import.handler.test.ts`, 7 tests, real temp SQLite DB + real
+  migrations (following `import.repository.test.ts`'s existing
+  fixture-DB pattern — no IPC-handler-test convention existed anywhere
+  in this codebase to follow instead): valid commit inserts exactly
+  `itemsAccepted` real rows (queried back and compared, not assumed),
+  dry run inserts zero, the report path resolves to the log-dir copy
+  only, and a garbage-header CSV genuinely rejects
+  (`/Could not find a header row/`). `npm run verify` 439→446.
+- Second live-code gap found mid-P2-4: the shared `ImportModal` shell
+  owns its own page-2 Back/Close buttons, so `ImportItemsModal.tsx` had
+  no way to disable them during an in-flight import (design spec State
+  D). Added a purely-additive `navDisabled?: boolean` prop (default
+  `false`) to `packages/ui/src/patterns/ImportModal.tsx`, grepped all 3
+  callers (Items/Suppliers/Customers) first — only Items passes it;
+  `ImportModal.test.tsx` still 3/3 unmodified, confirming no regression
+  to the other two.
+- P2-3/P2-4 — `ImportItemsModal.tsx` rewritten around the six-state
+  design spec. Landed at 375 lines on first pass (over the 280-line
+  split trigger) — split into `useImportItemsFlow.ts` (173, state
+  machine + header validation + the IPC call), `ImportFileChip.tsx`
+  (27), `ImportFileState.tsx` (71, states B–F's chip/link/error-block),
+  `ImportItemsInstructions.tsx` (83, page 1's unchanged sample-download
+  content); `ImportItemsModal.tsx` itself is now a 125-line thin render
+  shell. Toast wording matches the spec exactly, hand-verified:
+  `"Imported: 5 added, 2 rejected, 1 skipped"` when rejected > 0, the
+  `rejected` clause omitted otherwise.
+- Opening Stock CSV secondary file — explicitly skipped this session
+  per owner decision. `ipc.importData.commit()` is called with only
+  `{ itemsCsv }` (the key omitted entirely when absent, not set to
+  `undefined` — `exactOptionalPropertyTypes` requires that). Follow-up
+  logged in PROJECT.md §2.5.
+
+**Verified:**
+
+- `npm run verify` — 439/439 after Part 1 (pasted); 446/446 after Part
+  2 (439 baseline + 7 new `import.handler.test.ts` tests), confirmed
+  after every subtask.
+- `npm run typecheck` and `npm run lint` — both clean, pasted.
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0, pasted, after both Part 1 and Part 2.
+- `git diff --stat -- package.json package-lock.json` — empty; no new
+  npm dependency, confirmed.
+- File-cap audit: every touched/created file in this session's own
+  scope is under 300 lines (largest new file is `useImportItemsFlow.ts`
+  at 173). `preload.ts` (355) and `electron-api.d.ts` (389) were
+  already over cap before this session and only gained one line each —
+  logged in PROJECT.md, not re-split (out of scope).
+- Toast message format hand-verified via a standalone Node snippet
+  reproducing the exact `parts.push`/`join` logic, not just read.
+
+**Not done / deferred:**
+
+- Opening Stock CSV secondary file input/validation/IPC field — owner
+  confirmed skip for this session. See PROJECT.md §2.5 follow-up note.
+- Real running-window verification of the six UI states — sandbox
+  Electron GUI launch remains broken in this environment (Session 48).
+  An explicit "what to click" instruction is being handed to the owner
+  instead (see below).
+
+**Bugs found:** none in this session's own new code. Two real gaps
+between the session brief and live code (no `ImportItemsInput` schema
+existed; `ImportModal` shell had no way to disable its own nav buttons)
+— both surfaced, decided with the owner, and fixed as part of this
+session's own scope, not logged as separate bugs since they were
+prerequisites for the requested redesign itself, not pre-existing
+defects in shipped behavior.
+
+**Decisions taken:** drop `writeReportDual`'s source-adjacent report
+copy under Option B, keep only the log-dir copy (owner decision);
+duplicate `ITEM_COLUMNS` client-side rather than change the
+`apps/client`/`@shop/core` architecture boundary (owner-confirmed);
+skip Opening Stock CSV this session (owner decision); add
+`navDisabled?: boolean` to the shared `ImportModal` shell rather than
+fork it.
+
+**Blocked on:** owner's real-running-window visual check — see the
+instruction below — and eventually the Opening Stock CSV follow-up
+whenever the owner wants it built.
+
+**Next session should:** get the owner's visual confirmation of the six
+import states, then decide whether the Opening Stock CSV follow-up is
+next, or move to another screen's own redesign per the existing
+one-at-a-time rotation.
+
+**Owner visual check:**
+"Open Items → Import Items, go to Step 2. Click Select file and choose
+your items CSV. The filename should appear in a chip with a spinner,
+then either turn green with a row count (valid headers) or red with a
+list of missing/unexpected column names (invalid headers) — Import
+stays disabled either way until it's green. Click Import on a valid
+file — the chip should show 'Importing…' with a blue spinner, Back/
+Close should be disabled, then the modal should close and a green
+toast should appear reading 'Imported: N added, N skipped' (or with an
+added 'N rejected' if any rows were rejected). Try it again with a file
+that has the wrong extension of a real server error (e.g. a CSV with a
+completely different header row) already past validation, if you can
+construct one, to confirm the red 'Import failed' state and its retry
+button — otherwise this path was only verified via the automated
+`import.handler.test.ts` (garbage-header rejection) and code review,
+not a real click."
+
+**Checklist:**
+
+- [x] All verification checks passed (439/439 then 446/446 + both
+      builds clean, pasted after every subtask)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (§2.5)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met (Opening Stock follow-up is a
+      clean, scoped addition to the same file set)
+- [x] Any new bugs documented in PROJECT.md (none new — see Bugs found
+      above)
+- [x] Test suite passing (446/446)
+
+---
+
 ## [2026-09-10] Session 50 — Global toast notification system; Items migrated off inline alerts (T-0 through T-5, COMPLETE)
 
 **Goal:** Build a global toast notification system from scratch (React

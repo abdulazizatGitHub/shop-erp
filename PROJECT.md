@@ -289,6 +289,98 @@ this setting.
 
 ## 2.5 UI Redesign State
 
+**Update, 2026-09-10 (Session 51) — Import Items modal: dry-run label fix,
+then full renderer-side (Option B) import flow redesign, COMPLETE.**
+Two parts, Part 1 committed separately (`9655ec8`) before Part 2 began.
+
+**Part 1** — removed the "Dry run" button and its hint text from
+`ImportItemsModal.tsx`'s Step 2; "Commit import" renamed to "Import".
+`runImport`'s underlying function was kept (per instruction), only its
+now-unused `false`-argument call site (the Dry run button) was removed.
+
+**Part 2** — the IPC contract underlying this modal did not match the
+session brief's assumptions in three real, load-bearing ways, each
+surfaced and confirmed with the owner before any code was written (per
+CLAUDE.md rule 6, live code over spec): (1) the import handlers live in
+`apps/server/src/ipc/handlers/import.handler.ts`, not `item.handler.ts`;
+(2) there was no `ImportItemsInput` Zod schema anywhere — the old IPC
+calls (`ipc.importData.dryRun()`/`commit()`) took **zero** arguments,
+since the main process opened the file itself via
+`dialog.showOpenDialog` and read it with `readFileSync`; (3)
+`writeReportDual()` (the per-row CSV error report writer) wrote one
+copy of its report next to the source file **by path** — a real
+problem for Option B, since the renderer no longer has a path to give
+the server, only file content. Owner decision: drop the source-adjacent
+copy, keep only the guaranteed-durable log-dir copy —
+`writeReportDual`'s `sourceFilePath` param became `string | null`,
+`null` skips that write entirely (previously only reachable via a
+write failure's catch branch).
+Backend: new `ImportItemsInput` Zod schema
+(`{ itemsCsv: string, openingStockCsv?: string }`) in
+`packages/contracts/src/item/item.ts`; `import.handler.ts`'s
+`runImport` now takes CSV content directly (no more
+`readFileSync`/`dialog.showOpenDialog`, both removed); preload +
+`electron-api.d.ts` updated to `(input: ImportItemsInput) =>
+Promise<ImportResult>` (the `| null` cancel case is gone — there is no
+longer a dialog to cancel). New `import.handler.test.ts` (7 tests, real
+temp SQLite DB + real migrations, following `import.repository.test.ts`'s
+existing fixture-DB pattern exactly, since no IPC-handler-level test
+convention existed anywhere in this codebase to follow instead) —
+commit inserts real rows (row count hand-verified against
+`itemsAccepted`), dry run inserts nothing, the log-dir-only report path,
+and a garbage-header CSV genuinely rejects. `npm run verify` 439→446.
+A second live-code gap found and fixed the same way: the shared
+`ImportModal` shell (`packages/ui/src/patterns/ImportModal.tsx`) owns
+its own page-2 Back/Close buttons — `ImportItemsModal.tsx` had no way
+to disable them during an in-flight import (design spec's State D). Gave
+`ImportModal` a purely-additive `navDisabled?: boolean` prop (default
+`false`) following this session's own established pattern (grepped all
+3 callers — Items/Suppliers/Customers import modals — only Items passes
+it; the other two are unchanged, confirmed via `ImportModal.test.tsx`
+still passing 3/3 unmodified).
+Client: `ImportItemsModal.tsx` rewritten around the design spec's six
+states (A idle → B validating → C-OK/C-ERROR → D importing → E success/
+F failed), reading the picked file via the browser File API
+(`file.text()`), validating only the header line against a duplicated
+`ITEM_COLUMNS` array (client cannot import `@shop/core` — architecture
+boundary, `eslint.config.js:59` — owner-confirmed duplication is
+correct, matching the file's pre-existing pattern). Landed at 375 lines
+on first pass — over the 280-line split trigger — split into
+`useImportItemsFlow.ts` (173, the state machine + validation),
+`ImportFileChip.tsx` (27), `ImportFileState.tsx` (71, states B–F's
+chip/link/error-block JSX), `ImportItemsInstructions.tsx` (83, page 1's
+unchanged sample-download/checklist JSX); `ImportItemsModal.tsx` itself
+is now a 125-line thin render shell. Toast wording implemented exactly
+per spec (`"Imported: {accepted} added, {rejected} rejected, {skipped}
+skipped"` when `rejected > 0`, else without that clause) — hand-verified
+node-side, not just read: `parts.push('5 added')`/`'2 rejected'`/
+`'1 skipped')` → `"Imported: 5 added, 2 rejected, 1 skipped"`.
+**Opening Stock CSV secondary file, owner-confirmed skip for this
+session**: the modal's Step 1 instructions still mention it (informational
+only, wording adjusted to "imported separately, not yet part of this
+screen"); `ipc.importData.commit()` is only ever called with `{
+itemsCsv }` (no `openingStockCsv` key at all, not even `undefined` —
+`exactOptionalPropertyTypes` requires the key be absent, not
+undefined). **Follow-up needed, not built this session**: give
+`ImportItemsModal.tsx` a second file input + validation pass +
+`openingStockCsv` in the commit payload, once the owner wants it back.
+`npm run verify` 439→446 (7 new backend tests) confirmed after every
+subtask; `npm run typecheck`, `npm run lint`, and both
+`npm run build --workspace=@shop/client`/`--workspace=@shop/server`
+clean at session close. No new npm dependencies (`git diff --stat --
+package.json package-lock.json` empty). **Not verified in a real
+running window** — sandbox Electron GUI launch remains broken in this
+environment (Session 48); an explicit "what to click" owner
+verification instruction was handed over instead (see PROGRESS.md
+Session 51).
+**Two pre-existing over-cap files touched but not re-split, logged not
+fixed, out of this session's scope**: `apps/server/src/preload.ts` (355
+lines) and `apps/client/src/types/electron-api.d.ts` (389 lines) — both
+were already over the 300-line cap before this session (they list every
+IPC channel in the app); this session added one new import-related
+entry to each, consistent with their existing shape, not a new
+violation.
+
 **Update, 2026-09-10 — global toast notification system LIVE; Items
 screen migrated off inline alert strips.** T-0 through T-5 done,
 renderer-only, no new IPC/schema/business-logic changes. Three new

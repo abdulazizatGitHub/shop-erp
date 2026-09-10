@@ -11,6 +11,8 @@ export interface ImportModalProps {
   readonly instructions: ReactNode;
   /** Page 2 body — Dry Run/Commit buttons + result display; IPC calls stay caller-owned. */
   readonly children: ReactNode;
+  /** Disables page 2's Back/Close buttons — e.g. while an import is in flight. Default false. */
+  readonly navDisabled?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export function ImportModal({
   onClose,
   instructions,
   children,
+  navDisabled = false,
 }: ImportModalProps): React.JSX.Element | null {
   const [page, setPage] = useState<1 | 2>(1);
 
@@ -61,13 +64,14 @@ export function ImportModal({
           <div className="flex justify-between gap-3">
             <Button
               variant="secondary"
+              disabled={navDisabled}
               onClick={() => {
                 setPage(1);
               }}
             >
               Back
             </Button>
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" disabled={navDisabled} onClick={onClose}>
               Close
             </Button>
           </div>

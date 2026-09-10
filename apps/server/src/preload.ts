@@ -21,6 +21,7 @@ import type {
   DeliverJobResult,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
+  ImportItemsInput,
   ItemDto,
   ItemGetPricesInput,
   ItemLookups,
@@ -284,10 +285,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.uom.listConversions) as Promise<readonly UomConversionOption[]>,
   },
   importData: {
-    dryRun: (): Promise<ImportResult | null> =>
-      ipcRenderer.invoke(channels.importData.dryRun) as Promise<ImportResult | null>,
-    commit: (): Promise<ImportResult | null> =>
-      ipcRenderer.invoke(channels.importData.commit) as Promise<ImportResult | null>,
+    dryRun: (input: ImportItemsInput): Promise<ImportResult> =>
+      ipcRenderer.invoke(channels.importData.dryRun, input) as Promise<ImportResult>,
+    commit: (input: ImportItemsInput): Promise<ImportResult> =>
+      ipcRenderer.invoke(channels.importData.commit, input) as Promise<ImportResult>,
   },
   importSupplierBalance: {
     dryRun: (): Promise<SupplierBalanceImportResult | null> =>
