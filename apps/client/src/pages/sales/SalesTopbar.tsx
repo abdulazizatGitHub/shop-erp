@@ -1,5 +1,25 @@
 import { useEffect, useState } from 'react';
 
+/** Matches ItemProductCard's PackageIcon/WrenchIcon stroke style so the topbar shares one icon language instead of mixing in emoji. */
+function ClockIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
 function formatClock(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
@@ -59,7 +79,7 @@ export function SalesTopbar({
   return (
     <div className="flex h-12 shrink-0 items-center justify-between rounded-2xl border border-line bg-surface px-4">
       <div className="flex shrink-0 items-center gap-3">
-        <span className="whitespace-nowrap text-[14px] font-semibold text-ink">Counter sale</span>
+        <span className="whitespace-nowrap text-sm font-semibold text-ink">Counter sale</span>
         <span className="text-line" aria-hidden="true">
           |
         </span>
@@ -78,7 +98,8 @@ export function SalesTopbar({
               onClick={onLastSaleClick}
               className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
             >
-              🕘 Last sale
+              <ClockIcon />
+              Last sale
             </button>
             <span className="text-line" aria-hidden="true">
               |
@@ -90,7 +111,7 @@ export function SalesTopbar({
           onClick={onHelpClick}
           className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-ink-muted hover:bg-surface-sunken hover:text-ink"
         >
-          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
+          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-caption">
             ?
           </kbd>
           Help
@@ -99,7 +120,7 @@ export function SalesTopbar({
           |
         </span>
         <span
-          className="whitespace-nowrap text-[12px] text-ink-faint"
+          className="whitespace-nowrap text-callout text-ink-faint"
           aria-label="Current date and time"
         >
           {formatDate(now)}

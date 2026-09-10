@@ -36,7 +36,7 @@ export function HelpShortcutsModal({ open, onClose }: HelpShortcutsModalProps): 
                 {shortcut.keys.map((key, i) => (
                   <span key={key}>
                     {i > 0 && <span className="mx-1 text-ink-faint">+</span>}
-                    <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
+                    <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-caption">
                       {key}
                     </kbd>
                   </span>

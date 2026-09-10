@@ -1,6 +1,25 @@
 import { Money } from '@shop/shared';
 import { Button, MoneyDisplay } from '@shop/ui';
 
+/** Matches ItemProductCard's icon stroke style so the CTA doesn't rely on a ✓ glyph. */
+function CheckIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12.5 9.5 17 19 7" />
+    </svg>
+  );
+}
+
 export interface CheckoutPanelProps {
   readonly subtotalPaisa: number;
   readonly discountPaisa: number;
@@ -41,7 +60,7 @@ export function CheckoutPanel({
     <div className="mt-3 flex flex-col gap-3">
       {discountApplicable && (discountPkrEnabled || discountPctEnabled) && (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-medium text-ink-muted">Discount</span>
+          <span className="text-subheadline font-medium text-ink-muted">Discount</span>
           <div className="flex items-center gap-2">
             {discountPkrEnabled && (
               <select
@@ -51,7 +70,7 @@ export function CheckoutPanel({
                 onChange={(e) => {
                   onSelectedDiscountPkrPaisaChange(Number(e.target.value));
                 }}
-                className="h-[26px] max-w-[85px] rounded-md border border-line bg-surface-input px-1.5 text-[11px] disabled:opacity-50"
+                className="h-[26px] max-w-[85px] rounded-md border border-line bg-surface-input px-1.5 text-subheadline disabled:opacity-50"
               >
                 <option value={0}>None</option>
                 {discountPkrOptionsPaisa.map((paisa) => (
@@ -69,7 +88,7 @@ export function CheckoutPanel({
                 onChange={(e) => {
                   onSelectedDiscountPctChange(Number(e.target.value));
                 }}
-                className="h-[26px] max-w-[85px] rounded-md border border-line bg-surface-input px-1.5 text-[11px] disabled:opacity-50"
+                className="h-[26px] max-w-[85px] rounded-md border border-line bg-surface-input px-1.5 text-subheadline disabled:opacity-50"
               >
                 <option value={0}>None</option>
                 {discountPctOptions.map((pct) => (
@@ -102,7 +121,7 @@ export function CheckoutPanel({
         </div>
         <div className="my-1.5 border-t border-line" />
         <div className="flex items-center justify-between">
-          <span className="text-[13px] font-bold text-ink">Subtotal</span>
+          <span className="text-xs font-bold text-ink">Subtotal</span>
           <MoneyDisplay paisaValue={totalPaisa} size="grand" />
         </div>
       </div>
@@ -114,7 +133,8 @@ export function CheckoutPanel({
         disabled={cartEmpty}
         onClick={onOpenCheckout}
       >
-        ✓ Complete sale <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-xs">F10</kbd>
+        <CheckIcon />
+        Complete sale <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-xs">F10</kbd>
       </Button>
     </div>
   );

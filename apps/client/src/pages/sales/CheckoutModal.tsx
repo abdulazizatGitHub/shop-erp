@@ -24,6 +24,44 @@ function ReceiptIcon(): React.JSX.Element {
   );
 }
 
+/** Same stroke-icon convention as ReceiptIcon above — replaces the ✕ glyph. */
+function CloseIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  );
+}
+
+/** Matches SaleSuccessModal's CheckIcon — replaces the ✓ glyph on the Confirm button. */
+function CheckIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12.5 9.5 17 19 7" />
+    </svg>
+  );
+}
+
 export interface CheckoutModalProps {
   readonly open: boolean;
   readonly cart: readonly CartLine[];
@@ -121,7 +159,7 @@ export function CheckoutModal({
         className="flex max-h-[90vh] w-full max-w-[440px] flex-col gap-4 overflow-y-auto rounded-2xl bg-surface p-[22px] shadow-[0_20px_60px_rgba(0,0,0,.18)] outline-none"
       >
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 text-[15px] font-extrabold text-ink">
+          <span className="flex items-center gap-2 text-sm font-extrabold text-ink">
             <ReceiptIcon />
             Checkout
           </span>
@@ -131,7 +169,7 @@ export function CheckoutModal({
             onClick={onClose}
             className="rounded p-1 text-ink-faint hover:bg-surface-input hover:text-ink"
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 
@@ -190,9 +228,10 @@ export function CheckoutModal({
           ref={confirmButtonRef}
           type="button"
           onClick={onConfirm}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-pos-accent text-[14px] font-extrabold text-white shadow-[0_2px_8px_rgba(37,99,235,.25)] transition-all hover:-translate-y-px hover:bg-pos-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-pos-accent text-sm font-extrabold text-white shadow-[0_2px_8px_rgba(37,99,235,.25)] transition-all hover:-translate-y-px hover:bg-pos-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
-          ✓ Confirm sale
+          <CheckIcon />
+          Confirm sale
         </button>
       </div>
     </div>

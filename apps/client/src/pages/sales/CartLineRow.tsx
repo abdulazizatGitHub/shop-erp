@@ -60,17 +60,17 @@ export function CartLineRow({
   return (
     <div className="flex items-center gap-2 border-b border-surface-input px-1 py-2 last:border-b-0">
       <span
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold ${
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-caption font-semibold ${
           pill ? pill.className : 'bg-surface-input text-ink-faint'
         }`}
       >
         {pill?.letter ?? ''}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] font-semibold text-ink" title={line.itemLabel}>
+        <p className="truncate text-sm font-semibold text-ink" title={line.itemLabel}>
           {line.itemLabel}
         </p>
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] text-ink-faint">
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-subheadline text-ink-faint">
           {onQuantityChange && (
             <button
               type="button"
@@ -106,7 +106,7 @@ export function CartLineRow({
           )}
           {line.priceLevelBadge && (
             <span
-              className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] ${
+              className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-caption font-semibold uppercase tracking-[0.04em] ${
                 line.priceLevelBadge === 'wholesale'
                   ? 'bg-brand-subtle text-brand'
                   : 'bg-surface-input text-ink-faint'
@@ -117,7 +117,7 @@ export function CartLineRow({
           )}
         </div>
       </div>
-      <div className="shrink-0 text-right text-[14px] font-bold text-ink">
+      <div className="shrink-0 text-right text-sm font-bold text-ink">
         {totalPaisa !== null ? <MoneyDisplay paisaValue={totalPaisa} /> : '—'}
       </div>
       <button

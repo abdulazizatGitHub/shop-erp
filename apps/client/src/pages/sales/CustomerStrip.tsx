@@ -110,8 +110,8 @@ export function CustomerStrip({
           <UserIcon />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-ink">Walk-in customer</p>
-          <p className="truncate text-[11px] text-ink-faint">No account — cash only</p>
+          <p className="truncate text-xs font-semibold text-ink">Walk-in customer</p>
+          <p className="truncate text-subheadline text-ink-faint">No account — cash only</p>
         </div>
         <button
           type="button"
@@ -130,16 +130,16 @@ export function CustomerStrip({
 
   return (
     <div className="flex items-center gap-2 rounded-xl border-[1.5px] border-pos-accent-border bg-pos-accent-subtle px-2.5 py-2">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-bold text-pos-accent">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-caption font-bold text-pos-accent">
         {initials(customer.name)}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-ink">
+        <p className="truncate text-xs font-semibold text-ink">
           {customer.name}
           {typeLabel && <span className="ml-1 font-normal text-ink-faint">({typeLabel})</span>}
         </p>
         {balancePaisa !== null && (
-          <p className="truncate whitespace-nowrap text-[11px] text-ink-faint">
+          <p className="truncate whitespace-nowrap text-subheadline text-ink-faint">
             Outstanding: <MoneyDisplay paisaValue={balancePaisa} size="sm" />
           </p>
         )}

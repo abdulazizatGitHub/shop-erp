@@ -51,7 +51,7 @@ export function CheckoutPaymentMethod({
 }: CheckoutPaymentMethodProps): React.JSX.Element {
   return (
     <div>
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+      <p className="mb-1 text-caption font-bold uppercase tracking-[0.08em] text-ink-muted">
         Payment method
       </p>
       <div role="radiogroup" aria-label="Payment mode" className="grid grid-cols-2 gap-3">
@@ -70,7 +70,7 @@ export function CheckoutPaymentMethod({
         >
           <CashIcon />
           Cash
-          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
+          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-caption">
             C
           </kbd>
         </button>
@@ -93,7 +93,7 @@ export function CheckoutPaymentMethod({
         >
           <UdhaarIcon />
           Udhaar
-          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-[10px]">
+          <kbd className="rounded border border-line-strong bg-surface-page px-1.5 py-0.5 font-mono text-caption">
             U
           </kbd>
         </button>

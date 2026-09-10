@@ -19,7 +19,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: { DEFAULT: '#14181F', muted: '#5A6472', faint: '#8B94A3' },
+        // faint was #8B94A3 (2.9:1 on white) — below the 4.5:1 minimum for
+        // text under 18pt (HIG accessibility.md). Darkened to keep the
+        // faint/muted/DEFAULT hierarchy while passing contrast.
+        ink: { DEFAULT: '#14181F', muted: '#5A6472', faint: '#64707F' },
         surface: { DEFAULT: '#FFFFFF', sunken: '#F4F6F8', page: '#F2F4F7', input: '#F7F8FA' },
         line: { DEFAULT: '#DFE4EA', strong: '#B8C0CC' },
         sidebar: { bg: '#1E2235', text: '#9AA0B8', active: '#6FA8FF' },
@@ -44,6 +47,17 @@ export default {
         mono: ['JetBrains Mono', 'Consolas', 'monospace'],
       },
       fontSize: {
+        // Dense UI chrome (badges, kbd hints, eyebrow labels, meta rows —
+        // mostly on the Sale screen) sat below `xs` with no token to reach
+        // for, so components filled the gap with a dozen one-off
+        // text-[Npx] values. These three follow macOS's own built-in text
+        // styles (HIG typography.md) — caption/footnote share 10/13pt,
+        // subheadline is 11/14pt, callout is 12/15pt — and 10px is also
+        // the platform's minimum legible size, so `caption` is the floor:
+        // nothing in the app should go smaller.
+        caption: ['10px', '13px'],
+        subheadline: ['11px', '14px'],
+        callout: ['12px', '15px'],
         xs: ['13px', '18px'],
         sm: ['15px', '22px'],
         base: ['17px', '26px'],

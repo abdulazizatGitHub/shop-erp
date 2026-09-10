@@ -3,6 +3,27 @@ import { Money } from '@shop/shared';
 import { MoneyDisplay } from '@shop/ui';
 import { CartLineRow } from './CartLineRow.js';
 
+/** Matches ItemProductCard's icon stroke style so Clear doesn't rely on an emoji glyph. */
+function TrashIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16" />
+      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+    </svg>
+  );
+}
+
 export interface CartLine {
   readonly itemId: string;
   readonly itemLabel: string;
@@ -103,19 +124,20 @@ export function CartTable({
       className={`flex min-h-0 flex-1 flex-col overflow-hidden ${chrome === 'card' ? 'rounded-lg border border-line bg-surface p-3' : 'p-4'}`}
     >
       <div className="mb-2 flex shrink-0 items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+        <span className="text-caption font-bold uppercase tracking-[0.08em] text-ink-muted">
           Cart
         </span>
-        <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-medium text-brand">
+        <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-subheadline font-medium text-brand">
           {cart.length} {cart.length === 1 ? 'item' : 'items'}
         </span>
         {cart.length > 0 && onClear && (
           <button
             type="button"
             onClick={onClear}
-            className="ml-auto text-xs font-medium text-danger hover:underline"
+            className="ml-auto flex items-center gap-1 text-xs font-medium text-danger hover:underline"
           >
-            🗑 Clear
+            <TrashIcon />
+            Clear
           </button>
         )}
       </div>

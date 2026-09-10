@@ -92,9 +92,9 @@ export function SaleSuccessModal({
           <CheckIcon />
         </div>
         <p className="text-xl font-extrabold text-ink">Sale complete</p>
-        <p className="text-[13px] text-ink-faint">{sale.docNo}</p>
+        <p className="text-xs text-ink-faint">{sale.docNo}</p>
         <MoneyDisplay paisaValue={sale.totalAmountPaisa} size="grand" tone="accent" />
-        <p className="text-[13px] text-ink-faint">
+        <p className="text-xs text-ink-faint">
           {sale.paymentMode === 'cash' ? (
             <>
               Cash — <MoneyDisplay paisaValue={sale.paidAmountPaisa} size="sm" /> received

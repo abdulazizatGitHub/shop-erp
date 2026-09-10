@@ -44,7 +44,7 @@ export function BusinessUnitPill({
 
   return (
     <span
-      className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase ${pill.className}`}
+      className={`shrink-0 rounded px-2 py-0.5 text-caption font-semibold uppercase ${pill.className}`}
     >
       {pill.letter}
     </span>

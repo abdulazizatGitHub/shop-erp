@@ -67,9 +67,9 @@ export function ItemProductCard({
       <div className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-surface-input">
         {isRepair ? <WrenchIcon /> : <PackageIcon />}
       </div>
-      <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-ink">{item.nameEn}</p>
-      <p className="truncate font-mono text-[10px] text-ink-faint">{item.itemCode}</p>
-      {badge && <p className={`text-[11px] font-medium ${badge.className}`}>{badge.label}</p>}
+      <p className="line-clamp-2 text-xs font-semibold leading-tight text-ink">{item.nameEn}</p>
+      <p className="truncate font-mono text-caption text-ink-faint">{item.itemCode}</p>
+      {badge && <p className={`text-subheadline font-medium ${badge.className}`}>{badge.label}</p>}
       <div className="mt-auto flex items-end justify-between gap-1">
         {item.retailPricePaisa !== null ? (
           <MoneyDisplay paisaValue={item.retailPricePaisa} size="sm" />

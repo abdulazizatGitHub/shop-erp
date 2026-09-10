@@ -17,7 +17,7 @@ export function CheckoutOrderSummary({
 }: CheckoutOrderSummaryProps): React.JSX.Element {
   return (
     <div>
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+      <p className="mb-1 text-caption font-bold uppercase tracking-[0.08em] text-ink-muted">
         Order items
       </p>
       <div>
@@ -28,13 +28,13 @@ export function CheckoutOrderSummary({
               key={`${line.itemId}-${String(index)}`}
               className="flex items-center gap-2 border-b border-surface-input py-1.5 last:border-b-0"
             >
-              <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+              <span className="min-w-0 flex-1 truncate text-callout text-ink-muted">
                 {line.itemLabel}
               </span>
-              <span className="w-[52px] shrink-0 text-center text-[12px] text-ink-faint">
+              <span className="w-[52px] shrink-0 text-center text-callout text-ink-faint">
                 <QuantityDisplay quantityMilli={line.quantityMilli} /> {line.unitLabel}
               </span>
-              <span className="min-w-[60px] shrink-0 text-right text-[12px] font-semibold text-ink">
+              <span className="min-w-[60px] shrink-0 text-right text-callout font-semibold text-ink">
                 {lineTotalAmountPaisa !== null ? (
                   <MoneyDisplay paisaValue={lineTotalAmountPaisa} size="sm" />
                 ) : (
@@ -65,7 +65,7 @@ export function CheckoutOrderSummary({
         </div>
         <div className="my-1.5 border-t-[1.5px] border-line" />
         <div className="flex items-center justify-between">
-          <span className="text-[13px] font-bold text-ink">Subtotal</span>
+          <span className="text-xs font-bold text-ink">Subtotal</span>
           <MoneyDisplay paisaValue={totalPaisa} size="grand" tone="accent" />
         </div>
       </div>

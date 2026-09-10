@@ -163,8 +163,8 @@ export function ItemSearchPanel({
       renderItem={(item, highlighted) =>
         item.id === pendingItem?.id ? (
           <div className="flex h-full flex-col gap-1.5 rounded-xl border-[1.5px] border-pos-accent bg-pos-accent-subtle p-2.5">
-            <p className="truncate text-[12px] font-semibold text-ink">{item.nameEn}</p>
-            <span className="truncate font-mono text-[10px] text-ink-faint">{item.itemCode}</span>
+            <p className="truncate text-callout font-semibold text-ink">{item.nameEn}</p>
+            <span className="truncate font-mono text-caption text-ink-faint">{item.itemCode}</span>
             <div className="flex items-center gap-1">
               <input
                 ref={qtyInputRef}
@@ -195,14 +195,14 @@ export function ItemSearchPanel({
                 className="w-full min-w-0 rounded-md border border-line bg-surface px-2 py-1 font-mono text-sm text-ink focus:border-pos-accent focus:outline-none focus:ring-[3px] focus:ring-pos-accent/10"
               />
             </div>
-            <p className="truncate text-[10px] text-ink-muted">
+            <p className="truncate text-caption text-ink-muted">
               {saleUnit === 'alt' && pendingItem.altUomId !== null
                 ? uomName(pendingItem.altUomId)
                 : uomName(pendingItem.stockUomId)}
               {pendingItem.altUomId !== null && ' — ←/→'}
             </p>
-            <span className="mt-auto flex items-center gap-1 text-[10px] text-ink-faint">
-              <kbd className="rounded border border-line-strong bg-surface-page px-1 py-0.5 font-mono text-[9px]">
+            <span className="mt-auto flex items-center gap-1 text-caption text-ink-faint">
+              <kbd className="rounded border border-line-strong bg-surface-page px-1 py-0.5 font-mono text-caption">
                 Enter
               </kbd>
               to add

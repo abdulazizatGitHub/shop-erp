@@ -46,7 +46,7 @@ export function QueueStrip({
   return (
     <div className="flex shrink-0 flex-col gap-1.5 rounded-b-2xl border-t border-line bg-surface-input px-2.5 py-1.5">
       <div className="flex items-center gap-1.5">
-        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.06em] text-ink-faint">
+        <span className="flex items-center gap-1 text-caption font-bold uppercase tracking-[0.06em] text-ink-faint">
           <PauseIcon />
           Held sales
         </span>
@@ -55,7 +55,7 @@ export function QueueStrip({
             type="button"
             onClick={onHoldClick}
             title="Hold sale (Alt+H)"
-            className="ml-auto shrink-0 whitespace-nowrap rounded-md border border-pos-accent-border bg-pos-accent-subtle px-2 py-0.5 text-[10px] font-semibold text-pos-accent hover:bg-pos-accent-subtle/70"
+            className="ml-auto shrink-0 whitespace-nowrap rounded-md border border-pos-accent-border bg-pos-accent-subtle px-2 py-0.5 text-caption font-semibold text-pos-accent hover:bg-pos-accent-subtle/70"
           >
             Alt+H Hold
           </button>
@@ -63,7 +63,7 @@ export function QueueStrip({
       </div>
 
       {queue.length === 0 ? (
-        <p className="py-1 text-center text-[11px] text-ink-faint">No held sales</p>
+        <p className="py-1 text-center text-subheadline text-ink-faint">No held sales</p>
       ) : (
         <ul className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {queue.map((entry) => (
@@ -71,10 +71,10 @@ export function QueueStrip({
               key={entry.id}
               className="flex w-20 shrink-0 flex-col items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1.5 text-center"
             >
-              <p className="w-full truncate text-[10px] font-semibold text-ink">
+              <p className="w-full truncate text-caption font-semibold text-ink">
                 {entry.customer?.name ?? 'Walk-in'}
               </p>
-              <p className="whitespace-nowrap text-[9px] text-ink-faint">
+              <p className="whitespace-nowrap text-caption text-ink-faint">
                 {entry.cart.length} {entry.cart.length === 1 ? 'item' : 'items'}
               </p>
               <MoneyDisplay paisaValue={totalPaisa(entry)} size="sm" />
@@ -83,7 +83,7 @@ export function QueueStrip({
                 onClick={() => {
                   onResume(entry.id);
                 }}
-                className="text-[9px] font-semibold text-pos-accent hover:underline"
+                className="text-caption font-semibold text-pos-accent hover:underline"
               >
                 Resume →
               </button>
