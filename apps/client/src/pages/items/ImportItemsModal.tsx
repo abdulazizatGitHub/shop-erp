@@ -227,27 +227,15 @@ export function ImportItemsModal({
           </p>
           <div className="flex gap-3">
             <Button
-              variant="secondary"
-              disabled={importBusy}
-              onClick={() => {
-                runImport(false);
-              }}
-            >
-              Dry run
-            </Button>
-            <Button
               variant="primary"
               disabled={importBusy}
               onClick={() => {
                 runImport(true);
               }}
             >
-              Commit import
+              Import
             </Button>
           </div>
-          <p className="mt-3 text-xs text-ink-faint">
-            Dry run checks for errors without saving anything.
-          </p>
         </div>
 
         {error && <Alert variant="danger">{error}</Alert>}
