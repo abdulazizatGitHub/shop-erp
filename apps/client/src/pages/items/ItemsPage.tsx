@@ -20,6 +20,7 @@ import { resolveStockBadge } from '../../components/shared/StockBadge.js';
 import { ipc } from '../../lib/ipc.js';
 import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
+import { ImportOpeningStockModal } from './ImportOpeningStockModal.js';
 
 export function ItemsPage(): React.JSX.Element {
   const { showToast } = useToast();
@@ -28,6 +29,7 @@ export function ItemsPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [importOpeningStockOpen, setImportOpeningStockOpen] = useState(false);
 
   // P4.5-3: the full list is loaded once — the search box below filters it
   // in memory, not with a new IPC call per keystroke.
@@ -72,6 +74,14 @@ export function ItemsPage(): React.JSX.Element {
         title="Items"
         actions={
           <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setImportOpeningStockOpen(true);
+              }}
+            >
+              Import Opening Stock
+            </Button>
             <Button
               variant="secondary"
               onClick={() => {
@@ -198,6 +208,14 @@ export function ItemsPage(): React.JSX.Element {
         open={importOpen}
         onClose={() => {
           setImportOpen(false);
+        }}
+        onImported={loadItems}
+      />
+
+      <ImportOpeningStockModal
+        open={importOpeningStockOpen}
+        onClose={() => {
+          setImportOpeningStockOpen(false);
         }}
         onImported={loadItems}
       />

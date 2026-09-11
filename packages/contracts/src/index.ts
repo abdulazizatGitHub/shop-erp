@@ -7,6 +7,7 @@ export {
   ItemPricesDto,
   ItemTopSellingInput,
   ImportItemsInput,
+  ImportOpeningStockInput,
 } from './item/item.js';
 export type { ItemLookups } from './item/item.js';
 

@@ -19,6 +19,7 @@ import type {
   DeliverJobInput,
   DeliverJobResult,
   ImportItemsInput,
+  ImportOpeningStockInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
   ItemDto,
@@ -74,11 +75,14 @@ export interface ImportResult {
   readonly itemsAccepted: number;
   readonly itemsRejected: number;
   readonly itemsSkipped: number;
-  readonly openingStockReportPath: string | null;
-  readonly openingStockLogReportPath: string | null;
-  readonly openingStockAccepted: number | null;
-  readonly openingStockRejected: number | null;
-  readonly openingStockSkipped: number | null;
+}
+
+export interface OpeningStockImportResult {
+  readonly reportPath: string;
+  readonly logReportPath: string;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly skipped: number;
 }
 
 export interface SupplierBalanceImportResult {
@@ -336,6 +340,10 @@ export interface ElectronApi {
   readonly importData: {
     readonly dryRun: (input: ImportItemsInput) => Promise<ImportResult>;
     readonly commit: (input: ImportItemsInput) => Promise<ImportResult>;
+  };
+  readonly importOpeningStock: {
+    readonly dryRun: (input: ImportOpeningStockInput) => Promise<OpeningStockImportResult>;
+    readonly commit: (input: ImportOpeningStockInput) => Promise<OpeningStockImportResult>;
   };
   readonly importSupplierBalance: {
     readonly dryRun: () => Promise<SupplierBalanceImportResult | null>;

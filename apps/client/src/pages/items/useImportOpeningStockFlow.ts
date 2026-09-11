@@ -8,37 +8,24 @@ import {
   type ImportState,
 } from './importCsvValidation.js';
 
-// Mirrors packages/core/src/import/item-columns.ts's ITEM_COLUMNS exactly.
-// apps/client may never import @shop/core (architecture boundary — see
-// eslint.config.js), so this is a manually synced local copy, the same
-// pattern SuppliersImportPage/CustomersImportPage already use for their own
-// column instructions. If item-columns.ts changes, this must be updated too.
-export const ITEM_COLUMNS = [
+// Mirrors packages/core/src/import/item-columns.ts's OPENING_STOCK_COLUMNS
+// exactly. apps/client may never import @shop/core (architecture boundary
+// — see eslint.config.js), so this is a manually synced local copy, the
+// same pattern ITEM_COLUMNS in useImportItemsFlow.ts already uses. If
+// item-columns.ts changes, this must be updated too.
+export const OPENING_STOCK_COLUMNS = [
   'Item Code',
   'Item Name (English)',
-  'Item Name (Urdu)',
-  'Owning Business Unit',
-  'Category',
-  'Brand / Company',
-  'Variant / Spec',
-  'Selling Unit',
-  'Purchase Unit',
-  'Units per Purchase Unit',
-  'Track Stock? (Y/N)',
-  'Has Serial No? (Y/N)',
-  'Purchase Price (PKR)',
-  'Retail Price (PKR)',
-  'Wholesale Price (PKR)',
-  'Low Stock Alert Qty',
+  'Count Date',
+  'Quantity Counted',
+  'Unit Cost (PKR)',
+  'Serial Numbers',
   'Shelf / Location',
+  'Counted By',
   'Notes',
-  'Alt Unit',
-  'Alt Factor',
 ];
 
-export type { ImportState };
-
-export interface UseImportItemsFlowResult {
+export interface UseImportOpeningStockFlowResult {
   readonly state: ImportState;
   readonly fileInputRef: React.RefObject<HTMLInputElement>;
   readonly importDisabled: boolean;
@@ -50,17 +37,16 @@ export interface UseImportItemsFlowResult {
 }
 
 /**
- * Option B (2026-09-10): the renderer reads the Items CSV via the browser
- * File API, validates its header row client-side, then sends the full file
- * content over IPC — the main process no longer opens a native file dialog.
- * Opening Stock CSV import is a separate flow (its own modal/hook, per
- * Session 52's owner decision), not handled here.
+ * Option B, Opening Stock (Session 52, owner decision: separate from Items
+ * import — its own button, modal, and IPC channel). Same six-state
+ * file-picker shape as useImportItemsFlow, validated against
+ * OPENING_STOCK_COLUMNS and sent as openingStockCsv to a dedicated channel.
  */
-export function useImportItemsFlow(
+export function useImportOpeningStockFlow(
   open: boolean,
   onClose: () => void,
   onImported: () => void,
-): UseImportItemsFlowResult {
+): UseImportOpeningStockFlowResult {
   const { showToast } = useToast();
   const [state, setState] = useState<ImportState>({ status: 'idle' });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,7 +71,7 @@ export function useImportItemsFlow(
     file
       .text()
       .then((text) => {
-        const errors = validateHeaders(parseHeaderLine(text), ITEM_COLUMNS);
+        const errors = validateHeaders(parseHeaderLine(text), OPENING_STOCK_COLUMNS);
         if (errors.length > 0) {
           setState({ status: 'error', filename: file.name, errors });
         } else {
@@ -106,21 +92,21 @@ export function useImportItemsFlow(
     if (state.status !== 'ready' && state.status !== 'failed') return;
     const { filename, text } = state;
     setState({ status: 'importing', filename, text });
-    ipc.importData
-      .commit({ itemsCsv: text })
+    ipc.importOpeningStock
+      .commit({ openingStockCsv: text })
       .then((result) => {
-        const parts = [`${String(result.itemsAccepted)} added`];
-        if (result.itemsRejected > 0) parts.push(`${String(result.itemsRejected)} rejected`);
-        parts.push(`${String(result.itemsSkipped)} skipped`);
-        showToast({ variant: 'success', message: `Imported: ${parts.join(', ')}` });
+        showToast({
+          variant: 'success',
+          message: `Opening stock imported: ${String(result.accepted)} rows added`,
+        });
         onImported();
         onClose();
         setState({ status: 'idle' });
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Import failed';
+        const message = err instanceof Error ? err.message : 'Opening stock import failed';
         setState({ status: 'failed', filename, text, serverError: message });
-        showToast({ variant: 'error', message: 'Import failed — no data saved' });
+        showToast({ variant: 'error', message: 'Opening stock import failed' });
       });
   };
 

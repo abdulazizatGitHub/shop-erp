@@ -41,6 +41,140 @@
 
 ---
 
+## [2026-09-11] Session 52 — Import modal file chip dismiss button; Items/Opening Stock import split into separate buttons, modals, and IPC channels (COMPLETE)
+
+**Goal:** Fix 1 — give the import file chip a proper × dismiss button
+instead of a separate "Select different file" text link. Fix 2 — split
+the Items import modal (which still showed a confusing leftover
+"Opening Stock CSV — not yet part of this screen" card) into two fully
+separate flows: Import Items and Import Opening Stock, each its own
+button, modal, and backend.
+
+**Done:**
+
+- Dismiss button — `ImportFileChip.tsx` gained an `onDismiss?: () =>
+void` prop (an X icon, far right of the chip, hidden during
+  `importing` via a conditional prop spread rather than `undefined`,
+  since `exactOptionalPropertyTypes` requires the key be absent). The
+  old "Select different file" text link in `ImportFileState.tsx`
+  removed, not duplicated — `handleSelectDifferent` reused directly as
+  the dismiss handler. Committed separately as `4ea3369` (439/439 at
+  the time — this session started with a fresh BUG-7 ABI mismatch,
+  fixed the same known way each time before verifying).
+- P2-1-equivalent read-and-report for the split surfaced a real
+  contradiction between the brief and live code: `import:commit`
+  required `itemsCsv` (Zod `.min(1)`, non-optional) and had no branch
+  to serve an Opening-Stock-only request — the brief's proposed
+  `ipc.importData.commit({ openingStockCsv })` call would have failed
+  validation before the handler ran. Reported before writing any IPC
+  code; owner chose a dedicated channel pair over widening the Items
+  schema, matching the existing `supplierBalance`/`customerBalance`
+  precedent already in `channels.ts`.
+- F-1 — stripped the Opening Stock download card and its description
+  entirely out of `ImportItemsInstructions.tsx` (props, JSX, and the
+  now-unused `OPENING_STOCK_SAMPLE_HEADERS`/`ROW` constants in
+  `ImportItemsModal.tsx`); "Before you import" now reads: headers must
+  match exactly, duplicate item codes are skipped, import opening stock
+  separately after items are added.
+- F-2 backend — `ImportItemsInput.openingStockCsv` (already dead —
+  nothing had sent it since the Items flow became items-only) removed;
+  new `ImportOpeningStockInput` schema; `import.handler.ts`'s
+  `runImport` simplified to Items-only (dropped its unused
+  combined-sheets branch and the nullable `openingStock*` fields on
+  `ImportResult`, which no caller had ever read); new
+  `opening-stock-import.handler.ts` matching
+  `supplier-balance-import.handler.ts`'s single-purpose-result shape
+  but Option-B (content, not path/dialog). New
+  `opening-stock-import.handler.test.ts`, 7 tests, real temp SQLite DB
+  — seeds real items via `runImport` first (Opening Stock matches
+  against committed items), then proves commit inserts exactly
+  `accepted` real `stock_movement` rows (`movement_type = 'opening'`),
+  dry run inserts zero, report path is log-dir-only, and a
+  garbage-header CSV rejects. `npm run verify` 446→453. Also updated
+  the pre-existing `import.handler.test.ts`'s 4 call sites for
+  `runImport`'s narrowed (now 3-arg) signature.
+- F-2 frontend — extracted the six-state file-picker shape (`ImportState`
+  and header-parsing/validation helpers) out of `useImportItemsFlow.ts`
+  into a new shared `importCsvValidation.ts`, so the new
+  `useImportOpeningStockFlow.ts` reuses it instead of duplicating the
+  state machine a third time (`ImportFileChip`/`ImportFileState` were
+  already generic enough — only their type import needed retargeting).
+  New `ImportOpeningStockModal.tsx` + `ImportOpeningStockInstructions.tsx`
+  (single file card; bullets: items must already be imported, headers
+  must match exactly, item codes must match existing items exactly).
+- F-3 — `ItemsPage.tsx` header now reads Import Opening Stock
+  (secondary) → Import Items (secondary) → Add Item (primary),
+  least-common-action-first; both modals wired to the existing
+  `loadItems()` reload callback.
+
+**Verified:**
+
+- `npm run verify` — 439/439 after the dismiss-button fix; 453/453
+  after the split (446 baseline + 7 new opening-stock handler tests),
+  confirmed after every subtask (F-1, F-2 backend, F-2 frontend, F-3).
+- `npm run typecheck` — clean at every checkpoint, pasted.
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0, pasted, after F-1, F-2, and F-3.
+- `git diff --stat -- package.json package-lock.json` — empty, no new
+  npm dependency.
+- File-cap audit: every touched/created file in this session's own
+  scope is under 300 lines (largest new file is `useImportItemsFlow.ts`
+  at 143, down from 173 after the shared-helper extraction).
+  `preload.ts` (369) and `electron-api.d.ts` (397) were already over
+  cap before this session (Session 51) and only gained one channel's
+  worth of lines each — logged in PROJECT.md, not re-split (out of
+  scope).
+
+**Not done / deferred:** real running-window verification of both
+modals — sandbox Electron GUI launch remains broken in this environment
+(Session 48). Owner "what to click" instruction below instead.
+
+**Bugs found:** none in this session's own new code. The dead
+`ImportItemsInput.openingStockCsv` field and the never-populated
+`ImportResult.openingStock*` fields were both artifacts of Session 51's
+original combined-sheets design that this session's own split made
+obsolete — cleaned up as part of the split itself, not logged as a
+separate bug since nothing was ever broken by their presence (they were
+simply unused).
+
+**Decisions taken:** dedicated `import:openingStock:dryRun`/`commit`
+channel pair over widening `ImportItemsInput` (owner decision, matches
+existing supplier/customer balance precedent); shared
+`importCsvValidation.ts` extraction over a third copy of the state
+machine.
+
+**Blocked on:** owner's real-running-window visual check — see below.
+
+**Next session should:** get the owner's visual confirmation of both
+import flows, then continue the screen-by-screen redesign rotation or
+address whatever the owner raises from the click-through.
+
+**Owner visual check:**
+"The Items page should now have three buttons in the header: Import
+Opening Stock, Import Items, and Add Item. Click Import Items — the
+modal should show only the Items CSV download card, no mention of
+Opening Stock. Click Import Opening Stock — a separate modal should
+open for Opening Stock CSV only, with its own download card and
+instructions ('Items must already be imported...'). In either modal,
+select a file and confirm the chip now has an × button on the right —
+click it and confirm the chip disappears and the upload zone resets.
+Both modals should work independently of each other."
+
+**Checklist:**
+
+- [x] All verification checks passed (439/439 then 453/453 + both
+      builds clean, pasted after every subtask)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (§2.5)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met (both import flows are now
+      independently extensible)
+- [x] Any new bugs documented in PROJECT.md (none new — see Bugs found
+      above)
+- [x] Test suite passing (453/453)
+
+---
+
 ## [2026-09-10] Session 51 — Import Items modal: dry-run label fix + full Option B (renderer-side) import redesign (COMPLETE)
 
 **Goal:** Part 1 — remove the "Dry run" button from ImportItemsModal.tsx,

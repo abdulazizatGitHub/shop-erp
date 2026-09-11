@@ -22,6 +22,7 @@ import type {
   IssuePartsToJobInput,
   IssuePartsToJobResult,
   ImportItemsInput,
+  ImportOpeningStockInput,
   ItemDto,
   ItemGetPricesInput,
   ItemLookups,
@@ -93,6 +94,7 @@ import { channels } from './ipc/channels.js';
 import type { CreateCustomerResult } from './ipc/handlers/customer.handler.js';
 import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balance-import.handler.js';
 import type { ImportResult } from './ipc/handlers/import.handler.js';
+import type { OpeningStockImportResult } from './ipc/handlers/opening-stock-import.handler.js';
 import type { CreatePurchaseResult } from './ipc/handlers/purchase.handler.js';
 import type { CreateSupplierResult } from './ipc/handlers/supplier.handler.js';
 import type { CreateStaffResult } from './ipc/handlers/staff.handler.js';
@@ -289,6 +291,18 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.importData.dryRun, input) as Promise<ImportResult>,
     commit: (input: ImportItemsInput): Promise<ImportResult> =>
       ipcRenderer.invoke(channels.importData.commit, input) as Promise<ImportResult>,
+  },
+  importOpeningStock: {
+    dryRun: (input: ImportOpeningStockInput): Promise<OpeningStockImportResult> =>
+      ipcRenderer.invoke(
+        channels.importData.openingStockDryRun,
+        input,
+      ) as Promise<OpeningStockImportResult>,
+    commit: (input: ImportOpeningStockInput): Promise<OpeningStockImportResult> =>
+      ipcRenderer.invoke(
+        channels.importData.openingStockCommit,
+        input,
+      ) as Promise<OpeningStockImportResult>,
   },
   importSupplierBalance: {
     dryRun: (): Promise<SupplierBalanceImportResult | null> =>

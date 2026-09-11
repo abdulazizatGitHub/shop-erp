@@ -43,7 +43,7 @@ describe('runImport (Option B — receives CSV content directly, no file path)',
   it('valid itemsCsv, commit=true: parses, validates, and inserts real rows into the DB', async () => {
     const itemsCsv = readFileSync(itemsFixturePath, 'utf8');
 
-    const result = await runImport(deps, itemsCsv, null, true);
+    const result = await runImport(deps, itemsCsv, true);
 
     expect(result.itemsAccepted).toBeGreaterThan(0);
     expect(result.itemsReportPath).toBeTruthy();
@@ -59,7 +59,7 @@ describe('runImport (Option B — receives CSV content directly, no file path)',
   it('valid itemsCsv, commit=false (dry run): validates but inserts nothing', async () => {
     const itemsCsv = readFileSync(itemsFixturePath, 'utf8');
 
-    const result = await runImport(deps, itemsCsv, null, false);
+    const result = await runImport(deps, itemsCsv, false);
     expect(result.itemsAccepted).toBeGreaterThan(0);
 
     const db = openDatabase(dbPath);
@@ -73,7 +73,7 @@ describe('runImport (Option B — receives CSV content directly, no file path)',
   it('the report is written only to logDir, not next to a source file — there is no source path under Option B', async () => {
     const itemsCsv = readFileSync(itemsFixturePath, 'utf8');
 
-    const result = await runImport(deps, itemsCsv, null, true);
+    const result = await runImport(deps, itemsCsv, true);
 
     expect(result.itemsReportPath).toBe(result.itemsLogReportPath);
     expect(result.itemsReportPath.startsWith(deps.logDir)).toBe(true);
@@ -82,9 +82,7 @@ describe('runImport (Option B — receives CSV content directly, no file path)',
   it('a CSV with no recognizable header row (core-level failure) rejects, does not silently succeed', async () => {
     const garbageCsv = 'not,a,real,header\n1,2,3,4';
 
-    await expect(runImport(deps, garbageCsv, null, true)).rejects.toThrow(
-      /Could not find a header row/,
-    );
+    await expect(runImport(deps, garbageCsv, true)).rejects.toThrow(/Could not find a header row/);
   });
 });
 

@@ -1,16 +1,16 @@
 import { CheckCircle, Download, FileText } from 'lucide-react';
 import { downloadCsv } from '../../lib/downloadCsv.js';
 
-export interface ImportItemsInstructionsProps {
-  readonly itemColumns: readonly string[];
-  readonly itemSampleRow: readonly string[];
+export interface ImportOpeningStockInstructionsProps {
+  readonly columns: readonly string[];
+  readonly sampleRow: readonly string[];
 }
 
-/** Page 1 body of ImportItemsModal — sample-file download + the "before you import" checklist. */
-export function ImportItemsInstructions({
-  itemColumns,
-  itemSampleRow,
-}: ImportItemsInstructionsProps): React.JSX.Element {
+/** Page 1 body of ImportOpeningStockModal — sample-file download + the "before you import" checklist. */
+export function ImportOpeningStockInstructions({
+  columns,
+  sampleRow,
+}: ImportOpeningStockInstructionsProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -18,13 +18,13 @@ export function ImportItemsInstructions({
         <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-page px-4 py-3">
           <FileText size={20} strokeWidth={1.5} className="shrink-0 text-brand" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-ink">Items CSV</p>
-            <p className="text-xs text-ink-faint">Required — defines all item fields</p>
+            <p className="text-sm font-medium text-ink">Opening Stock CSV</p>
+            <p className="text-xs text-ink-faint">Defines initial stock quantities for each item</p>
           </div>
           <button
             type="button"
             onClick={() => {
-              downloadCsv('items-sample.csv', itemColumns, itemSampleRow);
+              downloadCsv('opening-stock-sample.csv', columns, sampleRow);
             }}
             className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-page"
           >
@@ -42,19 +42,19 @@ export function ImportItemsInstructions({
           <div className="flex items-start gap-2">
             <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
             <span className="text-xs text-ink-faint">
+              Items must already be imported before running this
+            </span>
+          </div>
+          <div className="flex items-start gap-2">
+            <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
+            <span className="text-xs text-ink-faint">
               Column headers must match exactly (case-sensitive)
             </span>
           </div>
           <div className="flex items-start gap-2">
             <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
             <span className="text-xs text-ink-faint">
-              Duplicate item codes will be skipped automatically
-            </span>
-          </div>
-          <div className="flex items-start gap-2">
-            <CheckCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-success" />
-            <span className="text-xs text-ink-faint">
-              Import opening stock separately after items are added
+              Each item code must match an existing item exactly
             </span>
           </div>
         </div>

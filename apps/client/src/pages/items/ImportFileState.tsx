@@ -1,6 +1,6 @@
 import { CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { ImportFileChip } from './ImportFileChip.js';
-import type { ImportState } from './useImportItemsFlow.js';
+import type { ImportState } from './importCsvValidation.js';
 
 export interface ImportFileStateProps {
   /** Every ImportState variant except 'idle' — the idle dashed-zone is rendered by the caller. */

@@ -85,6 +85,8 @@ export const channels = {
   importData: {
     dryRun: 'import:dryRun',
     commit: 'import:commit',
+    openingStockDryRun: 'import:openingStock:dryRun',
+    openingStockCommit: 'import:openingStock:commit',
     supplierBalanceDryRun: 'import:supplierBalance:dryRun',
     supplierBalanceCommit: 'import:supplierBalance:commit',
     customerBalanceDryRun: 'import:customerBalance:dryRun',

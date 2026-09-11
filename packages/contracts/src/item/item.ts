@@ -97,15 +97,22 @@ export const ItemTopSellingInput = z.object({
 export type ItemTopSellingInput = z.infer<typeof ItemTopSellingInput>;
 
 /**
- * Item import (Option B, 2026-09-10): the renderer reads the CSV file(s)
- * via the browser File API and sends content, not a path — the main
- * process no longer opens files itself via dialog.showOpenDialog.
+ * Item import (Option B, 2026-09-10): the renderer reads the CSV file via
+ * the browser File API and sends content, not a path — the main process
+ * no longer opens files itself via dialog.showOpenDialog. Opening Stock
+ * CSV import is a separate flow with its own channel/schema (Session 52,
+ * owner decision) — see ImportOpeningStockInput below.
  */
 export const ImportItemsInput = z.object({
   itemsCsv: z.string().min(1),
-  openingStockCsv: z.string().optional(),
 });
 export type ImportItemsInput = z.infer<typeof ImportItemsInput>;
+
+/** Opening Stock CSV import (Option B, Session 52) — its own channel, separate from ImportItemsInput. */
+export const ImportOpeningStockInput = z.object({
+  openingStockCsv: z.string().min(1),
+});
+export type ImportOpeningStockInput = z.infer<typeof ImportOpeningStockInput>;
 
 /** Reference-data options for populating the item form's dropdowns. */
 export interface ItemLookups {

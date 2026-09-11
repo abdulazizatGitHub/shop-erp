@@ -19,6 +19,7 @@ import { registerJobIssueHandlers } from './ipc/handlers/job-issue.handler.js';
 import { registerJobDeliveryHandlers } from './ipc/handlers/job-delivery.handler.js';
 import { registerCustodyHandlers } from './ipc/handlers/custody.handler.js';
 import { registerImportHandlers } from './ipc/handlers/import.handler.js';
+import { registerOpeningStockImportHandlers } from './ipc/handlers/opening-stock-import.handler.js';
 import { registerSupplierBalanceImportHandlers } from './ipc/handlers/supplier-balance-import.handler.js';
 import { registerCustomerBalanceImportHandlers } from './ipc/handlers/customer-balance-import.handler.js';
 import { registerBackupHandlers } from './ipc/handlers/backup.handler.js';
@@ -98,6 +99,7 @@ function registerIpcHandlers(dbPath: string): void {
   registerJobDeliveryHandlers({ dbPath, tenantId, deviceCode });
   registerCustodyHandlers({ dbPath, tenantId, deviceCode });
   registerImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
+  registerOpeningStockImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
   registerSupplierBalanceImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
   registerCustomerBalanceImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
   registerBackupHandlers({ dbPath, defaultBackupDir: resolveBackupDir() });

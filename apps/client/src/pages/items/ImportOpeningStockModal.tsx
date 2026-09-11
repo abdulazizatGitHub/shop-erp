@@ -1,33 +1,22 @@
 import { FileText } from 'lucide-react';
 import { Button, ImportModal } from '@shop/ui';
 import { ImportFileState } from './ImportFileState.js';
-import { ImportItemsInstructions } from './ImportItemsInstructions.js';
-import { ITEM_COLUMNS, useImportItemsFlow } from './useImportItemsFlow.js';
+import { ImportOpeningStockInstructions } from './ImportOpeningStockInstructions.js';
+import { OPENING_STOCK_COLUMNS, useImportOpeningStockFlow } from './useImportOpeningStockFlow.js';
 
-const ITEM_SAMPLE_ROW = [
+const OPENING_STOCK_SAMPLE_ROW = [
+  'CU-PIPE-01',
+  'Copper Pipe 10ft',
+  '2026-08-31',
+  '20',
+  '250',
   '',
-  'Gas R-134a',
-  '',
-  'Spare Parts',
-  '',
-  '',
-  '13.6 kg cylinder',
-  'Kg',
-  'Cylinder',
-  '13.6',
-  'Y',
-  'N',
-  '35000',
-  '4200',
-  '4000',
-  '5',
-  'Shelf A1',
-  '',
+  'Shelf C1',
   '',
   '',
 ];
 
-export interface ImportItemsModalProps {
+export interface ImportOpeningStockModalProps {
   readonly open: boolean;
   readonly onClose: () => void;
   /** Called once after a successful commit, so the caller can reload its item list. */
@@ -35,14 +24,15 @@ export interface ImportItemsModalProps {
 }
 
 /**
- * Option B redesign (2026-09-10): file picking/validation/state machine
- * live in useImportItemsFlow; this component is a thin render shell.
+ * Option B, Opening Stock (Session 52): separate from ImportItemsModal —
+ * own button, own modal, own IPC channel (owner decision). Same six-state
+ * file-picker shell as ImportItemsModal, driven by useImportOpeningStockFlow.
  */
-export function ImportItemsModal({
+export function ImportOpeningStockModal({
   open,
   onClose,
   onImported,
-}: ImportItemsModalProps): React.JSX.Element | null {
+}: ImportOpeningStockModalProps): React.JSX.Element | null {
   const {
     state,
     fileInputRef,
@@ -52,16 +42,19 @@ export function ImportItemsModal({
     handleFileChange,
     handleImportClick,
     handleModalClose,
-  } = useImportItemsFlow(open, onClose, onImported);
+  } = useImportOpeningStockFlow(open, onClose, onImported);
 
   return (
     <ImportModal
       open={open}
-      title="Import Items"
+      title="Import Opening Stock"
       onClose={handleModalClose}
       navDisabled={state.status === 'importing'}
       instructions={
-        <ImportItemsInstructions itemColumns={ITEM_COLUMNS} itemSampleRow={ITEM_SAMPLE_ROW} />
+        <ImportOpeningStockInstructions
+          columns={OPENING_STOCK_COLUMNS}
+          sampleRow={OPENING_STOCK_SAMPLE_ROW}
+        />
       }
     >
       <div className="flex flex-col gap-4">
@@ -76,7 +69,7 @@ export function ImportItemsModal({
         {state.status === 'idle' ? (
           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-brand/30 bg-surface-page px-6 py-10 text-center">
             <FileText size={40} strokeWidth={1.5} className="mb-3 text-brand/50" />
-            <p className="mb-1 text-sm font-medium text-ink">Select your Items CSV</p>
+            <p className="mb-1 text-sm font-medium text-ink">Select your Opening Stock CSV</p>
             <p className="mb-4 text-xs text-ink-faint">
               Column headers are checked as soon as you pick a file.
             </p>
