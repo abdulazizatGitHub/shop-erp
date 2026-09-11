@@ -5,14 +5,11 @@ import type { ImportState } from './useImportItemsFlow.js';
 export interface ImportFileStateProps {
   /** Every ImportState variant except 'idle' — the idle dashed-zone is rendered by the caller. */
   readonly state: Exclude<ImportState, { status: 'idle' }>;
-  readonly onSelectDifferent: () => void;
+  readonly onDismiss: () => void;
 }
 
-/** States B–F of ImportItemsModal — the file chip, "select different file" link, and any error block. */
-export function ImportFileState({
-  state,
-  onSelectDifferent,
-}: ImportFileStateProps): React.JSX.Element {
+/** States B–F of ImportItemsModal — the file chip (with its dismiss button) and any error block. */
+export function ImportFileState({ state, onDismiss }: ImportFileStateProps): React.JSX.Element {
   const subtitle =
     state.status === 'validating'
       ? 'Validating…'
@@ -37,17 +34,12 @@ export function ImportFileState({
 
   return (
     <div className="flex flex-col gap-3">
-      <ImportFileChip filename={state.filename} subtitle={subtitle} statusIcon={statusIcon} />
-
-      {state.status !== 'importing' && (
-        <button
-          type="button"
-          onClick={onSelectDifferent}
-          className="self-start text-xs text-brand hover:underline"
-        >
-          Select different file
-        </button>
-      )}
+      <ImportFileChip
+        filename={state.filename}
+        subtitle={subtitle}
+        statusIcon={statusIcon}
+        {...(state.status === 'importing' ? {} : { onDismiss })}
+      />
 
       {state.status === 'error' && (
         <div className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3">

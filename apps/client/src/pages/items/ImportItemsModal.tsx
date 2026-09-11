@@ -113,7 +113,7 @@ export function ImportItemsModal({
             </Button>
           </div>
         ) : (
-          <ImportFileState state={state} onSelectDifferent={handleSelectDifferent} />
+          <ImportFileState state={state} onDismiss={handleSelectDifferent} />
         )}
 
         <Button variant="primary" disabled={importDisabled} onClick={handleImportClick}>
