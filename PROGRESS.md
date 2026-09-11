@@ -41,6 +41,156 @@
 
 ---
 
+## [2026-09-11] Session 53 — Item code reformat to ITM-NNNN per ADR-0012 (reversal of BUG-X's 2026-08-30 "leave as-is" decision) (COMPLETE)
+
+**Goal:** Fix item codes still showing as `ITM-A-000001` (old
+device-coded format). Backend only, no renderer changes.
+
+**Real premise contradiction found before any code was written**: the
+brief's premise ("ADR-0012 was implemented for suppliers/purchases/
+payments but items were missed") was wrong — ADR-0012's own text
+explicitly excludes item codes, and `PROJECT.md` had a matching
+RESOLVED bug entry (BUG-X, 2026-08-30) recording the owner's own prior
+decision to leave item codes as-is, on the same exact symptom.
+Confirmed via live code that the exclusion was actually honored (0006
+never touches the `item` table; `item.repository.ts` still used the
+old `formatDocNumber` formatter). Stopped and reported per CLAUDE.md
+rule 5 rather than silently reversing a recorded decision; owner
+confirmed the decision has changed and to proceed.
+
+**A second correction found before writing the migration**: the
+brief's B-1 assumed `item_code` might be denormalized into other
+tables (`sale_line`, `stock_movement`, etc.) requiring a fan-out
+update — grepped and confirmed `item_code` is declared only on the
+`item` table (`0001_init.sql`, `UNIQUE (tenant_id, item_code)`); every
+other table references items by `item_id` (UUID FK). The brief's B-2
+step 3 (null `document_sequence.device_code` "to match how
+supplier/purchase sequences were fixed in 0006") was also wrong —
+queried the real dev DB and found every `document_sequence` row,
+including the already-ADR-0012-compliant ones (`sale`, `purchase`,
+`customer`, `supplier`), still has `device_code = 'A'`; 0006 never
+nulls that column anywhere, and ADR-0012 rule 4 says it should stay
+("remains... for future multi-device collision prevention"). Migration
+0013 therefore touches only `item.item_code` — no `document_sequence`
+change, since the item row's prefix (`ITM`) and `next_number` (`7`)
+were already correct. Both corrections shown to the owner with the
+exact live-data evidence before the migration file was written.
+
+**Done:**
+
+- New `packages/db/src/migrations/0013_item_code_reformat.sql` —
+  GLOB-guarded, idempotent reformat of `item.item_code` from
+  `ITM-DEVICE-NNNNNN` to `ITM-NNNN`, using 0006's exact proven pattern
+  (two UPDATEs, under/at-or-above 10000) rather than the brief's looser
+  suggested GLOB.
+- `item.repository.ts` — `formatDocNumber(ITEM_CODE_PREFIX,
+this.deviceCode, nextNumber)` → `formatDisplayDocNumber(ITEM_CODE_PREFIX,
+nextNumber)`, the same one-line change already made in
+  `sale.repository.ts` for ADR-0012. The `documentSequence` row
+  select/insert/update logic (still keyed by `deviceCode`) is
+  untouched — only the returned display string's shape changes.
+- `item.repository.test.ts` — 3 stale format assertions corrected
+  (`'ITM-A-000001'`→`'ITM-0001'`, `'ITM-A-000002'`→`'ITM-0002'`, one
+  test name), plus a new targeted test asserting
+  `/^ITM-\d{4,}$/` (would have caught the original bug). Grepped the
+  rest of `packages/db`/`apps/server`/`packages/core` for
+  `ITM-A-`/`ITM-0` first — every other `'ITM-...'` literal in other
+  test files (`job.repository.test.ts`, `job-part.repository.test.ts`,
+  `commission.repository.test.ts`, etc.) is an arbitrary raw-SQL
+  fixture string, not an assertion on the generator's format, so none
+  needed changing.
+- `migration-runner.test.ts` — the 4 pre-existing hardcoded
+  migration-file-list assertions updated to include `0013` (a routine,
+  mechanical consequence of adding any new migration, same as every
+  prior migration-adding session). Also added a new `describe('migration
+0013...)` block, mirroring 0006's own dedicated migration test
+  pattern exactly: migrates through 0012, seeds a real
+  `ITM-A-000006`-shaped row, runs `migrate()` again (applies only
+  0013), and asserts the exact reformatted value — plus a second test
+  proving a manually-entered code (`HAND-ENTERED-001`) is left
+  untouched (doesn't match the old two-hyphen/6-digit shape).
+- **Real-data verification, not just hand-calculation**: before
+  touching the repository or tests, ran migration 0013 against the
+  actual dev DB (`./data/shop-dev.db`, via `tsx` + the real
+  `migrate()` function — no npm script existed for this, so a
+  temporary repo-relative script was used and deleted immediately
+  after) at the owner's explicit request. Snapshotted item codes
+  before (`ITM-A-000001`..`ITM-A-000006`) and after (`ITM-0001`..
+  `ITM-0006`) via direct `better-sqlite3` queries — exact match to the
+  hand-calculation. Re-ran the migration a second time to confirm
+  idempotency (identical result, no error). The migration runner made
+  its own automatic pre-migrate backup (`data/backups/pre-migrate-
+2026-09-11T11-43-12-948Z.db`); a manual backup taken before running
+  was deleted afterward once the automatic one was confirmed present.
+- ADR-0012 and the `PROJECT.md` BUG-X entry both updated to record the
+  reversal explicitly (old decision text kept and marked superseded,
+  not deleted) — per CLAUDE.md rule 6, corrections are recorded, not
+  silently overwritten.
+
+**Verified:**
+
+- `npm run verify` — 453/453 baseline (no BUG-7 this session); 456/456
+  after all changes (3 new tests: 1 in `item.repository.test.ts`, 2 in
+  `migration-runner.test.ts`), confirmed after every subtask.
+- `npm run typecheck` — clean after B-3.
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both exit 0; client build confirms the renderer was genuinely
+  untouched (no renderer files in the diff).
+- Migration hand-verified against real data twice (see above) — the
+  CLAUDE.md §6 standard ("the query ran against a real database and
+  returned the expected rows"), not just read.
+- `git diff --stat -- package.json package-lock.json` — empty, no new
+  dependency (not that any was expected for a DB-only fix).
+
+**Not done / deferred:** none — this was a complete, scoped fix.
+
+**Bugs found:** none new. This session's own work fixed the original
+bug (item codes now match ADR-0012's format).
+
+**Decisions taken:** ADR-0012's item-code exclusion reversed (owner,
+2026-09-11); migration touches only the `item` table (no
+`document_sequence` change needed); followed 0006's exact GLOB pattern
+rather than the brief's looser suggested one.
+
+**Blocked on:** nothing.
+
+**Next session should:** get the owner's visual confirmation (see
+below), then continue whatever the owner prioritizes next — the
+screen-redesign rotation or another bug-fix pass.
+
+**Owner visual check:**
+"Open the Items tab. All existing item codes should now show as
+ITM-0001, ITM-0002, etc. — no letter between ITM and the number. Add a
+new item and confirm it gets the next code in sequence (ITM-0007, since
+6 items exist). Check that existing items still appear correctly in
+Sales when searching — the item codes in the sales search should also
+reflect the new format."
+
+**Checklist:**
+
+- [x] All verification checks passed (453/453 then 456/456 + both
+      builds clean, migration hand-verified against real data twice)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (BUG-X entry marked fixed;
+      §2.5 not touched — this was backend-only, no UI redesign work)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (456/456)
+
+**Note on file-size cap**: two pre-existing test files grew further
+over the 300-line cap this session — `item.repository.test.ts` (522
+lines before this session, 535 now) and `migration-runner.test.ts`
+(404 lines before this session, 497 now). Both were already over cap
+before this session touched them; the additions were small, targeted,
+and directly requested by this bug-fix's own scope (B-4/B-5 and the
+mechanical migration-list updates). Not re-split this session, per the
+same precedent as `preload.ts`/`electron-api.d.ts` in Sessions 51-52 —
+logged here rather than silently ignored, per CLAUDE.md §9. A future
+session should decide whether/how to split both.
+
+---
+
 ## [2026-09-11] Session 52 — Import modal file chip dismiss button; Items/Opening Stock import split into separate buttons, modals, and IPC channels (COMPLETE)
 
 **Goal:** Fix 1 — give the import file chip a proper × dismiss button

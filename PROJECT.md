@@ -2278,23 +2278,35 @@ Session 13 — a credit sale to a seeded customer posted the expected
 positive `party_ledger` row).
 `apps/client/src/pages/sales/SearchSelect.tsx`.
 
-### BUG-X: Item codes display as `ITM-A-000001` (old device-coded format) — MEDIUM, RESOLVED (decision: leave as-is)
+### BUG-X: Item codes display as `ITM-A-000001` (old device-coded format) — MEDIUM, RESOLVED (2026-09-11: reversed, now fixed)
 
 Found in: Phase 4, P4-1d real-hardware testing, 2026-08-30.
 Description: ADR-0012 (2026-08-28) reformatted `sale`/`customer`/
 `supplier`/`purchase`/`payment` document numbers to `PREFIX-NNNN`, but
-never covered item codes. Items still display as `ITM-A-000001`
+never covered item codes. Items still displayed as `ITM-A-000001`
 (device-coded, 6-digit padding) — the pre-ADR-0012 format everywhere
 else was cleaned up.
-Impact: Cosmetic inconsistency — item codes look visibly different
+Impact: Cosmetic inconsistency — item codes looked visibly different
 from every other document number in the system (receipts, invoices,
 customer/supplier codes). No money/stock correctness impact.
-Decision (owner, 2026-08-30): **leave item codes as-is, no migration.**
-ADR-0012 applies to customer-facing document numbers only. Item codes
-are internal catalogue references, not customer-facing document
-numbers, and were never in that ADR's scope. ADR-0012 amended with an
-explicit sentence recording this (see the ADR file itself).
-Status: RESOLVED — not a bug, a scope clarification. No code change.
+**Decision, 2026-08-30 (superseded): leave item codes as-is, no
+migration.** ADR-0012 was read as applying to customer-facing document
+numbers only.
+**Decision, 2026-09-11 (owner, reverses the above): item codes now
+follow ADR-0012's PREFIX-NNNN format too, for consistency with every
+other document number.** Fixed in migration
+`0013_item_code_reformat.sql` (reformats existing `item.item_code`
+rows; `item_code` is stored only on the `item` table — no other table
+denormalizes it, so no fan-out was needed) and
+`item.repository.ts` (now calls `formatDisplayDocNumber`, same as
+every other doc type). ADR-0012 updated to record the reversal, not
+silently overwritten — see the ADR file itself.
+Status: RESOLVED — fixed, 2026-09-11 (Session 53). `npm run verify`
+456/456; migration hand-verified against the real dev DB
+(`./data/shop-dev.db`): all 6 existing items went from
+`ITM-A-000001`..`ITM-A-000006` to `ITM-0001`..`ITM-0006`, confirmed
+idempotent on a second run, `document_sequence`'s `item`/`ITM` row
+needed no change (prefix and `next_number` were already correct).
 
 ### BUG-Y: Negative-stock confirmation is inline text with keyboard instructions, not a modal dialog — LOW, FIXED
 

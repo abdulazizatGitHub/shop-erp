@@ -108,7 +108,7 @@ function insertCancelledSaleLine(itemId: string, quantityMilli: number): void {
 }
 
 describe('KyselyItemRepository.createItem', () => {
-  it('auto-generates an item code when none is given, format ITM-A-000001', async () => {
+  it('auto-generates an item code when none is given, format ITM-0001', async () => {
     const result = await repo.createItem({
       itemCode: null,
       nameEn: 'Test Compressor',
@@ -119,7 +119,7 @@ describe('KyselyItemRepository.createItem', () => {
       retailPricePaisa: 500000,
     });
 
-    expect(result.itemCode).toBe('ITM-A-000001');
+    expect(result.itemCode).toBe('ITM-0001');
 
     const row = rawDb.prepare(`SELECT * FROM item WHERE id = ?`).get(result.id) as Record<
       string,
@@ -157,8 +157,22 @@ describe('KyselyItemRepository.createItem', () => {
       retailPricePaisa: 200,
     });
 
-    expect(first.itemCode).toBe('ITM-A-000001');
-    expect(second.itemCode).toBe('ITM-A-000002');
+    expect(first.itemCode).toBe('ITM-0001');
+    expect(second.itemCode).toBe('ITM-0002');
+  });
+
+  it('createItem generates item code in ITM-NNNN format (ADR-0012, 4+ digits, no device code segment)', async () => {
+    const result = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Format Check Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+
+    expect(result.itemCode).toMatch(/^ITM-\d{4,}$/);
   });
 
   it('respects an explicit item code and does not touch the sequence', async () => {
@@ -184,7 +198,7 @@ describe('KyselyItemRepository.createItem', () => {
       retailPricePaisa: 100,
     });
     // sequence must still start at 1 — explicit codes don't consume it
-    expect(next.itemCode).toBe('ITM-A-000001');
+    expect(next.itemCode).toBe('ITM-0001');
   });
 
   it('rejects a duplicate item code via the UNIQUE constraint', async () => {

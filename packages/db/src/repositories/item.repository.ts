@@ -1,5 +1,5 @@
 import { sql, type Kysely } from 'kysely';
-import { formatDocNumber, newId } from '@shop/shared';
+import { formatDisplayDocNumber, newId } from '@shop/shared';
 import type {
   ItemRecord,
   ItemRepositoryPort,
@@ -51,7 +51,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         .execute();
     }
 
-    return formatDocNumber(ITEM_CODE_PREFIX, this.deviceCode, nextNumber);
+    return formatDisplayDocNumber(ITEM_CODE_PREFIX, nextNumber);
   }
 
   async createItem(input: NewItemInput): Promise<NewItemResult> {

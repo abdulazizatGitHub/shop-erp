@@ -16,12 +16,18 @@ SUP — supplier
 RCP — receipt (payment received from customer)
 PMT — payment out (to supplier)
 PUR — purchase from supplier
+ITM — item (catalogue) code — added 2026-09-11, see reversal note below
 
-Item codes (item.code) are explicitly out of scope. This ADR covers
-customer-facing document numbers only. (Added 2026-08-30, resolving
-PROJECT.md BUG-X: item codes are internal catalogue references, not
-customer-facing document numbers, and remain in their existing
-`ITM-A-000001` format — no migration.)
+**Reversed 2026-09-11 (owner decision).** Item codes (item.code) were
+originally out of scope (added 2026-08-30, resolving PROJECT.md BUG-X:
+"item codes are internal catalogue references, not customer-facing
+document numbers"). The owner has since decided item codes should
+follow the same PREFIX-NNNN format as every other document number for
+consistency. `ITM` is now a covered prefix — see migration
+`0013_item_code_reformat.sql` and `packages/db/src/repositories/
+item.repository.ts` (uses `formatDisplayDocNumber`, same as every
+other doc type below). BUG-X in PROJECT.md is updated to reflect this
+reversal, not silently overwritten.
 
 ## Rules
 

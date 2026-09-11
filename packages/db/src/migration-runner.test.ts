@@ -40,6 +40,7 @@ describe('migrate', () => {
       '0010_job_additions.sql',
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
+      '0013_item_code_reformat.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
@@ -89,6 +90,7 @@ describe('migrate', () => {
       '0010_job_additions.sql',
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
+      '0013_item_code_reformat.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -114,6 +116,7 @@ describe('migrate', () => {
       { version: 10, name: '0010_job_additions.sql' },
       { version: 11, name: '0011_sale_line_item_optional.sql' },
       { version: 12, name: '0012_job_split_v2.sql' },
+      { version: 13, name: '0013_item_code_reformat.sql' },
     ]);
   });
 
@@ -184,6 +187,7 @@ describe('migrate', () => {
       '0010_job_additions.sql',
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
+      '0013_item_code_reformat.sql',
     ]);
 
     db = new Database(dbPath);
@@ -399,5 +403,95 @@ describe('migration 0009 — sale_line alt uom columns', () => {
     expect(saleUomId?.notnull).toBe(0);
     expect(saleToStockFactor).toBeDefined();
     expect(saleToStockFactor?.notnull).toBe(0);
+  });
+});
+
+describe('migration 0013 — item code reformat (ADR-0012 scope reversal)', () => {
+  // Migrates through 0012 first, seeds a row shaped like the pre-0013
+  // format, then runs migrate() again with the full directory so only
+  // 0013 applies — same pattern as the 0006 block above, proving the
+  // reformat runs against real pre-existing data.
+  function migrateThrough0012(): void {
+    const partialMigrationsDir = path.join(workDir, 'migrations-through-0012');
+    mkdirSync(partialMigrationsDir, { recursive: true });
+    for (const file of [
+      '0001_init.sql',
+      '0002_business_units.sql',
+      '0003_shared_overhead.sql',
+      '0004_party_ledger_bill_metadata.sql',
+      '0005_party_payment_terms.sql',
+      '0006_document_numbering_reformat.sql',
+      '0007_uom_conversion.sql',
+      '0008_item_alt_uom.sql',
+      '0009_sale_line_alt_uom.sql',
+      '0010_job_additions.sql',
+      '0011_sale_line_item_optional.sql',
+      '0012_job_split_v2.sql',
+    ]) {
+      copyFileSync(path.join(migrationsDir, file), path.join(partialMigrationsDir, file));
+    }
+    migrate(dbPath, partialMigrationsDir, backupDir);
+  }
+
+  const tenantId = '00000000-0000-0000-0000-000000000001';
+
+  it('reformats an existing item.item_code from ITM-DEVICE-NNNNNN to ITM-NNNN', () => {
+    migrateThrough0012();
+
+    const uomId = '00000000-0000-0000-0000-000000000030';
+    const itemId = '00000000-0000-0000-0000-000000000031';
+    const now = new Date().toISOString();
+
+    let db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, 'Test Tenant', ?, ?)`,
+    ).run(tenantId, now, now);
+    db.prepare(`INSERT INTO uom (id, tenant_id, name) VALUES (?, ?, 'Piece')`).run(uomId, tenantId);
+    db.prepare(
+      `INSERT INTO item (id, tenant_id, item_code, name_en, stock_uom_id, created_at, updated_at)
+       VALUES (?, ?, 'ITM-A-000006', 'Test Item', ?, ?, ?)`,
+    ).run(itemId, tenantId, uomId, now, now);
+    db.close();
+
+    // Arithmetic: sequence = 6, 6 < 10000 -> pad to 4 digits -> '0006'
+    // -> 'ITM-0006'.
+    migrate(dbPath, migrationsDir, backupDir);
+
+    db = new Database(dbPath);
+    const row = db.prepare(`SELECT item_code FROM item WHERE id = ?`).get(itemId) as {
+      item_code: string;
+    };
+    db.close();
+
+    expect(row.item_code).toBe('ITM-0006');
+  });
+
+  it('leaves a manually-entered item code untouched — only the old ITM-DEVICE-NNNNNN shape matches', () => {
+    migrateThrough0012();
+
+    const uomId = '00000000-0000-0000-0000-000000000032';
+    const itemId = '00000000-0000-0000-0000-000000000033';
+    const now = new Date().toISOString();
+
+    let db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, 'Test Tenant', ?, ?)`,
+    ).run(tenantId, now, now);
+    db.prepare(`INSERT INTO uom (id, tenant_id, name) VALUES (?, ?, 'Piece')`).run(uomId, tenantId);
+    db.prepare(
+      `INSERT INTO item (id, tenant_id, item_code, name_en, stock_uom_id, created_at, updated_at)
+       VALUES (?, ?, 'HAND-ENTERED-001', 'Manually Coded Item', ?, ?, ?)`,
+    ).run(itemId, tenantId, uomId, now, now);
+    db.close();
+
+    migrate(dbPath, migrationsDir, backupDir);
+
+    db = new Database(dbPath);
+    const row = db.prepare(`SELECT item_code FROM item WHERE id = ?`).get(itemId) as {
+      item_code: string;
+    };
+    db.close();
+
+    expect(row.item_code).toBe('HAND-ENTERED-001');
   });
 });
