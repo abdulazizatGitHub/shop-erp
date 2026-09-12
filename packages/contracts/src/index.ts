@@ -25,6 +25,7 @@ export {
   SupplierIdInput,
   SupplierDto,
   SupplierBalanceDto,
+  ImportSupplierBalanceInput,
 } from './party/supplier.js';
 
 export { StaffCreateInput, StaffDto } from './party/staff.js';

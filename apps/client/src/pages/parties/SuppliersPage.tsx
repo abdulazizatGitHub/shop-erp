@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { Alert, Button, PageHeader } from '@shop/ui';
+import { Button, PageHeader, useToast } from '@shop/ui';
 import { AddSupplierModal } from './AddSupplierModal.js';
 import { ImportSuppliersModal } from './ImportSuppliersModal.js';
 import { SupplierListView } from './SupplierListView.js';
 
 export function SuppliersPage(): React.JSX.Element {
+  const { showToast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   // Remounts SupplierListView after a create/import, forcing a fresh
   // load — simpler than lifting the supplier list up into this component.
   const [listVersion, setListVersion] = useState(0);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6 bg-surface-page">
       <PageHeader
         title="Suppliers"
         actions={
@@ -38,9 +38,12 @@ export function SuppliersPage(): React.JSX.Element {
         }
       />
 
-      {message && <Alert variant="success">{message}</Alert>}
-
-      <SupplierListView key={listVersion} />
+      {/* Plain div, not the shared Card primitive — same reasoning as
+          ItemsPage.tsx (Card has no className override, used by 11 other
+          screens). See PROJECT.md §2.5. */}
+      <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+        <SupplierListView key={listVersion} />
+      </div>
 
       <AddSupplierModal
         open={addOpen}
@@ -49,7 +52,7 @@ export function SuppliersPage(): React.JSX.Element {
         }}
         onCreated={(partyCode) => {
           setAddOpen(false);
-          setMessage(`Supplier created: ${partyCode}`);
+          showToast({ variant: 'success', message: `Supplier created: ${partyCode}` });
           setListVersion((v) => v + 1);
         }}
       />

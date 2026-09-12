@@ -20,6 +20,7 @@ import type {
   DeliverJobResult,
   ImportItemsInput,
   ImportOpeningStockInput,
+  ImportSupplierBalanceInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
   ItemDto,
@@ -346,8 +347,8 @@ export interface ElectronApi {
     readonly commit: (input: ImportOpeningStockInput) => Promise<OpeningStockImportResult>;
   };
   readonly importSupplierBalance: {
-    readonly dryRun: () => Promise<SupplierBalanceImportResult | null>;
-    readonly commit: () => Promise<SupplierBalanceImportResult | null>;
+    readonly dryRun: (input: ImportSupplierBalanceInput) => Promise<SupplierBalanceImportResult>;
+    readonly commit: (input: ImportSupplierBalanceInput) => Promise<SupplierBalanceImportResult>;
   };
   readonly importCustomerBalance: {
     readonly dryRun: () => Promise<CustomerBalanceImportResult | null>;

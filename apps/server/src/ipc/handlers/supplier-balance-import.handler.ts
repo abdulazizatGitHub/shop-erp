@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dialog, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
+import { ImportSupplierBalanceInput } from '@shop/contracts';
 import {
   formatSupplierBalanceImportReport,
   parseCsv,
@@ -25,21 +25,26 @@ export interface SupplierBalanceImportResult {
   readonly skipped: number;
 }
 
-async function runSupplierBalanceImport(
+/**
+ * Option B conversion (Suppliers redesign session): the renderer reads the
+ * CSV file via the browser File API and sends content directly — no more
+ * dialog.showOpenDialog/readFileSync. Matches
+ * opening-stock-import.handler.ts's runOpeningStockImport exactly.
+ */
+export async function runSupplierBalanceImport(
   deps: SupplierBalanceImportHandlerDeps,
-  filePath: string,
+  balancesCsv: string,
   commit: boolean,
 ): Promise<SupplierBalanceImportResult> {
   const db = openDatabase(deps.dbPath);
   try {
     const repo = new KyselyImportRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
 
-    const csvText = readFileSync(filePath, 'utf8');
-    const { rows } = parseCsv(csvText, SUPPLIER_BALANCE_COLUMNS);
+    const { rows } = parseCsv(balancesCsv, SUPPLIER_BALANCE_COLUMNS);
     const lookups = await repo.getSupplierBalanceLookups();
     const results = validateSupplierBalanceRows(rows, lookups);
     const reportPaths = writeReportDual(
-      filePath,
+      null,
       deps.logDir,
       formatSupplierBalanceImportReport(results),
       'supplier-balances',
@@ -62,25 +67,15 @@ async function runSupplierBalanceImport(
   }
 }
 
-async function pickFileAndRun(
-  deps: SupplierBalanceImportHandlerDeps,
-  commit: boolean,
-): Promise<SupplierBalanceImportResult | null> {
-  const picked = await dialog.showOpenDialog({
-    title: 'Select the Supplier Opening Balance CSV',
-    properties: ['openFile'],
-    filters: [{ name: 'CSV', extensions: ['csv'] }],
-  });
-  if (picked.canceled || picked.filePaths.length === 0) return null;
-
-  const [filePath] = picked.filePaths;
-  if (!filePath) return null;
-  return runSupplierBalanceImport(deps, filePath, commit);
-}
-
 export function registerSupplierBalanceImportHandlers(
   deps: SupplierBalanceImportHandlerDeps,
 ): void {
-  ipcMain.handle(channels.importData.supplierBalanceDryRun, () => pickFileAndRun(deps, false));
-  ipcMain.handle(channels.importData.supplierBalanceCommit, () => pickFileAndRun(deps, true));
+  ipcMain.handle(channels.importData.supplierBalanceDryRun, (_event, raw: unknown) => {
+    const input = ImportSupplierBalanceInput.parse(raw);
+    return runSupplierBalanceImport(deps, input.balancesCsv, false);
+  });
+  ipcMain.handle(channels.importData.supplierBalanceCommit, (_event, raw: unknown) => {
+    const input = ImportSupplierBalanceInput.parse(raw);
+    return runSupplierBalanceImport(deps, input.balancesCsv, true);
+  });
 }

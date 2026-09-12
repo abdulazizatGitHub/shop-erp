@@ -44,7 +44,7 @@ export function AddSupplierModal({
 
   function setField(
     field: keyof typeof EMPTY_FORM,
-  ): (e: React.ChangeEvent<HTMLInputElement>) => void {
+  ): (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void {
     return (e) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
     };
@@ -78,31 +78,53 @@ export function AddSupplierModal({
   }
 
   return (
-    <Modal open={open} title="Add supplier" onClose={onClose}>
-      <div className="flex flex-col gap-4">
+    <Modal open={open} title="Add supplier" onClose={onClose} size="wide">
+      <div className="flex flex-col gap-5">
         {error && <Alert variant="danger">{error}</Alert>}
+
         <div className="grid grid-cols-2 gap-4">
           <TextInput
-            label="Name"
+            label="Supplier name"
             autoFocus
             required
             value={form.name}
             onChange={setField('name')}
           />
-          <TextInput label="Shop Name" value={form.shopName} onChange={setField('shopName')} />
+          <TextInput
+            label="Shop / business name"
+            value={form.shopName}
+            onChange={setField('shopName')}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <TextInput label="Phone" required value={form.phone} onChange={setField('phone')} />
           <TextInput label="City / Area" value={form.cityArea} onChange={setField('cityArea')} />
-          <div className="col-span-2">
-            <TextInput
-              label="Payment Terms"
-              value={form.paymentTerms}
-              onChange={setField('paymentTerms')}
-            />
-          </div>
-          <div className="col-span-2">
-            <TextInput label="Notes" value={form.notes} onChange={setField('notes')} />
-          </div>
         </div>
+
+        <div className="border-t border-line" />
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+          Additional details
+        </p>
+
+        <div className="flex flex-col gap-1">
+          <TextInput
+            label="Payment Terms"
+            value={form.paymentTerms}
+            onChange={setField('paymentTerms')}
+          />
+          <p className="text-xs text-ink-faint">e.g. Net 30, Cash on delivery</p>
+        </div>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-muted">
+          Notes
+          <textarea
+            value={form.notes}
+            onChange={setField('notes')}
+            rows={3}
+            className="w-full resize-none rounded-md border border-line bg-surface px-3 py-2 text-base text-ink placeholder:text-ink-faint focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+          />
+        </label>
+
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Cancel

@@ -23,6 +23,7 @@ import type {
   IssuePartsToJobResult,
   ImportItemsInput,
   ImportOpeningStockInput,
+  ImportSupplierBalanceInput,
   ItemDto,
   ItemGetPricesInput,
   ItemLookups,
@@ -305,14 +306,16 @@ contextBridge.exposeInMainWorld('api', {
       ) as Promise<OpeningStockImportResult>,
   },
   importSupplierBalance: {
-    dryRun: (): Promise<SupplierBalanceImportResult | null> =>
+    dryRun: (input: ImportSupplierBalanceInput): Promise<SupplierBalanceImportResult> =>
       ipcRenderer.invoke(
         channels.importData.supplierBalanceDryRun,
-      ) as Promise<SupplierBalanceImportResult | null>,
-    commit: (): Promise<SupplierBalanceImportResult | null> =>
+        input,
+      ) as Promise<SupplierBalanceImportResult>,
+    commit: (input: ImportSupplierBalanceInput): Promise<SupplierBalanceImportResult> =>
       ipcRenderer.invoke(
         channels.importData.supplierBalanceCommit,
-      ) as Promise<SupplierBalanceImportResult | null>,
+        input,
+      ) as Promise<SupplierBalanceImportResult>,
   },
   importCustomerBalance: {
     dryRun: (): Promise<CustomerBalanceImportResult | null> =>

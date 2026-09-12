@@ -7,7 +7,7 @@ export interface MoneyDisplayProps {
   readonly paisaValue: number;
   readonly size?: MoneyDisplaySize;
   /** Overrides the automatic negative-is-red rule for a specific money direction. */
-  readonly tone?: 'in' | 'out' | 'due' | 'muted' | 'auto' | 'accent';
+  readonly tone?: 'in' | 'out' | 'due' | 'muted' | 'auto' | 'accent' | 'positive';
 }
 
 const SIZE_CLASSES: Record<MoneyDisplaySize, string> = {
@@ -43,9 +43,11 @@ export function MoneyDisplay({
             ? 'text-ink-faint'
             : tone === 'accent'
               ? 'text-pos-accent'
-              : paisa < 0
-                ? 'text-danger'
-                : 'text-ink';
+              : tone === 'positive'
+                ? 'text-success'
+                : paisa < 0
+                  ? 'text-danger'
+                  : 'text-ink';
   return (
     <span className={`font-mono tabular-nums ${SIZE_CLASSES[size]} ${colorClass}`}>{text}</span>
   );

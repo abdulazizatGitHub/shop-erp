@@ -289,6 +289,150 @@ this setting.
 
 ## 2.5 UI Redesign State
 
+**Update, 2026-09-12 (Session 54) — Suppliers screen redesign COMPLETE,
+brought to Items-screen design parity, including an Option B conversion
+of the supplier balance import.** Renderer-only except S-7's required
+backend change (flagged in advance, per the session's own scope rule:
+"renderer-only unless the supplier balance import handler uses
+dialog.showOpenDialog"). S-0 through S-8 all done, in order, 456/456
+(then 464/464 after S-7a's new tests) + clean client/server builds
+after every subtask.
+
+**Real path contradiction found before any code was written**: the
+session brief assumed `apps/client/src/pages/suppliers/`; the real
+Suppliers screen lives in `apps/client/src/pages/parties/`, alongside
+Customers (a shared-folder organization, not per-entity folders) —
+`SuppliersPage.tsx`, `AddSupplierModal.tsx`, `ImportSuppliersModal.tsx`,
+plus one file the brief didn't know about, `SupplierListView.tsx` (the
+table was already extracted out of the page component). Flagged and
+confirmed before any edit, per CLAUDE.md rule 6 (live code over spec).
+No file needed a pre-split — all four were well under 280 lines
+throughout.
+
+`SuppliersPage.tsx`/`SupplierListView.tsx` gained the same
+`bg-surface-page` + white dual-shadow `rounded-2xl` card as
+`ItemsPage.tsx` (plain `<div>`, not `Card` — same reasoning as Items:
+`Card` has no `className` override and is used by 11 other screens).
+`SuppliersPage.tsx`'s inline success `<Alert>` (the toast migration
+session explicitly scoped itself to Items only) was migrated to
+`useToast()` — the only call site was the post-create success message;
+no `setError` existed in this file (both modals own their own inline
+error `<Alert>`s, unchanged). Search bar gained the same
+`lucide-react` `Search` icon via `TextInput`'s `icon` prop as
+`ItemsPage.tsx` uses (no extra `className` on the icon — `TextInput`'s
+own wrapper already colors it `text-ink-faint`; adding one would have
+invented a pattern that doesn't exist in the reference file). Table
+gained the CODE monospace chip, `zebra={false} hover="neutral"` rows,
+uppercase/tracking-wide headers, and a `Building2`-icon `EmptyState` —
+all copied byte-for-byte from `ItemsPage.tsx`'s equivalents.
+
+**One shared-primitive gap found and fixed, owner-confirmed before
+touching it**: `MoneyDisplay` (`packages/ui/src/primitives/
+MoneyDisplay.tsx`) had no green/success tone — its `'auto'` branch only
+distinguished negative (`text-danger`) from non-negative (`text-ink`,
+not `text-success`). Grepped all 73 `<MoneyDisplay` call sites first
+(pasted in full to the owner) — none passed `tone="positive"`, so the
+new tone is purely additive with zero risk to any existing caller.
+Implemented as a genuine new branch (`tone === 'positive'` →
+`text-success`), not a change to `'auto'`'s existing behavior. The
+Balance column now computes `tone` as `positive`/`auto`/`'muted'` for
+positive/negative/zero respectively — negative deliberately uses the
+existing `'auto'` branch (which already renders `text-danger` for any
+negative value) rather than the brief's suggested `tone="out"`, since
+`'out'` actually renders `text-money-out` (a distinct semantic-money
+token, `#A32B1F` vs. `text-danger`'s `#B3261E` — kept deliberately
+separate per that file's own comment on money-vs-UI-state color
+vocabularies) — using it would not have matched the design spec's
+explicit "negative → text-danger" requirement. Flagged and corrected
+before finalizing, not left silently wrong. The owner separately
+confirmed this same `'positive'` tone will be reused on the Customers
+screen's own balance column in a future session — built once, correctly,
+here.
+
+`AddSupplierModal.tsx` gained `size="wide"`, the two-section
+grid layout (Name/Shop Name, then Phone/City Area, then a
+`border-t`+"Additional details" divider, then Payment Terms with a
+hint line, then Notes), landing at 144 lines (no split needed). Notes
+was confirmed live as a plain single-line `TextInput` (not a textarea)
+before any edit, per the brief's own instruction — converted to a
+`<textarea>` styled with `TextInput`'s actual live default-tone classes
+(`rounded-md border border-line focus:border-brand
+focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus`)
+rather than the brief's own suggested ring-based focus snippet, since
+matching `TextInput` visually means copying what `TextInput` actually
+renders, not inventing a new focus style. `setField`'s change-handler
+type was widened to accept `HTMLTextAreaElement` alongside
+`HTMLInputElement` (it only ever reads `e.target.value`, identical on
+both) rather than duplicating the setter. No validation/logic/IPC
+changes — `form.notes` stays a plain `string` in state exactly as
+before, `blankToNull` still runs only at submit.
+
+**Supplier balance import converted from server-side `dialog.showOpenDialog`
+to Option B**, confirmed necessary before any code was written (the
+handler read the file itself via `readFileSync` after a native file
+dialog; `ipc.importSupplierBalance.dryRun()`/`.commit()` took zero
+arguments). Followed `opening-stock-import.handler.ts`'s exact pattern
+(the newest, cleanest Option-B precedent in the codebase): new
+`ImportSupplierBalanceInput` Zod schema (`{ balancesCsv: z.string().min(1) }`)
+in `packages/contracts/src/party/supplier.ts` (exported from the
+package index alongside the other supplier contracts);
+`supplier-balance-import.handler.ts` rewritten to accept CSV content
+directly (`dialog.showOpenDialog`/`readFileSync` removed entirely, both
+channels now Zod-parse `{ balancesCsv }` from the renderer);
+`writeReportDual`'s `sourceFilePath` passed as `null` (log-dir copy
+only, same decision as the Items Option-B session — there is no source
+path under Option B). New `supplier-balance-import.handler.test.ts`
+(8 tests: real temp-SQLite-DB pattern exactly matching
+`opening-stock-import.handler.test.ts`, seeding a real "Metro
+Refrigeration Traders" supplier via `KyselyPartyRepository.createSupplier`
+first since the fixture CSV's matched row needs a real supplier to
+match against — same precedent as `packages/db/src/repositories/
+import.repository.test.ts`'s existing supplier-balance fixture setup —
+covering commit-inserts-rows, dry-run-inserts-nothing, bad-headers
+rejects, unmatched-supplier-name rejects not silently skips, the
+log-dir-only report path, plus 3 Zod schema tests). Preload
+(`apps/server/src/preload.ts`) and `apps/client/src/types/
+electron-api.d.ts` updated to the new input-taking, non-nullable-return
+signature (no more `| null` — there is no dialog to cancel).
+Client: new `useImportSupplierBalanceFlow.ts` (127 lines) and
+`ImportSupplierBalanceInstructions.tsx` (64 lines), mirroring
+`useImportOpeningStockFlow.ts`/`ImportOpeningStockInstructions.tsx`
+exactly (same six-state shape, reusing the existing
+`importCsvValidation.ts`/`ImportFileChip.tsx`/`ImportFileState.tsx`
+directly from `apps/client/src/pages/items/` rather than copying them —
+the brief's own instruction, since these were already extracted as
+shared, non-Items-specific helpers). `ImportSuppliersModal.tsx`
+rewritten as a 92-line thin shell (dropped from 128 lines despite
+gaining real client-side file handling, since the old file's own
+server-side Dry-run/Commit button JSX and result-paragraph were
+replaced by the shared six-state chip UI). Toast wording implemented
+exactly per brief: success `"Balances imported: N accepted, N
+skipped"`, error `"Import failed — no data saved"`. "Dry run" removed;
+"Commit import" is now "Import". The shared `ImportModal` shell's
+"— Step N of 2" title suffix was deliberately left unchanged (owner
+decision: consistency across all four import modals outweighs a
+cosmetic per-modal preference) — no `showStepSuffix` prop was added.
+
+`npm run verify`: 456/456 baseline (after fixing BUG-7's
+`better-sqlite3` NODE_MODULE_VERSION mismatch via
+`npm install better-sqlite3 --no-save`, `--no-save` confirmed via a
+clean `git status` afterward) throughout S-1–S-6; 464/464 from S-7a
+onward (8 new backend tests). `npm run build --workspace=@shop/client`
+and `--workspace=@shop/server` both clean after every subtask.
+**Not verified in a real running window** — sandbox Electron GUI
+launch remains broken in this environment (per Session 48); an
+explicit "what to click" owner verification instruction was handed
+over instead for both S-7's file-import flow and the final S-8
+close-out (see PROGRESS.md Session 54).
+**Two pre-existing over-cap files touched again, still not re-split,
+still out of scope**: `apps/server/src/preload.ts` (372 lines) and
+`apps/client/src/types/electron-api.d.ts` (398 lines) — both already
+over the 300-line cap before this session (every IPC channel in the
+app lives in each); this session added one channel's worth of type
+changes to each (no new channel — the existing supplier-balance
+channels just gained a typed input), consistent with their existing
+shape, not a new violation.
+
 **Update, 2026-09-11 (Session 52) — Items import and Opening Stock import
 split into fully separate buttons/modals/IPC channels; import modal file
 chip gained a dismiss button.** Two parts:

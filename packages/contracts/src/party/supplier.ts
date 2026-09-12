@@ -49,3 +49,15 @@ export const SupplierBalanceDto = z.object({
   balancePaisa: z.number().int(),
 });
 export type SupplierBalanceDto = z.infer<typeof SupplierBalanceDto>;
+
+/**
+ * Supplier balance import (Option B conversion, Suppliers redesign session):
+ * the renderer reads the CSV file via the browser File API and sends
+ * content, not a path — the main process no longer opens files itself via
+ * dialog.showOpenDialog. Same pattern as ImportItemsInput/
+ * ImportOpeningStockInput (packages/contracts/src/item/item.ts).
+ */
+export const ImportSupplierBalanceInput = z.object({
+  balancesCsv: z.string().min(1),
+});
+export type ImportSupplierBalanceInput = z.infer<typeof ImportSupplierBalanceInput>;

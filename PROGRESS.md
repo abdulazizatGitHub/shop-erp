@@ -41,6 +41,132 @@
 
 ---
 
+## [2026-09-12] Session 54 — Suppliers screen redesign, brought to Items-screen parity, incl. Option B import conversion (COMPLETE)
+
+**Goal:** Bring the Suppliers screen to the same design level as the
+Items screen (Sessions 49–53). Renderer-only unless the supplier
+balance import handler required a backend change.
+
+**Real path contradiction found before any code was written**: the
+session brief assumed `apps/client/src/pages/suppliers/`; the real
+Suppliers screen lives in `apps/client/src/pages/parties/` alongside
+Customers. Confirmed and reported per CLAUDE.md rule 6 before any edit;
+the owner confirmed `parties/` as canonical.
+
+**Done:**
+
+- `apps/client/src/pages/parties/SuppliersPage.tsx` — `bg-surface-page`
+  - white dual-shadow `rounded-2xl` card (matching `ItemsPage.tsx`
+    exactly); inline success `<Alert>` migrated to `useToast()` (the
+    toast session had scoped itself to Items only).
+- `apps/client/src/pages/parties/SupplierListView.tsx` — search bar
+  gained the `lucide-react` `Search` icon via `TextInput`'s `icon`
+  prop; table gained the CODE monospace chip, `zebra={false}
+hover="neutral"` rows, uppercase/tracking-wide headers, and a
+  `Building2`-icon `EmptyState` — all copied from `ItemsPage.tsx`.
+  Balance column now colors positive/negative/zero as
+  `text-success`/`text-danger`/`text-ink-faint` via a new
+  `MoneyDisplay` `tone="positive"` for the positive case and the
+  existing `tone="auto"` (unchanged) for negative.
+- `packages/ui/src/primitives/MoneyDisplay.tsx` — added `'positive'`
+  to the `tone` union (renders `text-success`), purely additive;
+  grepped all 73 `<MoneyDisplay` callers first, none passed
+  `tone="positive"`, confirmed zero regression. Deliberately did NOT
+  use `tone="out"` for the negative case as originally suggested —
+  `'out'` renders `text-money-out` (`#A32B1F`), a distinct semantic
+  token from `text-danger` (`#B3261E`) per the file's own
+  money-vs-UI-state color-vocabulary comment; `'auto'`'s existing
+  negative branch already renders `text-danger` correctly, so it was
+  reused unchanged.
+- `apps/client/src/pages/parties/AddSupplierModal.tsx` — `size="wide"`,
+  two-section grid layout (Name/Shop Name, Phone/City Area, a
+  divider, then Payment Terms with a hint line, then Notes). Notes
+  confirmed live as a plain `TextInput` (not a textarea) before
+  editing; converted to a `<textarea>` styled with `TextInput`'s
+  actual default-tone classes (not the brief's own suggested
+  ring-based focus snippet, since matching `TextInput` means copying
+  what it actually renders). `setField`'s handler type widened to
+  accept `HTMLTextAreaElement` alongside `HTMLInputElement`. No
+  logic/validation/IPC changes. 144 lines, no split needed.
+- Supplier balance import converted from server-side
+  `dialog.showOpenDialog` to Option B, confirmed necessary before any
+  code was written. New `ImportSupplierBalanceInput` Zod schema
+  (`packages/contracts/src/party/supplier.ts`, exported from the
+  package index). `supplier-balance-import.handler.ts` rewritten to
+  accept `{ balancesCsv }` directly (no more
+  `dialog.showOpenDialog`/`readFileSync`), following
+  `opening-stock-import.handler.ts`'s exact pattern;
+  `writeReportDual`'s `sourceFilePath` passed as `null` (log-dir copy
+  only). New `supplier-balance-import.handler.test.ts` (8 tests, real
+  temp-SQLite-DB pattern, seeding a real "Metro Refrigeration Traders"
+  supplier via `KyselyPartyRepository.createSupplier` first so the
+  fixture CSV's matched row resolves). Preload and
+  `electron-api.d.ts` updated to the new input-taking,
+  non-nullable-return signature.
+- New `apps/client/src/pages/parties/useImportSupplierBalanceFlow.ts`
+  (127 lines) and `ImportSupplierBalanceInstructions.tsx` (64 lines),
+  mirroring `useImportOpeningStockFlow.ts`/
+  `ImportOpeningStockInstructions.tsx` exactly — reusing
+  `importCsvValidation.ts`/`ImportFileChip.tsx`/`ImportFileState.tsx`
+  directly from `apps/client/src/pages/items/`, not copied.
+  `ImportSuppliersModal.tsx` rewritten as a 92-line thin shell. Toast
+  wording exactly per brief: success `"Balances imported: N accepted,
+N skipped"`, error `"Import failed — no data saved"`. "Dry run"
+  removed; "Commit import" renamed to "Import". The shared
+  `ImportModal` shell's "— Step N of 2" title suffix was deliberately
+  left unchanged (owner decision: cross-modal consistency over a
+  cosmetic preference).
+
+**Verified:**
+
+- `npm run verify` — 456/456 baseline (after fixing BUG-7's
+  `better-sqlite3` NODE_MODULE_VERSION mismatch via `npm install
+better-sqlite3 --no-save`, confirmed via a clean `git status`
+  afterward) throughout S-1–S-6; 464/464 from S-7a onward (8 new
+  backend tests), confirmed after every subtask.
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both exit 0, confirmed after every
+  subtask.
+- `wc -l` on every touched/created Suppliers file — all under 300
+  (largest: `AddSupplierModal.tsx` at 144 lines).
+
+**Not done / deferred:**
+
+- Not verified in a real running window — sandbox Electron GUI launch
+  remains broken in this environment (Session 48). An explicit "what
+  to click" owner verification instruction was handed over instead.
+- `apps/server/src/preload.ts` (372 lines) and `apps/client/src/types/
+electron-api.d.ts` (398 lines) remain over the 300-line cap —
+  pre-existing (Session 51/52), not re-split, out of this session's
+  scope; this session added one existing channel's worth of typed-input
+  changes to each, not a new channel.
+
+**Bugs found:** none new.
+
+**Decisions taken:** none beyond the two the owner resolved before
+S-2 started (MoneyDisplay `'positive'` tone addition; ImportModal
+step-suffix left unchanged).
+
+**Blocked on:** nothing.
+
+**Next session should:** get real running-window verification for the
+Suppliers screen (and the still-pending Items/Opening-Stock-import
+screens from Sessions 51–53) once the sandbox Electron GUI launch is
+fixed, or hand the owner's "what to click" instructions in the
+meantime.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none new
+- [x] Test suite passing (456/456 → 464/464)
+
+---
+
 ## [2026-09-11] Session 53 — Item code reformat to ITM-NNNN per ADR-0012 (reversal of BUG-X's 2026-08-30 "leave as-is" decision) (COMPLETE)
 
 **Goal:** Fix item codes still showing as `ITM-A-000001` (old

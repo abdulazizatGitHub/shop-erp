@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Building2, Search } from 'lucide-react';
 import type { SupplierDto } from '@shop/contracts';
 import {
   Alert,
@@ -66,37 +67,50 @@ export function SupplierListView(): React.JSX.Element {
       <TextInput
         variant="search"
         autoFocus
-        placeholder="Search suppliers by name, code, or phone"
+        icon={<Search size={16} strokeWidth={1.5} />}
+        placeholder="Search by name, code, or phone…"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
         }}
       />
       {suppliers.length === 0 ? (
-        <EmptyState message="No suppliers yet." hint="Add your first supplier using the Add tab." />
+        <div className="flex items-center justify-center py-16">
+          <EmptyState
+            icon={<Building2 size={40} strokeWidth={1.5} />}
+            message="No suppliers yet"
+            hint="Add your first supplier or import balances from a CSV file."
+          />
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState message={`No suppliers match "${query}".`} />
       ) : (
         <Table>
           <TableHead>
-            <TableRow>
-              <TableHeaderCell>Code</TableHeaderCell>
-              <TableHeaderCell>Name</TableHeaderCell>
-              <TableHeaderCell>Shop Name</TableHeaderCell>
-              <TableHeaderCell>Phone</TableHeaderCell>
-              <TableHeaderCell className="text-right">Balance</TableHeaderCell>
+            <TableRow zebra={false} hover="neutral">
+              <TableHeaderCell className="tracking-wide text-ink-faint">Code</TableHeaderCell>
+              <TableHeaderCell className="tracking-wide text-ink-faint">Name</TableHeaderCell>
+              <TableHeaderCell className="tracking-wide text-ink-faint">Shop Name</TableHeaderCell>
+              <TableHeaderCell className="tracking-wide text-ink-faint">Phone</TableHeaderCell>
+              <TableHeaderCell className="text-right tracking-wide text-ink-faint">
+                Balance
+              </TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.map((supplier) => {
               const supplierBalance = balances[supplier.id];
               return (
-                <TableRow key={supplier.id}>
-                  <TableCell>{supplier.partyCode}</TableCell>
-                  <TableCell>{supplier.name}</TableCell>
-                  <TableCell>{supplier.shopName ?? '—'}</TableCell>
-                  <TableCell>{supplier.phone ?? '—'}</TableCell>
-                  <TableCell className="text-right">
+                <TableRow key={supplier.id} zebra={false} hover="neutral">
+                  <TableCell className="py-3">
+                    <span className="inline-flex items-center rounded border border-line bg-surface-page px-2 py-0.5 font-mono text-xs text-ink-faint">
+                      {supplier.partyCode}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-3">{supplier.name}</TableCell>
+                  <TableCell className="py-3">{supplier.shopName ?? '—'}</TableCell>
+                  <TableCell className="py-3">{supplier.phone ?? '—'}</TableCell>
+                  <TableCell className="py-3 text-right">
                     {supplierBalance === undefined ? (
                       <Spinner size="sm" />
                     ) : supplierBalance === 'error' ? (
@@ -104,7 +118,9 @@ export function SupplierListView(): React.JSX.Element {
                     ) : (
                       <MoneyDisplay
                         paisaValue={supplierBalance}
-                        tone={supplierBalance === 0 ? 'muted' : 'auto'}
+                        tone={
+                          supplierBalance > 0 ? 'positive' : supplierBalance < 0 ? 'auto' : 'muted'
+                        }
                       />
                     )}
                   </TableCell>
