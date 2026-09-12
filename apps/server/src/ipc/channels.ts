@@ -57,6 +57,18 @@ export const channels = {
     list: 'purchase:list',
     printOrder: 'purchase:printOrder',
   },
+  purchaseOrder: {
+    create: 'purchaseOrder:create',
+    get: 'purchaseOrder:get',
+    list: 'purchaseOrder:list',
+    cancel: 'purchaseOrder:cancel',
+  },
+  grn: {
+    create: 'grn:create',
+    get: 'grn:get',
+    listForPO: 'grn:listForPO',
+    cancel: 'grn:cancel',
+  },
   payment: { receive: 'payment:receive', pay: 'payment:pay' },
   job: {
     create: 'job:create',

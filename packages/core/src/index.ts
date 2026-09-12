@@ -126,6 +126,41 @@ export type {
 } from './purchase/purchase.repository.port.js';
 
 export {
+  PurchaseOrderNotFoundError,
+  PurchaseOrderAlreadyCancelledError,
+  PurchaseOrderHasGrnsError,
+} from './purchase-order/errors.js';
+export type {
+  PurchaseOrderStatus,
+  PurchaseOrderRepositoryPort,
+  NewPurchaseOrderLineInput,
+  NewPurchaseOrderInput,
+  NewPurchaseOrderResult,
+  PurchaseOrderLineRecord,
+  PurchaseOrderRecord,
+  PurchaseOrderSummary,
+} from './purchase-order/purchase-order.repository.port.js';
+
+export {
+  GrnNotFoundError,
+  GrnAlreadyCancelledError,
+  PurchaseOrderCancelledError,
+  InvalidGrnLineError,
+  MissingSupplierForCreditError,
+} from './grn/errors.js';
+export type {
+  GrnPaymentMode,
+  GrnStatus,
+  GrnRepositoryPort,
+  NewGrnLineInput,
+  NewGrnInput,
+  NewGrnResult,
+  GrnLineRecord,
+  GrnRecord,
+  GrnSummary,
+} from './grn/grn.repository.port.js';
+
+export {
   resolvePricePaisa,
   computeLineTotalPaisa,
   isCreditLimitExceeded,

@@ -41,6 +41,143 @@
 
 ---
 
+## [2026-09-12] Session 55 — Phase 9: Purchase Orders + Goods Receipt Notes, BACKEND COMPLETE
+
+**Goal:** Split the one-step `purchase` flow into a two-stage Purchase
+Order → Goods Receipt Note flow (backend only, per explicit session
+scope — no UI this session).
+
+**Done:**
+
+- `packages/db/src/migrations/0014_purchase_order_grn.sql` — 5 new
+  tables (`purchase_order`, `purchase_order_line`, `grn`, `grn_line`,
+  `item_price_history`) + 2 new `document_sequence` rows (PO/GRN). No
+  `CHECK` constraints, matching project convention.
+- `packages/db/src/kysely-schema.ts` — 5 new table interfaces + `Database`
+  entries, plain `number` columns matching all 30 existing tables (not
+  the brief's own draft `ColumnType<number,number,number>`).
+- `packages/core/src/purchase-order/` and `packages/core/src/grn/` — port
+  interfaces + typed domain error classes (`PurchaseOrderNotFoundError`,
+  `PurchaseOrderAlreadyCancelledError`, `PurchaseOrderHasGrnsError`,
+  `GrnNotFoundError`, `GrnAlreadyCancelledError`,
+  `PurchaseOrderCancelledError`, `InvalidGrnLineError`,
+  `MissingSupplierForCreditError`) — new code uses typed errors from the
+  start, unlike `purchase.repository.ts`'s existing plain-`Error` gap
+  (not backfilled, out of scope).
+- `packages/db/src/repositories/purchase-order.repository.ts` +
+  `grn.repository.ts` — the latter is the phase's most critical file:
+  one transaction validates the PO/line/supplier rules, posts
+  `stock_movement`, updates `item.last_purchase_cost`/`avg_cost` +
+  `item_price` (retail/wholesale) with a full `item_price_history` audit
+  trail wherever a value actually changes, updates
+  `purchase_order_line.quantity_received_milli` and recomputes
+  `purchase_order.status`, and posts the supplier `party_ledger` row for
+  credit receipts. `cancel()` reverses stock/ledger via new rows (never
+  UPDATE/DELETE on the append-only tables) but deliberately never rolls
+  back `item_price_history`/`item.last_purchase_cost` — a cancellation
+  is the record that a price change was voided, not a reason to erase
+  it. Both repositories follow `purchase.repository.ts`'s exact
+  `withRetry(() => db.transaction().execute(...))` pattern — load-bearing
+  for BUG-15's doc-number-collision safety, not a style choice.
+- `apps/server/src/ipc/handlers/purchase-order.handler.ts` +
+  `grn.handler.ts`, new channels in `channels.ts`
+  (`purchaseOrder.{create,get,list,cancel}`,
+  `grn.{create,get,listForPO,cancel}`), new Zod contracts in
+  `packages/contracts/src/purchase-order/` and `packages/contracts/src/grn/`,
+  registered in `main.ts`.
+- `apps/server/src/preload.ts` + `apps/client/src/types/electron-api.d.ts`
+  — full exposure, including client-side mirror interfaces (`client`
+  can't import `@shop/core`) for `PurchaseOrderRecord`/`GrnRecord`/etc.,
+  matching the existing `JobSplitRecord` precedent.
+- `packages/db/src/repositories/purchase-order.repository.test.ts` (5
+  tests) and `grn.repository.test.ts` (10 tests) — real temp-SQLite-DB,
+  no mocks, every money/stock assertion hand-calculated in a comment.
+- `packages/db/src/migration-runner.test.ts` — `applied` array and the
+  table-count assertion (44 → 49, verified via a real `.tables` query,
+  not assumed) updated for migration 0014.
+- `docs/phases/PHASE_9.md` — full phase doc with Decisions (D1–D6),
+  the one bug self-caught before it shipped, and verification detail.
+- `PROJECT.md` — BUG-16 status updated (structurally addressed by
+  `grn.supplier_bill_ref`, UI field still missing), "GRN and batch
+  tracking workflow" future-feature entry updated to backend-in-progress,
+  Phase 9 row added to the phase status table, top status header updated.
+
+**Verified:**
+
+- Pre-session baseline: `git log --oneline -10` confirmed HEAD at
+  `4f2d887`; `npm run verify` 464/464; `SELECT doc_no, status,
+payment_mode FROM purchase` confirmed PUR-0001 (cash, confirmed) and
+  PUR-0002 (credit, confirmed) — both untouched throughout the session.
+- Migration 0014 applied to the real dev DB via `npm run db:migrate`
+  (automatic pre-migrate backup written); `.tables` confirmed all 5 new
+  tables present (49 total); `document_sequence` confirmed exactly 2 new
+  rows (PO/1, GRN/1); `purchase` confirmed unchanged after.
+- `npx tsc --noEmit` and `npx eslint --max-warnings=0` run clean after
+  every file added, not just once at the end.
+- 5 new purchase-order tests + 10 new GRN tests, all passing on first
+  real run against a real temp SQLite DB — including the UoM-conversion
+  hand calculation (`3,500,000 × 1000 / 13,600 = 257,352.94… →
+257,353`), reused verbatim from `purchase.repository.test.ts`'s own
+  fixture and numbers, and test case 1's two independent
+  purchase-cost/retail `item_price_history` conditions asserted with
+  separate queries per explicit instruction.
+- `npm run verify`: 464/464 → 479/479 (typecheck + lint + test, exit 0).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server`: both clean.
+
+**Not done / deferred:**
+
+- No UI screens — explicitly out of scope this session, per the brief.
+- CSV bulk import for GRN, batch/lot tracking — explicitly out of scope
+  (owner decision on batch tracking specifically).
+- No changes to the existing `purchase`/`purchase_line` tables, or to any
+  existing purchase/sale/payment IPC handler.
+- `avg_cost`/`last_purchase_cost` remain a last-purchase-cost overwrite,
+  not a true weighted average — same known limitation the existing
+  purchase flow already has (docs/phases/PHASE_2.md), now shared by GRN
+  too. Not addressed this phase.
+- No permission enforcement on the new handlers — consistent with every
+  other handler in the codebase (BUG-ADR9, still open, deferred in
+  Phase 8).
+
+**Bugs found:** None in existing code. One self-caught bug in this
+session's own new code, fixed before any test was written against it
+(see `docs/phases/PHASE_9.md` §4 Decision D4 / §5) — not logged as a
+PROJECT.md Known Bug since it never shipped.
+
+**Decisions taken:** See `docs/phases/PHASE_9.md` §4, Decisions D1–D6 —
+most load-bearing: `price_level` matched by `name` not `code` (D1,
+owner-confirmed after a real schema discrepancy was found and reported
+rather than guessed at); `grn_line.unit_cost_paisa` is per-purchase-unit,
+converted via the existing `computeCostPerStockUnitPaisa` (D2); credit
+GRN ledger totals always recomputed from the converted per-stock-unit
+rate × received quantity, accepting a documented 1-paisa rounding drift
+for UoM-converting items (D3, owner-confirmed); "no lines received"
+always resolves `purchase_order.status` to `'sent'`, including after a
+GRN cancellation reverts a fully/partially received PO back to zero (D4,
+self-caught fix); Zod contracts use `.nullable()` not the brief's own
+`.optional()`, matching the already-written port types exactly (D6).
+
+**Blocked on:** nothing.
+
+**Next session should:** Build the Purchase Order and GRN UI screens on
+top of this backend. Start by reading `docs/phases/PHASE_9.md` §8 "Notes
+for next phase" for the exact IPC surface, DTO shapes, and the
+BUG-16/avg_cost caveats a UI session needs to know about before
+designing the screens.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none — see Bugs found above)
+- [x] Test suite passing (479/479)
+
+---
+
 ## [2026-09-12] Session 54 — Suppliers screen redesign, brought to Items-screen parity, incl. Option B import conversion (COMPLETE)
 
 **Goal:** Bring the Suppliers screen to the same design level as the

@@ -12,6 +12,8 @@ import { registerAdvanceHandlers } from './ipc/handlers/advance.handler.js';
 import { registerExpenseHandlers } from './ipc/handlers/expense.handler.js';
 import { registerCashSessionHandlers } from './ipc/handlers/cash-session.handler.js';
 import { registerPurchaseHandlers } from './ipc/handlers/purchase.handler.js';
+import { registerPurchaseOrderHandlers } from './ipc/handlers/purchase-order.handler.js';
+import { registerGrnHandlers } from './ipc/handlers/grn.handler.js';
 import { registerSaleHandlers } from './ipc/handlers/sale.handler.js';
 import { registerPaymentHandlers } from './ipc/handlers/payment.handler.js';
 import { registerJobHandlers } from './ipc/handlers/job.handler.js';
@@ -92,6 +94,8 @@ function registerIpcHandlers(dbPath: string): void {
   registerExpenseHandlers({ dbPath, tenantId, deviceCode });
   registerCashSessionHandlers({ dbPath, tenantId, deviceCode });
   registerPurchaseHandlers({ dbPath, tenantId, deviceCode });
+  registerPurchaseOrderHandlers({ dbPath, tenantId, deviceCode });
+  registerGrnHandlers({ dbPath, tenantId, deviceCode });
   registerSaleHandlers({ dbPath, tenantId, deviceCode });
   registerPaymentHandlers({ dbPath, tenantId, deviceCode });
   registerJobHandlers({ dbPath, tenantId, deviceCode });

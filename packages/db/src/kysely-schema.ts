@@ -515,6 +515,74 @@ export interface AttendanceTable {
   businessUnitId: string | null;
 }
 
+/** See 0014_purchase_order_grn.sql. Phase 9. No prices, no stock/ledger impact. */
+export interface PurchaseOrderTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  supplierPartyId: string | null;
+  supplierNote: string | null;
+  orderDate: string;
+  expectedDelivery: string | null;
+  notes: string | null;
+  status: string; // draft | sent | partially_received | fully_received | cancelled
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** See 0014_purchase_order_grn.sql. Phase 9. */
+export interface PurchaseOrderLineTable {
+  id: string;
+  tenantId: string;
+  purchaseOrderId: string;
+  itemId: string;
+  quantityOrderedMilli: number;
+  quantityReceivedMilli: number;
+  notes: string | null;
+}
+
+/** See 0014_purchase_order_grn.sql. Phase 9. Stock and party_ledger post here, not on purchase_order. */
+export interface GrnTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  purchaseOrderId: string;
+  supplierPartyId: string | null;
+  supplierBillRef: string | null;
+  grnDate: string;
+  paymentMode: string; // cash | credit
+  status: string; // confirmed | cancelled
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** See 0014_purchase_order_grn.sql. Phase 9. purchaseOrderLineId null = unplanned receipt. */
+export interface GrnLineTable {
+  id: string;
+  tenantId: string;
+  grnId: string;
+  purchaseOrderLineId: string | null;
+  itemId: string;
+  quantityReceivedMilli: number;
+  unitCostPaisa: number;
+  sellingPricePaisa: number;
+  wholesalePricePaisa: number | null;
+}
+
+/** See 0014_purchase_order_grn.sql. Phase 9. Permanent, never rolled back by a GRN cancellation. */
+export interface ItemPriceHistoryTable {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  priceType: string; // purchase_cost | retail | wholesale
+  oldValuePaisa: number;
+  newValuePaisa: number;
+  changedAt: string;
+  sourceType: string; // 'grn'
+  sourceId: string;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -548,4 +616,9 @@ export interface Database {
   expenseCategory: ExpenseCategoryTable;
   expense: ExpenseTable;
   cashSession: CashSessionTable;
+  purchaseOrder: PurchaseOrderTable;
+  purchaseOrderLine: PurchaseOrderLineTable;
+  grn: GrnTable;
+  grnLine: GrnLineTable;
+  itemPriceHistory: ItemPriceHistoryTable;
 }

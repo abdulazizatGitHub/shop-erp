@@ -7,7 +7,9 @@ import type {
   CreateItemInput,
   CreateJobInput,
   CreatePaymentInput,
+  CreateGrnInput,
   CreatePurchaseInput,
+  CreatePurchaseOrderInput,
   CreateSaleInput,
   CreateSupplierInput,
   CustodyReconciliationResult,
@@ -18,6 +20,8 @@ import type {
   DailySalesReportRowDto,
   DeliverJobInput,
   DeliverJobResult,
+  GrnIdInput,
+  GrnListForPurchaseOrderInput,
   ImportItemsInput,
   ImportOpeningStockInput,
   ImportSupplierBalanceInput,
@@ -39,6 +43,7 @@ import type {
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
+  PurchaseOrderIdInput,
   PartyAnyDto,
   PartySearchAnyInput,
   ReceivablesAgingRowDto,
@@ -141,6 +146,76 @@ export interface TechnicianCustodyRecord {
   readonly qtyHeldMilli: number;
   readonly lastMovement: string | null;
   readonly warehouseId: string;
+}
+
+/** Mirrors @shop/core's PurchaseOrderLineRecord. */
+export interface PurchaseOrderLineRecord {
+  readonly id: string;
+  readonly itemId: string;
+  readonly quantityOrderedMilli: number;
+  readonly quantityReceivedMilli: number;
+  readonly notes: string | null;
+}
+
+/** Mirrors @shop/core's PurchaseOrderRecord. */
+export interface PurchaseOrderRecord {
+  readonly id: string;
+  readonly docNo: string;
+  readonly supplierPartyId: string | null;
+  readonly supplierNote: string | null;
+  readonly orderDate: string;
+  readonly expectedDelivery: string | null;
+  readonly notes: string | null;
+  readonly status: string;
+  readonly lines: readonly PurchaseOrderLineRecord[];
+}
+
+/** Mirrors @shop/core's PurchaseOrderSummary. */
+export interface PurchaseOrderSummary {
+  readonly id: string;
+  readonly docNo: string;
+  readonly supplierName: string | null;
+  readonly orderDate: string;
+  readonly status: string;
+  readonly lineCount: number;
+  readonly totalOrderedMilli: number;
+  readonly totalReceivedMilli: number;
+}
+
+/** Mirrors @shop/core's GrnLineRecord. */
+export interface GrnLineRecord {
+  readonly id: string;
+  readonly purchaseOrderLineId: string | null;
+  readonly itemId: string;
+  readonly quantityReceivedMilli: number;
+  readonly unitCostPaisa: number;
+  readonly sellingPricePaisa: number;
+  readonly wholesalePricePaisa: number | null;
+}
+
+/** Mirrors @shop/core's GrnRecord. */
+export interface GrnRecord {
+  readonly id: string;
+  readonly docNo: string;
+  readonly purchaseOrderId: string;
+  readonly supplierPartyId: string | null;
+  readonly supplierBillRef: string | null;
+  readonly grnDate: string;
+  readonly paymentMode: string;
+  readonly status: string;
+  readonly notes: string | null;
+  readonly lines: readonly GrnLineRecord[];
+}
+
+/** Mirrors @shop/core's GrnSummary. */
+export interface GrnSummary {
+  readonly id: string;
+  readonly docNo: string;
+  readonly grnDate: string;
+  readonly paymentMode: string;
+  readonly status: string;
+  readonly lineCount: number;
+  readonly totalReceivedMilli: number;
 }
 
 /** Mirrors @shop/db's BusinessUnitOption. */
@@ -298,6 +373,18 @@ export interface ElectronApi {
     readonly cancel: (input: PurchaseIdInput) => Promise<void>;
     readonly list: (input: PurchaseListInput) => Promise<readonly PurchaseListRowDto[]>;
     readonly printOrder: (purchaseId: string) => Promise<PurchasePrintOutcome>;
+  };
+  readonly purchaseOrder: {
+    readonly create: (input: CreatePurchaseOrderInput) => Promise<{ id: string; docNo: string }>;
+    readonly get: (input: PurchaseOrderIdInput) => Promise<PurchaseOrderRecord | null>;
+    readonly list: () => Promise<readonly PurchaseOrderSummary[]>;
+    readonly cancel: (input: PurchaseOrderIdInput) => Promise<void>;
+  };
+  readonly grn: {
+    readonly create: (input: CreateGrnInput) => Promise<{ id: string; docNo: string }>;
+    readonly get: (input: GrnIdInput) => Promise<GrnRecord | null>;
+    readonly listForPO: (input: GrnListForPurchaseOrderInput) => Promise<readonly GrnSummary[]>;
+    readonly cancel: (input: GrnIdInput) => Promise<void>;
   };
   readonly sale: {
     readonly create: (input: CreateSaleInput) => Promise<CreateSaleAndPrintResult>;

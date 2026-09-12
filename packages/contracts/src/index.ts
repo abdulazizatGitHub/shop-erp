@@ -106,6 +106,28 @@ export {
 } from './purchase/purchase.js';
 
 export {
+  PurchaseOrderLineInput,
+  CreatePurchaseOrderInput,
+  PurchaseOrderIdInput,
+  PurchaseOrderStatus,
+  PurchaseOrderLineDto,
+  PurchaseOrderDto,
+  PurchaseOrderSummaryDto,
+} from './purchase-order/purchase-order.js';
+
+export {
+  GrnLineInput,
+  CreateGrnInput,
+  GrnIdInput,
+  GrnListForPurchaseOrderInput,
+  GrnPaymentMode,
+  GrnStatus,
+  GrnLineDto,
+  GrnDto,
+  GrnSummaryDto,
+} from './grn/grn.js';
+
+export {
   SetReceiptPaperSizeInput,
   SetShopNameInput,
   SetDiscountApplyWalkinInput,

@@ -3,7 +3,28 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-09 (Session 46)
+**Last updated:** 2026-09-12 (Phase 9 session)
+**Update, 2026-09-12 — Phase 9 (Purchase Orders + GRN) BACKEND COMPLETE.**
+P9-1 through P9-13 all done: migration `0014_purchase_order_grn.sql` (5
+new tables — `purchase_order`, `purchase_order_line`, `grn`, `grn_line`,
+`item_price_history` — plus 2 new `document_sequence` rows), core-layer
+ports + typed domain errors for both new modules, `purchase-order.
+repository.ts` + `grn.repository.ts` (the latter being the phase's most
+critical file — one transaction posts stock, updates item cost/price
+with a full `item_price_history` audit trail, updates PO running totals
+and status, and posts the supplier `party_ledger` entry for credit
+receipts), IPC handlers + Zod contracts + channel registration for both
+modules, and full preload/`electron-api.d.ts` exposure. `npm run verify`
+464/464 → 479/479 (15 new tests, every money/stock assertion
+hand-calculated, including the UoM-conversion cost math — Rs 35,000/
+cylinder → 257,353 paisa/kg — reused verbatim from Phase 2's own fixture
+and numbers). One real schema discrepancy found and resolved before
+writing any code (`price_level` has no `code` column — matched by `name`
+instead, owner-confirmed) and one bug caught in this session's own new
+code before it shipped (a purchase-order status-recompute edge case on
+GRN cancellation) — see `docs/phases/PHASE_9.md` §4/§5 for both. **No UI
+this session** — Purchase Order / GRN screens are explicitly out of
+scope, the next session's task once this backend is reviewed.
 **Current phase:** Phase 8 — Bug-fix & hardening (P8-0 through P8-7 all
 DONE — P8-1/BUG-ADR9 explicitly deferred by owner decision, everything
 else fixed and verified, including a real running-window click-through
@@ -261,9 +282,13 @@ this setting.
 - **GRN and batch tracking workflow** — requested 2026-09-01 during
   Phase 4.5 close-out. Staff records goods receipt against a purchase
   order, generates a batch number, links the stock movement to that
-  batch. Requires new schema: `purchase_order`, `grn`, `batch` tables —
-  a real business-logic/schema change, out of scope for a UI-only
-  phase. Planned for Phase 8, after go-live.
+  batch. **Backend IN PROGRESS (Phase 9, 2026-09-12)**: `purchase_order`
+  and `grn` tables built (migration 0014), full repository + IPC layer
+  complete and tested (479/479, 15 new tests) — see
+  `docs/phases/PHASE_9.md`. Batch/lot tracking (the third table this
+  entry originally scoped) was explicitly dropped by owner decision, not
+  built. **Not yet DONE**: no UI screens exist for either PO or GRN —
+  that's the next session on this feature.
 - **Purchase entry as a modal** — requested 2026-09-01, same session.
   The Purchases screen's entry form is inline (matches the Sales
   screen's pattern, per P4.5-5's explicit layout instruction); a modal
@@ -1359,6 +1384,7 @@ for any new icon need in apps/client going forward.
 | 8 (D)  | Discount presets (owner-configured, replaces free-form entry) | ✅ D-1–D-4 all DONE — Settings "Discount presets" card, combined `settings:getDiscountConfig` IPC, checkout dropdowns replace Session 44's free-form inputs; Session 44's "Discount defaults" card removed entirely (owner-directed, zero grep hits after removal); `useSaleFlow.ts`/`SettingsPage.tsx` both split under cap first; real-running-window-verified, zero bugs found                                                                                                                                                                        | Session 45 (2026-09-09). 428/428 tests. See `PROGRESS.md` Session 45                                                                  |
 | 8 (E)  | POS card grid — top-selling items, stock badges, queue strip  | ✅ E-1–E-5 all DONE — `item:search`/new `item:topSelling` carry `stockOnHandMilli` (scalar-subquery, all-warehouses-summed, corrected from the brief's row-duplicating literal JOIN); sale screen's left panel is now a product-card grid (falls back to all-items when no sales exist yet) with the held-sale queue moved from the topbar to a strip at the bottom; `ItemResultRow.tsx`/`HeldSalesPopover.tsx` deleted, superseded; real-running-window-verified against real dev-DB fixtures, zero bugs found (BUG-23 logged, pre-existing, not fixed) | Session 46 (2026-09-09). 434/434 tests. See `PROGRESS.md` Session 46                                                                  |
 | 8 (F)  | POS layout v2 — cart to right panel, new checkout modal       | ✅ P1–P7 all DONE — cart moved left→right panel (reversing Session 46), new `CheckoutModal.tsx` (+`CheckoutOrderSummary`/`CheckoutPaymentMethod`), F10 threaded through an approved `useSaleFlow.ts` edit; BUG-24 found+fixed and re-confirmed on the owner's own machine (Session 48) after this sandbox's Electron GUI stopped launching mid-Session-47; fully closed                                                                                                                                                                                  | Sessions 47–48 (2026-09-09). 434/434 tests. See `PROGRESS.md` Sessions 47/48                                                          |
+| 9      | Purchase Orders + Goods Receipt Notes (GRN) — backend only    | ⏳ BACKEND COMPLETE, P9-1–P9-13 all done — migration 0014 (5 new tables), core ports + typed errors, both repositories, IPC handlers/channels/Zod contracts, preload+electron-api.d.ts exposure, 15 new hand-verified tests including the UoM-conversion cost calculation reused verbatim from Phase 2. No UI screens built — explicitly out of scope, next session's task                                                                                                                                                                               | P9-1–P9-13 (2026-09-12). 479/479 tests. See `docs/phases/PHASE_9.md`                                                                  |
 
 ---
 
@@ -2147,9 +2173,11 @@ later. Money and stock are still correct — this is a usability gap, not
 a correctness bug.
 Fix: Add Bill Reference / Due Date / Bill Notes / Supplier Invoice No.
 fields to `PurchasePage.tsx`'s form, at minimum for the credit path.
-Status: UNFIXED — not in PG-D's stated field list; a deliberate
-scope-narrowing this session, not an oversight discovered afterward. See
-`docs/phases/PHASE_2G.md` §5/§8.
+Status: GRN table structurally addresses this — grn.supplier_bill_ref
+exists as a proper column from migration 0014. The old Purchase screen
+UI field is still missing. This bug stays open until the UI session
+either adds the field to the legacy purchase form or migrates users
+fully to the GRN flow.
 
 ### BUG-17: `job.update` / `job.returnPart` / `job.addAccessory` do not exist — deliberate stubs, LOW
 

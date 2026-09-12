@@ -41,12 +41,13 @@ describe('migrate', () => {
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
+      '0014_purchase_order_grn.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 44 tables and 11 views — the 43-table baseline (P0-8 + uom_conversion), +1 for job_accessory (0010); 0011 rebuilds sale_line in place (net zero) and 0012 rebuilds v_job_split in place (net zero)', () => {
+  it('applies exactly 49 tables and 11 views — the 44-table baseline (through 0013), +5 for purchase_order/purchase_order_line/grn/grn_line/item_price_history (0014); 0013 reformats item.item_code in place (net zero)', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -55,7 +56,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(44);
+    expect(tables).toHaveLength(49);
     expect(views).toHaveLength(11);
   });
 
@@ -91,6 +92,7 @@ describe('migrate', () => {
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
+      '0014_purchase_order_grn.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -117,6 +119,7 @@ describe('migrate', () => {
       { version: 11, name: '0011_sale_line_item_optional.sql' },
       { version: 12, name: '0012_job_split_v2.sql' },
       { version: 13, name: '0013_item_code_reformat.sql' },
+      { version: 14, name: '0014_purchase_order_grn.sql' },
     ]);
   });
 
@@ -188,6 +191,7 @@ describe('migrate', () => {
       '0011_sale_line_item_optional.sql',
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
+      '0014_purchase_order_grn.sql',
     ]);
 
     db = new Database(dbPath);

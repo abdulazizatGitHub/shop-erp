@@ -8,7 +8,9 @@ import type {
   CreateItemInput,
   CreateJobInput,
   CreatePaymentInput,
+  CreateGrnInput,
   CreatePurchaseInput,
+  CreatePurchaseOrderInput,
   CreateSaleInput,
   CreateSupplierInput,
   CustodyReconciliationResult,
@@ -19,6 +21,8 @@ import type {
   DailySalesReportRowDto,
   DeliverJobInput,
   DeliverJobResult,
+  GrnIdInput,
+  GrnListForPurchaseOrderInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
   ImportItemsInput,
@@ -42,6 +46,7 @@ import type {
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
+  PurchaseOrderIdInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
   SaleSearchInput,
@@ -79,8 +84,12 @@ import type {
   WageMonthRowDto,
 } from '@shop/contracts';
 import type {
+  GrnRecord,
+  GrnSummary,
   JobPartRecord,
   JobSplitRecord,
+  PurchaseOrderRecord,
+  PurchaseOrderSummary,
   SaleRecord,
   TechnicianCustodyRecord,
 } from '@shop/core';
@@ -97,6 +106,8 @@ import type { CustomerBalanceImportResult } from './ipc/handlers/customer-balanc
 import type { ImportResult } from './ipc/handlers/import.handler.js';
 import type { OpeningStockImportResult } from './ipc/handlers/opening-stock-import.handler.js';
 import type { CreatePurchaseResult } from './ipc/handlers/purchase.handler.js';
+import type { CreatePurchaseOrderResult } from './ipc/handlers/purchase-order.handler.js';
+import type { CreateGrnResult } from './ipc/handlers/grn.handler.js';
 import type { CreateSupplierResult } from './ipc/handlers/supplier.handler.js';
 import type { CreateStaffResult } from './ipc/handlers/staff.handler.js';
 import type { SupplierBalanceImportResult } from './ipc/handlers/supplier-balance-import.handler.js';
@@ -201,6 +212,29 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.purchase.printOrder, {
         id: purchaseId,
       }) as Promise<PurchasePrintOutcome>,
+  },
+  purchaseOrder: {
+    create: (input: CreatePurchaseOrderInput): Promise<CreatePurchaseOrderResult> =>
+      ipcRenderer.invoke(
+        channels.purchaseOrder.create,
+        input,
+      ) as Promise<CreatePurchaseOrderResult>,
+    get: (input: PurchaseOrderIdInput): Promise<PurchaseOrderRecord | null> =>
+      ipcRenderer.invoke(channels.purchaseOrder.get, input) as Promise<PurchaseOrderRecord | null>,
+    list: (): Promise<readonly PurchaseOrderSummary[]> =>
+      ipcRenderer.invoke(channels.purchaseOrder.list) as Promise<readonly PurchaseOrderSummary[]>,
+    cancel: (input: PurchaseOrderIdInput): Promise<void> =>
+      ipcRenderer.invoke(channels.purchaseOrder.cancel, input) as Promise<void>,
+  },
+  grn: {
+    create: (input: CreateGrnInput): Promise<CreateGrnResult> =>
+      ipcRenderer.invoke(channels.grn.create, input) as Promise<CreateGrnResult>,
+    get: (input: GrnIdInput): Promise<GrnRecord | null> =>
+      ipcRenderer.invoke(channels.grn.get, input) as Promise<GrnRecord | null>,
+    listForPO: (input: GrnListForPurchaseOrderInput): Promise<readonly GrnSummary[]> =>
+      ipcRenderer.invoke(channels.grn.listForPO, input) as Promise<readonly GrnSummary[]>,
+    cancel: (input: GrnIdInput): Promise<void> =>
+      ipcRenderer.invoke(channels.grn.cancel, input) as Promise<void>,
   },
   sale: {
     create: (input: CreateSaleInput): Promise<CreateSaleAndPrintResult> =>
