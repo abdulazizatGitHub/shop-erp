@@ -3,7 +3,81 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-12 (Phase 9 session)
+**Last updated:** 2026-09-13 (Phase 9-UI session)
+**Update, 2026-09-13 — Phase 9-UI (Purchase Orders + GRN screens) COMPLETE.**
+P9U-0 through P9U-9 all done: the old one-step Purchases screen
+(`PurchasePage.tsx`/`PurchaseListTable.tsx`) removed entirely from the
+UI (backend `purchase.repository.ts`/handlers untouched, read-only
+historical data per the phase's own scope), replaced by a new
+`apps/client/src/pages/purchase-orders/` module — Purchase Orders list
+(status pills, ordered/received via `QuantityDisplay`), a two-step New
+PO modal (qty-only lines, no price), a PO detail view (lines with
+remaining-quantity highlighting, GRNs section), a two-step New GRN
+modal (pre-filled PO lines + "add unplanned line", Rupees-to-paisa
+conversion done exactly once in the submit handler via the existing
+`Money.fromRupees`, inline + submit-time "cannot exceed remaining
+quantity" validation sharing one validator function), and a GRN detail
+view (Cancel GRN with the required stock/ledger-reversal warning copy).
+Sidebar's "Purchases" (Alt+4) became "Purchase Orders", same slot, same
+icon. Item price history (S6): new additive `item:priceHistory` channel
+(owner-approved before writing any code), `price-history.repository.ts`
+(new file — `item.repository.ts` was already at 301 lines, at/over the
+300-line cap, so per instruction the query went in its own file; the
+handler itself went into the existing `item.handler.ts`, 110 lines,
+under the 260-line threshold), and a "History" button/modal on
+`ItemsPage.tsx` showing old price struck through beside the new price.
+**BUG-16 (purchase entry UI omits bill reference) is now CLOSED** — the
+old Purchase screen it described no longer exists, and the GRN modal
+collects `supplierBillRef` directly.
+Three live-code discrepancies from the session brief were found and
+resolved (rule 6 — live code over spec), not guessed past: (1)
+`packages/ui` is lint-forbidden from importing `@shop/contracts`
+(`eslint.config.js:78-87`), so `PurchaseOrderStatusBadge`/`GrnStatusBadge`
+live in `apps/client/src/components/shared/` instead, matching
+`BusinessUnitPill.tsx`'s existing precedent; (2) `PurchaseOrderLineRecord`/
+`GrnLineRecord` carry no `itemName` field, only `itemId` — names are
+resolved client-side against `ipc.item.search({query:'',categoryId:null})`,
+the same full-item-list pattern `ItemsPage.tsx` already uses; (3)
+`purchaseOrder:list` unconditionally filters `status != 'cancelled'`
+server-side with no parameter to include them
+(`purchase-order.repository.ts:210`) — the brief's "Show cancelled"
+toggle was skipped as there is nothing for it to show; would need a
+backend change, logged below as a future-feature note, not built.
+**Sandbox environment note**: the Electron GUI cannot launch in this
+sandbox (`ELECTRON_RUN_AS_NODE=1` forces the `electron` binary to run
+as plain Node — confirmed via a real crash trace, not assumed; same
+class of finding as every session since Session 48). Owner chose, when
+asked, to verify P9U-6/P9U-7's money/stock correctness via a throwaway
+Node/tsx script driving the real `purchase-order.repository.ts`/
+`grn.repository.ts` directly against `data/shop-dev.db` (deleted after
+use, confirmed via `git status`) rather than a UI click-through —
+every value hand-calculated and matched exactly (5 pieces × Rs 5,000 →
+`stock_movement.quantity` 5000, `unit_cost` 500000 paisa; credit ledger
+`party_ledger.amount` -2,500,000 paisa; cancellation posted exact
+opposite-sign reversing rows, `+5000`/`+2,500,000`). All other screens
+verified via `npm run typecheck`/`lint`/`build` (both `--workspace=@shop/client`
+and `--workspace=@shop/server`) and `npm run verify` (479/479) after
+every sub-task — real click-through instructions handed to the owner
+at session close (see `docs/phases/PHASE_9.md` §9).
+**One incident, self-caused and self-fixed, not a pre-existing bug**:
+an early attempt to launch the Electron GUI ran `electron-rebuild -f -w
+better-sqlite3`, silently swapping the workspace's `better-sqlite3`
+native binary from the Node ABI (127) to the Electron ABI (130) and
+breaking all 84 test files with a `NODE_MODULE_VERSION` mismatch —
+same class of issue as the historical BUG-7. Fixed the same way
+(`npm install better-sqlite3 --no-save` at the repo root, then `npm
+rebuild better-sqlite3` inside `packages/db` for its own nested copy),
+confirmed back to 479/479, confirmed via `git status` that no tracked
+file changed. Not logged as a new numbered bug since it never reached
+a committed state and was caught/fixed within the same session before
+any verification was reported as passing.
+**Future feature note, not built this session**: a "show cancelled
+purchase orders" view would need `purchaseOrder:list` to accept an
+optional include-cancelled parameter — currently hard-filtered out in
+SQL. No phase assigned.
+
+---
+
 **Update, 2026-09-12 — Phase 9 (Purchase Orders + GRN) BACKEND COMPLETE.**
 P9-1 through P9-13 all done: migration `0014_purchase_order_grn.sql` (5
 new tables — `purchase_order`, `purchase_order_line`, `grn`, `grn_line`,
@@ -282,18 +356,22 @@ this setting.
 - **GRN and batch tracking workflow** — requested 2026-09-01 during
   Phase 4.5 close-out. Staff records goods receipt against a purchase
   order, generates a batch number, links the stock movement to that
-  batch. **Backend IN PROGRESS (Phase 9, 2026-09-12)**: `purchase_order`
-  and `grn` tables built (migration 0014), full repository + IPC layer
-  complete and tested (479/479, 15 new tests) — see
-  `docs/phases/PHASE_9.md`. Batch/lot tracking (the third table this
-  entry originally scoped) was explicitly dropped by owner decision, not
-  built. **Not yet DONE**: no UI screens exist for either PO or GRN —
-  that's the next session on this feature.
+  batch. **DONE (backend Phase 9, 2026-09-12; UI Phase 9-UI, 2026-09-13)**:
+  `purchase_order`/`grn` tables (migration 0014), full repository + IPC
+  layer (479/479, 15 tests) and the full screen set — Purchase Orders
+  list, New PO modal, PO detail, New GRN modal, GRN detail, item price
+  history — all shipped this session. See `docs/phases/PHASE_9.md`.
+  Batch/lot tracking (the third table this entry originally scoped) was
+  explicitly dropped by owner decision, not built. **Still open**: a
+  "show cancelled POs" toggle would need `purchaseOrder:list` to accept
+  an include-cancelled parameter (currently hard-filtered in SQL) — no
+  phase assigned.
 - **Purchase entry as a modal** — requested 2026-09-01, same session.
   The Purchases screen's entry form is inline (matches the Sales
   screen's pattern, per P4.5-5's explicit layout instruction); a modal
-  variant was raised as a possible future alternative. Deferred pending
-  feedback from real use — no phase assigned.
+  variant was raised as a possible future alternative. Superseded —
+  the Purchases screen itself was replaced by the Purchase Order/GRN
+  flow this session, both of which are already modal-based.
 - **Low stock warnings** — requested 2026-09-01. A `reorder_point`
   field on the `item` table, with dashboard alerts when stock is at or
   below it. Requires a schema migration — out of scope for a UI-only
@@ -2157,7 +2235,7 @@ describes (see `docs/phases/PHASE_2.md` §5d). Do not treat that as
 evidence this bug is safe to ignore elsewhere — §5d's finding is
 specific to that code's statement ordering, not a general exemption.
 
-### BUG-16: Purchase entry UI omits bill reference/due date/bill notes — credit purchases post party_ledger rows with no bill metadata — LOW
+### BUG-16: Purchase entry UI omits bill reference/due date/bill notes — credit purchases post party_ledger rows with no bill metadata — LOW — CLOSED
 
 Found in: Phase 2G, 2026-08-28
 Description: `CreatePurchaseInput` (`packages/contracts/src/purchase/purchase.ts`)
@@ -2173,11 +2251,12 @@ later. Money and stock are still correct — this is a usability gap, not
 a correctness bug.
 Fix: Add Bill Reference / Due Date / Bill Notes / Supplier Invoice No.
 fields to `PurchasePage.tsx`'s form, at minimum for the credit path.
-Status: GRN table structurally addresses this — grn.supplier_bill_ref
-exists as a proper column from migration 0014. The old Purchase screen
-UI field is still missing. This bug stays open until the UI session
-either adds the field to the legacy purchase form or migrates users
-fully to the GRN flow.
+Status: CLOSED, 2026-09-13 (Phase 9-UI session). The old Purchase
+screen this bug described no longer exists — `PurchasePage.tsx` was
+removed entirely and replaced by the Purchase Order + GRN flow. The
+new GRN modal (`NewGrnModal.tsx`/`NewGrnStep1.tsx`) collects
+`supplierBillRef` directly and passes it through to
+`grn.supplier_bill_ref`.
 
 ### BUG-17: `job.update` / `job.returnPart` / `job.addAccessory` do not exist — deliberate stubs, LOW
 

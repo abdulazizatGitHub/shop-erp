@@ -41,6 +41,170 @@
 
 ---
 
+## [2026-09-13] Session 56 — Phase 9-UI: Purchase Orders + GRN screens, COMPLETE
+
+**Goal:** Build the Purchase Order and GRN UI screens on top of Phase 9's
+backend (Session 55): a Purchase Orders list, New PO modal, PO detail,
+New GRN modal, GRN detail, and item price history — replacing the old
+one-step Purchases screen entirely.
+
+**Done:**
+
+- `apps/client/src/pages/purchases/{PurchasePage,PurchaseListTable}.tsx` —
+  deleted (backend `purchase.repository.ts`/handlers untouched, confirmed
+  no other caller first via grep).
+- `apps/client/src/app/{App.tsx,navigation.ts,NavIcon.tsx}` — "Purchases"
+  (Alt+4) replaced by "Purchase Orders", same slot/icon, new placeholder
+  page swapped in before the real screen existed (P9U-1), then swapped
+  for the real one (P9U-3).
+- `apps/client/src/components/shared/{PurchaseOrderStatusBadge,GrnStatusBadge}.tsx` —
+  new, wrapping the existing `Badge` primitive (placed here, not
+  `packages/ui`, since that package is lint-forbidden from importing
+  `@shop/contracts` — `eslint.config.js:78-87`).
+- `apps/client/src/pages/purchase-orders/` — new module, 15 files:
+  `PurchaseOrdersPage`/`PurchaseOrdersTable` (S1), `NewPoModal` +
+  `NewPoStep1`/`NewPoStep2`/`PoLinesTable` (S2), `PurchaseOrderDetailModal`
+  - `PoDetailLinesTable`/`PoDetailGrnsSection` (S3), `NewGrnModal` +
+    `NewGrnStep1`/`GrnLinesEditor`/`GrnLineRow`/`grnLines.ts` (S4),
+    `GrnDetailModal` + `GrnDetailLinesTable` (S5). Every file under the
+    300-line cap (two initial drafts — `NewPoModal.tsx` at 339,
+    `GrnLinesEditor` combined — were split before verification, not after).
+- `apps/client/src/pages/items/ItemPriceHistoryModal.tsx` + a new
+  "History" button/column on `ItemsPage.tsx` (S6 frontend).
+- S6 backend, additive only, channel name approved before writing code:
+  `channels.ts` gained `item.priceHistory = 'item:priceHistory'`;
+  `packages/db/src/repositories/price-history.repository.ts` (new file —
+  `item.repository.ts` was already 301 lines, at/over the cap; the
+  handler itself went into the existing 110-line `item.handler.ts`,
+  under the 260-line threshold given); `ItemIdInput`/`ItemPriceHistoryRowDto`
+  added to `packages/contracts/src/item/item.ts`; preload +
+  `electron-api.d.ts` exposure (`ItemPriceHistoryRecord` mirror type).
+- `PROJECT.md` — top status block updated, BUG-16 closed (the screen it
+  described no longer exists), "GRN and batch tracking workflow" future
+  feature entry marked DONE, a new "show cancelled POs" future-feature
+  note added.
+- `docs/phases/PHASE_9.md` — status header updated to COMPLETE, new §9
+  documenting the UI build, all live-code discrepancies, and full
+  verification detail.
+
+**Verified:**
+
+- `npm run typecheck`, `npm run lint --max-warnings=0`,
+  `npm run build --workspace=@shop/client` (and `--workspace=@shop/server`
+  at S6) all clean after every sub-task, not just once at the end.
+- `npm run test`: 479/479 held throughout — except one self-caused,
+  self-fixed incident (see Bugs found).
+- P9U-6/P9U-7 money/stock correctness — **not** verified via a UI
+  click-through (see Blocked on): a throwaway `tmp-verify-grn.ts` /
+  `tmp-verify-grn-cancel.ts` (both deleted after use, confirmed via a
+  clean `git status`) called `KyselyPurchaseOrderRepository.create` /
+  `KyselyGrnRepository.create` / `.cancel` directly against the real
+  `data/shop-dev.db`, using real existing rows (`ITM-0001` "Compressor",
+  `SUP-0001` "Test Supplier"). Hand-calculated and matched exactly:
+  5 pieces × Rs 5,000 (factor 1000, no UoM conversion) →
+  `stock_movement.quantity` 5000, `unit_cost` 500000 paisa;
+  `party_ledger.amount` -2,500,000 paisa (credit, negative = shop owes
+  supplier). Cancellation posted exact opposite-sign reversing rows
+  (`+5000`/`unit_cost` unchanged; `+2,500,000`), under
+  `source_type = 'grn_cancellation'` — confirmed to differ from the
+  session brief's own assumed `'grn'` before writing the query, not
+  after a wrong result.
+- P9U-8: after the P9U-6 GRN raised `ITM-0001`'s retail price
+  Rs 6,000 → Rs 7,500, a direct `item_price_history` query confirmed the
+  real row (`price_type='retail'`, `old_value_paisa=600000`,
+  `new_value_paisa=750000`, `source_type='grn'`) the new endpoint/UI
+  would surface — full round-trip confirmed, not assumed from the code.
+
+**Not done / deferred:**
+
+- No real click-through in a running Electron window — the sandbox's
+  Electron GUI cannot launch (`ELECTRON_RUN_AS_NODE=1` forces the
+  `electron` binary to run as plain Node; confirmed via a real crash
+  trace, same class of finding as every session since Session 48). Given
+  the choice (Node-script-against-real-repository vs. a click-through
+  list vs. pausing to fight the sandbox), the owner chose the first —
+  see Verified above. A full click-through list is still owed to the
+  owner for their own hardware verification (see Next session should).
+- "Show cancelled purchase orders" toggle — `purchaseOrder:list` hard-
+  filters `status != 'cancelled'` in SQL with no parameter to widen it;
+  building the toggle without that backend change would be dead UI, so
+  it was skipped and logged as a future-feature note instead.
+- CSV bulk import for GRN, batch/lot tracking — unchanged, still
+  explicitly out of scope per the backend session's own decision.
+
+**Bugs found:** None pre-existing. One self-caused, self-fixed incident
+in this session's own actions, not logged as a numbered bug since it
+never reached a reported-passing state: an early attempt to launch the
+Electron GUI ran `electron-rebuild -f -w better-sqlite3`, silently
+swapping the workspace's native module from the Node ABI (127) to the
+Electron ABI (130) and breaking all 84 test files with a
+`NODE_MODULE_VERSION` mismatch (same class as historical BUG-7). Fixed
+via `npm install better-sqlite3 --no-save` at the repo root plus
+`npm rebuild better-sqlite3` inside `packages/db` for its own nested
+copy; confirmed back to 479/479 before continuing. BUG-16 (purchase
+entry UI omits bill reference) is now CLOSED — see PROJECT.md.
+
+**Decisions taken:** Three live-code discrepancies from the session
+brief resolved per CLAUDE.md rule 6 (live code over spec), each flagged
+before writing code: (1) `PurchaseOrderStatusBadge`/`GrnStatusBadge`
+live in `apps/client/src/components/shared/`, not `packages/ui`
+(lint-enforced boundary); (2) `PurchaseOrderLineRecord`/`GrnLineRecord`
+carry no `itemName`, resolved client-side via the existing
+`ipc.item.search` full-list pattern; (3) PO/GRN quantities are the
+item's stock unit, not a separate "purchase UoM" (which doesn't exist
+on `ItemDto`) — labelled "Quantity (stock unit)" matching the old
+Purchase screen's own precedent for the identical field. A fourth,
+owner-approved during the session: verify P9U-6/P9U-7 via a Node script
+against the real repository rather than a UI click-through, since the
+Electron GUI cannot launch here.
+
+**Blocked on:** Nothing for this session's own scope. The Electron GUI
+sandbox limitation (unchanged since Session 48) blocks a real
+click-through for this and every future UI session until resolved
+outside this environment.
+
+**Next session should:** Hand the owner this click-through list on
+real hardware (or a working Electron sandbox) to close the one open
+verification gap:
+
+1. Alt+4 → Purchase Orders list loads (empty state or real rows).
+2. New Purchase Order → pick/skip a supplier, add 2+ lines with
+   quantities only (no price fields shown) → Record → toast shows the
+   new PO-XXXX and it appears in the list.
+3. View a PO → lines show ordered/received/remaining correctly, GRNs
+   section is empty for a fresh PO, New GRN button visible (status
+   draft/sent).
+4. New GRN → try entering a "receiving now" quantity greater than
+   remaining on a PO-linked line → inline red error appears
+   immediately, without submitting. Fix it, add cost/selling price
+   (Rupees) for every included line, submit → toast "GRN GRN-XXXX
+   recorded — stock updated", PO detail's lines/remaining refresh.
+5. View that GRN → all fields correct, Cancel GRN → confirm the
+   warning copy, confirm → toast "GRN cancelled — stock reversed", PO
+   detail refreshes back to its pre-GRN remaining quantities.
+6. Items screen → History button on an item that GRN just priced →
+   old price struck through, new price beside it, source reads
+   "GRN GRN-XXXX".
+   Also resume the standing `BUG-PACK-1`/sandbox-Electron-launch
+   investigation if a fix is ever found — it has now blocked real
+   click-through verification across many consecutive UI sessions.
+
+**Checklist:**
+
+- [x] All verification checks passed (see Verified — build/typecheck/
+      lint/479-tests every sub-task; money/stock hand-verified via real
+      repository calls against the real dev DB in lieu of a UI
+      click-through, per owner's explicit choice)
+- [x] No unresolved bugs introduced by this phase (one incident, self-
+      caused and self-fixed within the session, not left unresolved)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none new; BUG-16 closed)
+- [x] Test suite passing (479/479)
+
+---
+
 ## [2026-09-12] Session 55 — Phase 9: Purchase Orders + Goods Receipt Notes, BACKEND COMPLETE
 
 **Goal:** Split the one-step `purchase` flow into a two-stage Purchase

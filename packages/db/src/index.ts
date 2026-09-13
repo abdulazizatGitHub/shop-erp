@@ -24,6 +24,8 @@ export type { WageMonthRow } from './repositories/wage-report.repository.js';
 export { KyselyPurchaseRepository } from './repositories/purchase.repository.js';
 export { KyselyPurchaseOrderRepository } from './repositories/purchase-order.repository.js';
 export { KyselyGrnRepository } from './repositories/grn.repository.js';
+export { getItemPriceHistory } from './repositories/price-history.repository.js';
+export type { ItemPriceHistoryRow } from './repositories/price-history.repository.js';
 export { KyselySaleRepository } from './repositories/sale.repository.js';
 export { KyselyPaymentRepository } from './repositories/payment.repository.js';
 export { KyselyJobRepository } from './repositories/job.repository.js';

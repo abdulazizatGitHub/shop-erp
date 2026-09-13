@@ -30,6 +30,7 @@ import type {
   ImportSupplierBalanceInput,
   ItemDto,
   ItemGetPricesInput,
+  ItemIdInput,
   ItemLookups,
   ItemPricesDto,
   ItemSearchInput,
@@ -97,6 +98,7 @@ import type {
   BusinessUnitOption,
   ReceiptPaperSize,
   ServiceChargeOption,
+  ItemPriceHistoryRow,
   TechnicianOption,
   UomConversionOption,
 } from '@shop/db';
@@ -142,6 +144,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.item.getPrices, input) as Promise<ItemPricesDto>,
     topSelling: (input: ItemTopSellingInput): Promise<readonly ItemDto[]> =>
       ipcRenderer.invoke(channels.item.topSelling, input) as Promise<readonly ItemDto[]>,
+    priceHistory: (input: ItemIdInput): Promise<readonly ItemPriceHistoryRow[]> =>
+      ipcRenderer.invoke(channels.item.priceHistory, input) as Promise<
+        readonly ItemPriceHistoryRow[]
+      >,
   },
   customer: {
     create: (input: CreateCustomerInput): Promise<CreateCustomerResult> =>

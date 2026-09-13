@@ -8,7 +8,7 @@ import { DashboardPage } from '../pages/dashboard/DashboardPage.js';
 import { ExpensesPage } from '../pages/expenses/ExpensesPage.js';
 import { CustomersPage } from '../pages/parties/CustomersPage.js';
 import { SuppliersPage } from '../pages/parties/SuppliersPage.js';
-import { PurchasePage } from '../pages/purchases/PurchasePage.js';
+import { PurchaseOrdersPage } from '../pages/purchase-orders/PurchaseOrdersPage.js';
 import { ReportsPage } from '../pages/reports/ReportsPage.js';
 import { SalePage } from '../pages/sales/SalePage.js';
 import { SettingsPage } from '../pages/settings/SettingsPage.js';
@@ -43,7 +43,7 @@ export function App(): React.JSX.Element {
           {tab === 'sales' && <SalePage />}
           {tab === 'items' && <ItemsPage />}
           {tab === 'suppliers' && <SuppliersPage />}
-          {tab === 'purchases' && <PurchasePage />}
+          {tab === 'purchase-orders' && <PurchaseOrdersPage />}
           {tab === 'jobs' && <JobsPage />}
           {tab === 'technician-custody' && <TechnicianCustodyPage />}
           {tab === 'reports' && <ReportsPage />}

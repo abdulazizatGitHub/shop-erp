@@ -2,7 +2,7 @@ export type Tab =
   | 'sales'
   | 'items'
   | 'suppliers'
-  | 'purchases'
+  | 'purchase-orders'
   | 'jobs'
   | 'technician-custody'
   | 'reports'
@@ -37,7 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'sales', label: 'Sales', shortcutDigit: '1' },
   { key: 'items', label: 'Items', shortcutDigit: '2' },
   { key: 'suppliers', label: 'Suppliers', shortcutDigit: '3' },
-  { key: 'purchases', label: 'Purchases', shortcutDigit: '4' },
+  { key: 'purchase-orders', label: 'Purchase Orders', shortcutDigit: '4' },
   { key: 'reports', label: 'Reports', shortcutDigit: '5' },
   { key: 'customers', label: 'Customers', shortcutDigit: '6' },
   { key: 'settings', label: 'Settings', shortcutDigit: '7' },

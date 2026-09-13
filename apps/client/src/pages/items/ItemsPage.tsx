@@ -21,6 +21,7 @@ import { ipc } from '../../lib/ipc.js';
 import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
 import { ImportOpeningStockModal } from './ImportOpeningStockModal.js';
+import { ItemPriceHistoryModal } from './ItemPriceHistoryModal.js';
 
 export function ItemsPage(): React.JSX.Element {
   const { showToast } = useToast();
@@ -30,6 +31,7 @@ export function ItemsPage(): React.JSX.Element {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importOpeningStockOpen, setImportOpeningStockOpen] = useState(false);
+  const [historyItem, setHistoryItem] = useState<ItemDto | null>(null);
 
   // P4.5-3: the full list is loaded once — the search box below filters it
   // in memory, not with a new IPC call per keystroke.
@@ -146,6 +148,7 @@ export function ItemsPage(): React.JSX.Element {
                   <TableHeaderCell className="tracking-wide text-ink-faint">
                     Alt Unit
                   </TableHeaderCell>
+                  <TableHeaderCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -181,6 +184,16 @@ export function ItemsPage(): React.JSX.Element {
                       </TableCell>
                       <TableCell className="py-3">
                         {item.altUomId ? uomName(item.altUomId) : '—'}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setHistoryItem(item);
+                          }}
+                        >
+                          History
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -218,6 +231,15 @@ export function ItemsPage(): React.JSX.Element {
           setImportOpeningStockOpen(false);
         }}
         onImported={loadItems}
+      />
+
+      <ItemPriceHistoryModal
+        open={historyItem !== null}
+        itemId={historyItem?.id ?? null}
+        itemName={historyItem?.nameEn ?? null}
+        onClose={() => {
+          setHistoryItem(null);
+        }}
       />
     </div>
   );

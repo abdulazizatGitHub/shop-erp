@@ -1,14 +1,14 @@
 # Phase 9 — Purchase Orders + Goods Receipt Notes (GRN)
 
-**Status:** BACKEND COMPLETE (P9-1 through P9-13 all done). No UI —
-screens are a follow-up session, per this phase's own explicit scope.
+**Status:** COMPLETE — backend (2026-09-12) + UI (2026-09-13).
 **Started:** 2026-09-12
-**Completed:** 2026-09-12 (backend only)
+**Completed:** 2026-09-12 (backend), 2026-09-13 (UI)
 **Branch:** main
-**Last verified commit:** 4f2d887 (this session's work pending commit)
-**Test baseline:** 464/464 → 479/479 this session (5 new tests in
-purchase-order.repository.test.ts, 10 new tests in
-grn.repository.test.ts)
+**Last verified commit:** 282ce3e (backend, committed); this session's
+UI work pending commit.
+**Test baseline:** 464/464 → 479/479 (backend session, 15 new tests);
+479/479 held throughout the UI session (renderer-only + one additive
+read-only IPC channel, no new repository tests required).
 
 ---
 
@@ -254,3 +254,156 @@ touched by this phase — none were blocking.
   the original brief). A UI showing "current cost" after a GRN
   cancellation should be aware the price change from that GRN is still
   in effect unless a later GRN/price change supersedes it.
+
+---
+
+## 9. UI session (2026-09-13) — P9U-0 through P9U-9, all DONE
+
+### 9.1 What was built
+
+Old one-step Purchases screen removed entirely from the UI
+(`PurchasePage.tsx`, `PurchaseListTable.tsx` deleted; `purchase:*`
+backend untouched, read-only historical data). New
+`apps/client/src/pages/purchase-orders/` module:
+
+- **PurchaseOrdersPage / PurchaseOrdersTable** — list, status pills
+  (`PurchaseOrderStatusBadge`), quantities via the existing
+  `QuantityDisplay` primitive, Cancel gated to draft/sent.
+- **NewPoModal (+ NewPoStep1/NewPoStep2/PoLinesTable)** — two-step:
+  supplier-or-note + dates, then item/qty/notes lines (no price —
+  prices are entered at GRN time, per the original design).
+- **PurchaseOrderDetailModal (+ PoDetailLinesTable/PoDetailGrnsSection)**
+  — lines with ordered/received/remaining (fully-received rows
+  struck through), the GRN list for this PO, Cancel PO.
+- **NewGrnModal (+ NewGrnStep1/GrnLinesEditor/GrnLineRow/grnLines.ts)**
+  — two-step: date/bill-ref/payment-mode (credit locked out with a
+  warning when the PO has no linked supplier), then PO lines
+  pre-filled with the remaining quantity (editable) plus "add
+  unplanned line". Money conversion (Rupees string -> paisa) happens
+  in exactly one function, `convertLineMoney` in `NewGrnModal.tsx`,
+  called by both the submit handler and the live subtotal preview —
+  never re-implemented inline. "Receiving now" is validated against
+  the remaining quantity in two places sharing one function,
+  `validateReceivingNow` (`grnLines.ts`): inline on the field as the
+  user types, and again defensively in the submit handler.
+- **GrnDetailModal (+ GrnDetailLinesTable)** — full line detail,
+  Cancel GRN with the required stock/ledger-reversal warning copy.
+- **Item price history** — new additive `item:priceHistory` channel
+  (owner-approved before writing code), `price-history.repository.ts`
+  (plain function, no port — matches `wage-report.repository.ts`'s
+  established precedent for a single read-only query), a "History"
+  button/modal on `ItemsPage.tsx` (old price struck through, new
+  price beside it, source shown as `"GRN <id>"`).
+
+### 9.2 Live-code discrepancies found and resolved (rule 6)
+
+1. **`packages/ui` cannot import `@shop/contracts`**
+   (`eslint.config.js:78-87`, lint-enforced) — the brief's own
+   instruction to put `PurchaseOrderStatusBadge`/`GrnStatusBadge` in
+   `packages/ui/src/components/` would fail lint immediately, since
+   both switch on contract-typed status enums. Placed in
+   `apps/client/src/components/shared/` instead, the exact precedent
+   `BusinessUnitPill.tsx` already set for the same constraint.
+2. **`PurchaseOrderLineRecord`/`GrnLineRecord` carry no `itemName`**
+   (confirmed against the live `electron-api.d.ts` types) — only
+   `itemId`. Every line table resolves names client-side against a
+   full `ipc.item.search({query:'',categoryId:null})` load, the same
+   pattern `ItemsPage.tsx` already uses for its own list.
+3. **PO/GRN quantities are stock-unit, not "purchase-unit"** — the
+   brief's S2 spec assumed a `Quantity (Cylinder)`-style purchase-UoM
+   label; `grn.repository.ts:311` inserts `quantityReceivedMilli`
+   directly as `stock_movement.quantity` with no conversion, and
+   `ItemDto` has no `purchaseUomId` field at all (only `stockUomId`).
+   Labelled "Quantity (stock unit)" instead, matching
+   `PurchasePage.tsx`'s own prior precedent for the identical field.
+4. **`purchaseOrder:list` hard-filters cancelled POs in SQL**
+   (`purchase-order.repository.ts:210`, no parameter to include them)
+   — the brief's "Show cancelled" toggle was skipped; there is
+   nothing for it to show without a backend change, logged as a
+   future-feature note in `PROJECT.md` instead of built as dead UI.
+5. **`PurchaseOrderRecord` has no supplier name**, only
+   `supplierPartyId`, and there is no `party.getById` channel to
+   resolve it — the list row (`PurchaseOrderSummary`) already carries
+   a server-resolved `supplierName`, threaded through as a prop into
+   `PurchaseOrderDetailModal` instead of adding a new IPC call.
+6. **`item.repository.ts` was already at 301 lines** (at/over the
+   300-line cap) when S6 needed a new query — per instruction, the
+   query went into a new `price-history.repository.ts` rather than
+   that file; the handler itself (110 lines, under the 260-line
+   threshold given) stayed in the existing `item.handler.ts`.
+7. **Real column names differ from the brief's assumed SQL** — money
+   verification queries in the session brief referenced
+   `stock_movement.unit_cost_paisa`; the live column is `unit_cost`.
+   The brief's cancellation-verification query also assumed
+   `source_type = 'grn'` would show reversing rows; cancellation
+   actually posts them under `source_type = 'grn_cancellation'`
+   (`grn.repository.ts:667,712`) — confirmed before running any query,
+   not after a wrong result.
+
+### 9.3 Verification (real output, not eyeballed)
+
+Electron's GUI cannot launch in this sandbox
+(`ELECTRON_RUN_AS_NODE=1` forces the `electron` binary to run as
+plain Node — confirmed via a real crash trace on
+`electron.app.setName is not a function`, same class of finding as
+every session since Session 48). Given the choice, the owner selected
+driving the real repositories directly over a click-through:
+
+- Every sub-task: `npm run typecheck`, `npm run lint`
+  (`--max-warnings=0`), `npm run build --workspace=@shop/client` (and
+  `--workspace=@shop/server` at S6, since it touched the backend) all
+  clean; `npm run test` 479/479 throughout.
+- **P9U-6 (GRN create), real dev DB (`data/shop-dev.db`)**: a
+  throwaway `tmp-verify-grn.ts` (deleted after use, confirmed via
+  `git status`) called `KyselyPurchaseOrderRepository.create` then
+  `KyselyGrnRepository.create` directly — the same functions the IPC
+  handler calls — for 5 pieces of the real "Compressor" item
+  (`ITM-0001`, `purchase_to_stock_factor` 1000, no UoM conversion) at
+  Rs 5,000/piece, credit, from the real "Test Supplier" (`SUP-0001`).
+
+  ```text
+  stock_movement: quantity 5000, unit_cost 500000, source_type 'grn'
+  party_ledger:   amount -2500000, entry_type 'purchase', source_type 'grn'
+  ```
+
+  Hand calculation: 5 × 1000 milli = 5000 (matches); factor 1000 means
+  no conversion, so `unit_cost` stays 500,000 paisa (matches);
+  `500,000 × 5000 / 1000 = 2,500,000` paisa, negative for a credit
+  receipt (shop owes supplier) (matches).
+
+- **P9U-7 (GRN cancel), same DB, same GRN**: `KyselyGrnRepository.cancel`
+  called directly.
+
+  ```text
+  stock_movement: quantity -5000, unit_cost 500000, source_type 'grn_cancellation'
+  party_ledger:   amount +2500000, entry_type 'purchase_return', source_type 'grn_cancellation'
+  ```
+
+  Exact opposite-sign reversal of both rows above — matches.
+
+- **P9U-8 (price history)**: after the P9U-6 GRN above raised
+  `ITM-0001`'s retail price from Rs 6,000 to Rs 7,500, a direct query
+  of `item_price_history` for that item confirmed one real row
+  (`price_type='retail'`, `old_value_paisa=600000`,
+  `new_value_paisa=750000`, `source_type='grn'`) — the exact row the
+  new `item:priceHistory` endpoint/UI would surface.
+- **Self-caused, self-fixed incident**: an initial attempt to launch
+  the Electron GUI ran `electron-rebuild -f -w better-sqlite3`,
+  swapping the workspace's native module from the Node ABI (127) to
+  the Electron ABI (130) and breaking all 84 test files
+  (`NODE_MODULE_VERSION` mismatch — same class as historical BUG-7).
+  Fixed via `npm install better-sqlite3 --no-save` at the repo root
+  plus `npm rebuild better-sqlite3` inside `packages/db` for its own
+  nested copy; confirmed back to 479/479 and a clean `git status`
+  before any further work. Not logged as a new bug — caught and fixed
+  before any verification was reported as passing.
+
+### 9.4 Not done / deferred
+
+- No real click-through in a running Electron window — the sandbox
+  blocker above. A full "what to click" instruction list was handed
+  to the owner (see `PROGRESS.md`'s session entry).
+- "Show cancelled purchase orders" toggle — needs a backend change
+  (§9.2 point 4), out of this session's scope.
+- CSV bulk import for GRN, batch/lot tracking — still explicitly out
+  of scope (owner decision), unchanged from the backend session.

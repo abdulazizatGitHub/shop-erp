@@ -8,6 +8,8 @@ export {
   ItemTopSellingInput,
   ImportItemsInput,
   ImportOpeningStockInput,
+  ItemIdInput,
+  ItemPriceHistoryRowDto,
 } from './item/item.js';
 export type { ItemLookups } from './item/item.js';
 

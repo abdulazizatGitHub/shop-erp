@@ -114,6 +114,25 @@ export const ImportOpeningStockInput = z.object({
 });
 export type ImportOpeningStockInput = z.infer<typeof ImportOpeningStockInput>;
 
+/** P9U-8. */
+export const ItemIdInput = z.object({
+  itemId: z.string().uuid(),
+});
+export type ItemIdInput = z.infer<typeof ItemIdInput>;
+
+/** P9U-8. Mirrors item_price_history exactly (see 0014_purchase_order_grn.sql). */
+export const ItemPriceHistoryRowDto = z.object({
+  id: z.string().uuid(),
+  itemId: z.string().uuid(),
+  priceType: z.string(),
+  oldValuePaisa: z.number().int(),
+  newValuePaisa: z.number().int(),
+  changedAt: z.string(),
+  sourceType: z.string(),
+  sourceId: z.string(),
+});
+export type ItemPriceHistoryRowDto = z.infer<typeof ItemPriceHistoryRowDto>;
+
 /** Reference-data options for populating the item form's dropdowns. */
 export interface ItemLookups {
   readonly businessUnits: readonly {

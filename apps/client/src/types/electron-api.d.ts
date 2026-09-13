@@ -29,6 +29,7 @@ import type {
   IssuePartsToJobResult,
   ItemDto,
   ItemGetPricesInput,
+  ItemIdInput,
   ItemLookups,
   ItemPricesDto,
   ItemSearchInput,
@@ -207,6 +208,18 @@ export interface GrnRecord {
   readonly lines: readonly GrnLineRecord[];
 }
 
+/** Mirrors @shop/db's ItemPriceHistoryRow. */
+export interface ItemPriceHistoryRecord {
+  readonly id: string;
+  readonly itemId: string;
+  readonly priceType: string;
+  readonly oldValuePaisa: number;
+  readonly newValuePaisa: number;
+  readonly changedAt: string;
+  readonly sourceType: string;
+  readonly sourceId: string;
+}
+
 /** Mirrors @shop/core's GrnSummary. */
 export interface GrnSummary {
   readonly id: string;
@@ -329,6 +342,7 @@ export interface ElectronApi {
     readonly lookups: () => Promise<ItemLookups>;
     readonly getPrices: (input: ItemGetPricesInput) => Promise<ItemPricesDto>;
     readonly topSelling: (input: ItemTopSellingInput) => Promise<readonly ItemDto[]>;
+    readonly priceHistory: (input: ItemIdInput) => Promise<readonly ItemPriceHistoryRecord[]>;
   };
   readonly customer: {
     readonly create: (input: CreateCustomerInput) => Promise<{ id: string; partyCode: string }>;

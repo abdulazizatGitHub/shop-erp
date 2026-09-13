@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import {
   CreateItemInput,
   ItemGetPricesInput,
+  ItemIdInput,
   ItemSearchInput,
   ItemTopSellingInput,
   type ItemDto,
@@ -11,6 +12,7 @@ import {
 import { createItem, searchItems, topSellingItems } from '@shop/core';
 import {
   createKyselyDb,
+  getItemPriceHistory,
   getItemPrices,
   KyselyItemRepository,
   listBusinessUnits,
@@ -18,6 +20,7 @@ import {
   listUoms,
   listUomConversions,
   openDatabase,
+  type ItemPriceHistoryRow,
   type UomConversionOption,
 } from '@shop/db';
 import { channels } from '../channels.js';
@@ -95,6 +98,19 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
       db.close();
     }
   });
+
+  ipcMain.handle(
+    channels.item.priceHistory,
+    withError(async (_event, raw: unknown): Promise<readonly ItemPriceHistoryRow[]> => {
+      const input = ItemIdInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getItemPriceHistory(createKyselyDb(db), deps.tenantId, input.itemId);
+      } finally {
+        db.close();
+      }
+    }),
+  );
 
   ipcMain.handle(
     channels.uom.listConversions,
