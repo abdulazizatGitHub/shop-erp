@@ -26,6 +26,8 @@ export { KyselyPurchaseOrderRepository } from './repositories/purchase-order.rep
 export { KyselyGrnRepository } from './repositories/grn.repository.js';
 export { getItemPriceHistory } from './repositories/price-history.repository.js';
 export type { ItemPriceHistoryRow } from './repositories/price-history.repository.js';
+export { getItemsByCode } from './repositories/item-lookup.repository.js';
+export type { ItemCodeLookupRow } from './repositories/item-lookup.repository.js';
 export { KyselySaleRepository } from './repositories/sale.repository.js';
 export { KyselyPaymentRepository } from './repositories/payment.repository.js';
 export { KyselyJobRepository } from './repositories/job.repository.js';

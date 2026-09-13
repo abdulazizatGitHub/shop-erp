@@ -3,7 +3,78 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-13 (Phase 9-UI session)
+**Last updated:** 2026-09-13 (Phase 9-CSV session)
+**Update, 2026-09-13 — Phase 9-CSV (GRN CSV import against a PO) COMPLETE.**
+P9C-0 through P9C-6 all done: staff can now upload a supplier invoice as a
+CSV against a specific purchase order — three-step modal (header details
+→ upload/validate → confirm & record) launched from a new "Upload GRN
+CSV" button beside "New GRN" in `PurchaseOrderDetailModal.tsx`. Both
+buttons now share one enable rule, widened this session (owner decision,
+a correctness fix not just a CSV-import concern — see §6 of
+`docs/phases/PHASE_9.md`): enabled only for `sent`/`partially_received`,
+disabled for `draft`/`fully_received`/`cancelled` (previously "New GRN"
+alone was wrongly enabled for `draft`).
+New `packages/core/src/grn/grn-csv-import.ts` (`parseGrnCsv` — exact
+case-sensitive, exact-order 6-column header check, stricter than the
+existing fuzzy `parseCsv`; `validateGrnCsvRows` — item-exists →
+on-this-PO → qty-positive-and-≤-remaining → cost/price-positive →
+optional-wholesale → notes-≤200-chars, with the remaining quantity
+tracked and decremented **across rows in the same file**, so a second
+row for an item already received earlier in the same CSV is checked
+against what's actually left, not the PO's original static remaining)
+plus its own test file, 13 tests (10 required + 3 extra file-level
+cases), all money/quantity values hand-calculated in comments. New
+additive read-only `grn:csvDryRun` IPC channel — client parses the CSV
+itself (header/row split only, no business rules) then calls this
+channel for the authoritative accepted/rejected split, mirroring
+`NewGrnModal`'s existing inline-then-defensive double-check pattern; the
+actual commit still goes through the unchanged `grn:create`. New
+`packages/db/src/repositories/item-lookup.repository.ts`
+(`getItemsByCode`, a plain function — `item.repository.ts` was already
+at 301 lines, at/over the 300-line cap, matching the exact precedent
+`price-history.repository.ts` set last session). Template download is
+pre-filled with one row per remaining PO line (item code + remaining
+qty), via a new additive `downloadCsvRows()` sibling to the existing
+`downloadCsv()` — that function and its four existing callers are
+untouched. DB-verified end-to-end against the real dev DB via a
+throwaway script (deleted after use, confirmed via `git status`): a
+CSV with one valid + one over-remaining-qty row produced the exact
+expected accept/reject split, and the resulting GRN's `stock_movement`/
+`party_ledger` rows matched the hand-calculated paisa/milli values
+exactly. **Sandbox note (unchanged from every session since Session 48)**: the Electron GUI still cannot launch here
+(`ELECTRON_RUN_AS_NODE=1`), so this is real-repository verification, not
+a UI click-through — see `docs/phases/PHASE_9.md` §10 for the full
+click-through list still owed to the owner.
+**One internal contradiction in the session brief, resolved by asking
+rather than guessing**: Step 2's own wording said "no IPC call yet —
+pure client-side validation," which would have made the entire new
+`grn:csvDryRun` channel (explicitly required elsewhere in the same
+brief, with its own handler/tests/execution sub-task) dead code. Owner
+confirmed: client parses only; `grn:csvDryRun` is the actual validation
+source of truth, called immediately after parsing.
+**Six other discrepancies found and resolved before writing code (rule
+6, all owner-confirmed)**: `ImportModal`'s shared shell is a fixed
+two-page wizard, not extensible to three steps — built `GrnCsvImportModal.tsx`
+as its own stepped modal on the base `Modal` primitive instead, matching
+`NewPoModal.tsx`/`NewGrnModal.tsx`'s own precedent; the brief's
+`grn:csvDryRun` payload included a client-supplied `tenantId`, which no
+other channel in this codebase accepts (always `deps.tenantId`,
+server-side) — excluded from the Zod input; neither existing header
+helper (`parseCsv`'s fuzzy ≥60% match, `validateHeaders`'s
+set-membership-only check) enforces the brief's exact-order contract —
+wrote a dedicated strict check instead; the brief's named
+`ParsedGrnCsvRow` type is identical in shape to the existing
+`ParsedCsvRow` — reused that type directly, additively exporting
+`csv.ts`'s previously-private `parseCsvLine` so the new strict parser
+could reuse its quote-handling; pre-filled the template (owner
+confirmed, brief's own recommendation); used `Money.multiplyByQuantity`
+
+- `Money.sum` for the total-value calculation rather than a hand-rolled
+  formula, with the required hand-calculated comment in
+  `GrnCsvImportModal.tsx`'s confirm handler.
+
+---
+
 **Update, 2026-09-13 — Phase 9-UI (Purchase Orders + GRN screens) COMPLETE.**
 P9U-0 through P9U-9 all done: the old one-step Purchases screen
 (`PurchasePage.tsx`/`PurchaseListTable.tsx`) removed entirely from the

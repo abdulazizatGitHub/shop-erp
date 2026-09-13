@@ -1,14 +1,14 @@
 # Phase 9 — Purchase Orders + Goods Receipt Notes (GRN)
 
-**Status:** COMPLETE — backend (2026-09-12) + UI (2026-09-13).
+**Status:** COMPLETE — backend (2026-09-12) + UI (2026-09-13) + CSV import (2026-09-13).
 **Started:** 2026-09-12
-**Completed:** 2026-09-12 (backend), 2026-09-13 (UI)
+**Completed:** 2026-09-12 (backend), 2026-09-13 (UI), 2026-09-13 (CSV import)
 **Branch:** main
-**Last verified commit:** 282ce3e (backend, committed); this session's
-UI work pending commit.
+**Last verified commit:** 18ea084 (UI, committed); this session's CSV-import
+work pending commit.
 **Test baseline:** 464/464 → 479/479 (backend session, 15 new tests);
-479/479 held throughout the UI session (renderer-only + one additive
-read-only IPC channel, no new repository tests required).
+479/479 held throughout the UI session; 479 → 492/492 this session
+(13 new tests in `grn-csv-import.test.ts`).
 
 ---
 
@@ -405,5 +405,174 @@ driving the real repositories directly over a click-through:
   to the owner (see `PROGRESS.md`'s session entry).
 - "Show cancelled purchase orders" toggle — needs a backend change
   (§9.2 point 4), out of this session's scope.
-- CSV bulk import for GRN, batch/lot tracking — still explicitly out
-  of scope (owner decision), unchanged from the backend session.
+- CSV bulk import for GRN — **now done, see §10**. Batch/lot tracking
+  still explicitly out of scope (owner decision), unchanged from the
+  backend session.
+
+---
+
+## 10. CSV-import session (2026-09-13) — P9C-0 through P9C-6, all DONE
+
+### 10.1 What was built
+
+A new "Upload GRN CSV" button beside "New GRN" (`PoDetailGrnsSection.tsx`),
+launching `GrnCsvImportModal.tsx` — a three-step modal (own `Modal`, not
+the shared `ImportModal`, see §10.3):
+
+- **Step 1** — GRN date, bill reference, payment mode (Cash/Credit).
+  Credit shows a warning banner but never blocks, per the brief.
+- **Step 2** — file picker; on selection, the client parses the CSV
+  itself (`grnCsvParse.ts` — header split + exact-order header check
+  only, no business rules) then immediately calls the new
+  `grn:csvDryRun` channel for the authoritative accepted/rejected
+  split (see 10.2 — resolves a real contradiction in the session
+  brief). Shows accepted/rejected counts and each rejection's row
+  number + reason. "Download template" produces a CSV pre-filled with
+  one row per remaining PO line (item code + remaining qty; cost/
+  price/notes left blank for staff to fill from the supplier bill).
+- **Step 3** — summary (PO, date, bill ref, payment mode, line count,
+  total value) before the actual commit via the unchanged `grn:create`.
+
+Backend: `packages/core/src/grn/grn-csv-import.ts` —
+`GRN_CSV_COLUMNS`, `parseGrnCsv` (file-level: exact case-sensitive
+exact-order header, non-empty data), `validateGrnCsvRows` (row-level:
+item exists → on this PO → qty positive and ≤ remaining → cost/price
+positive → optional wholesale valid if present → notes ≤200 chars).
+The remaining-quantity check is **stateful across rows within one
+file** — a `Map<purchaseOrderLineId, number>` is decremented as each
+row is accepted, so a second CSV row receiving more of an
+already-partially-received (within this same file) item is checked
+against what's genuinely left, not the PO's original static remaining.
+Verified live: a real dry-run against a fresh 10-unit PO with one
+4-unit accepted row followed by a 99-unit row correctly reported the
+second row's remaining as 6, not 10 (see §10.4).
+
+New additive IPC: `grn:csvDryRun` (channel in `channels.ts`, handler in
+the existing `grn.handler.ts`, 75→128 lines, still well under the
+260-line threshold given). Zod input `GrnCsvDryRunInput` = `{
+purchaseOrderId, rows }` only — deliberately excludes a client-supplied
+`tenantId` the brief's draft included (see 10.3). New
+`packages/db/src/repositories/item-lookup.repository.ts`
+(`getItemsByCode`, a plain function, not a `KyselyItemRepository`
+method — `item.repository.ts` was already at 301 lines, matching the
+exact precedent `price-history.repository.ts` set in the Phase 9-UI
+session for the identical situation).
+
+`downloadCsv.ts` gained an additive sibling, `downloadCsvRows()`, for
+multi-row templates — the original `downloadCsv()` and its four
+existing callers (Items/Suppliers/Customers/Opening-Stock templates)
+are untouched.
+
+**Button gating widened, a real behaviour fix** (owner decision, Q1):
+`PurchaseOrderDetailModal.tsx`'s `GRN_ALLOWED_STATUSES_EXCLUDED` now
+excludes `draft` as well as `fully_received`/`cancelled`, for **both**
+"New GRN" and "Upload GRN CSV" — previously "New GRN" alone was wrongly
+enabled for a `draft` PO (goods cannot have arrived if the order was
+never sent). Not scoped to CSV import only; it's a correctness fix to
+existing manual-entry behaviour too.
+
+### 10.2 A real contradiction in the session brief, resolved by asking
+
+Step 2's own wording said _"parse CSV client-side, run dry-run
+validation immediately (no IPC call yet — pure client-side
+validation)"_ — but the same brief specified a full `grn:csvDryRun`
+server endpoint (its own core module, handler, and test-case list) to
+perform exactly that validation. Taking "no IPC call yet" literally
+would make the entire channel dead code the UI never calls, which
+doesn't fit the rest of the brief's structure. Asked rather than
+guessed (CLAUDE.md rule 5); owner confirmed: the client only splits
+the file into rows (that part is genuinely IPC-free), and
+`grn:csvDryRun` is the actual, authoritative validation path, called
+immediately after parsing — mirroring the inline-then-defensive
+double-check pattern `NewGrnModal.tsx` already uses for its own
+receiving-quantity cap.
+
+### 10.3 Other discrepancies found and resolved (rule 6), all owner-confirmed
+
+1. `ImportModal` (`packages/ui/src/patterns/ImportModal.tsx`) is a
+   fixed two-page shell (`page: 1 | 2`, hardcoded "Step N of 2" title,
+   Back/Close nav on page 2) — not an extensible N-step wizard, and
+   `ImportItemsModal.tsx` itself is genuinely two-step, so the brief's
+   own "reuse ImportModal... three-step pattern like ImportItemsModal"
+   was self-contradictory. Built `GrnCsvImportModal.tsx` on the base
+   `Modal` primitive with local step state instead, matching
+   `NewPoModal.tsx`/`NewGrnModal.tsx`'s own precedent for multi-step
+   flows in this same folder.
+2. The brief's `grn:csvDryRun` payload included a client-supplied
+   `tenantId` — no other channel in this codebase accepts tenant id
+   from the renderer (always `deps.tenantId`, server-side, per CLAUDE.md
+   §3.5). Excluded from `GrnCsvDryRunInput`.
+3. Neither existing header-check helper enforces the brief's
+   exact-order contract: `parseCsv` (core) needs only a ≥60% fuzzy
+   name-match to locate a header row (order-agnostic); `validateHeaders`
+   (client) checks set-membership only. Wrote a dedicated exact-order
+   check in both `grn-csv-import.ts` (server) and `grnCsvParse.ts`
+   (client, for instant feedback before the dry-run round-trip) instead
+   of stretching either existing helper's semantics.
+4. The brief's named `ParsedGrnCsvRow` type is identical in shape to
+   the existing `ParsedCsvRow` (`{ rowNumber, cells }`) — reused that
+   type directly. To build it with the same quote-aware comma-splitting
+   `parseCsv` already has (Notes can legitimately contain commas),
+   additively exported `csv.ts`'s previously-private `parseCsvLine`
+   (one-line change, zero behaviour change to `parseCsv`'s existing
+   callers).
+5. Pre-fill decision (the brief asked for one): pre-fill the template
+   with the PO's remaining lines, per the brief's own recommendation —
+   confirmed before writing `downloadCsvRows()`.
+6. Total-value calculation: used `Money.multiplyByQuantity` +
+   `Money.sum` (the established, tested, shared utility for exactly
+   this) rather than the brief's own hand-rolled
+   `Math.round(qtyMilli/1000 × unitCostPaisa/100 × 100)` formula, which
+   is algebraically the same operation. The required hand-calculated
+   comment is in `GrnCsvImportModal.tsx`'s total-value computation.
+
+### 10.4 Verification (real output, not eyeballed)
+
+Same sandbox constraint as the Phase 9-UI session
+(`ELECTRON_RUN_AS_NODE=1` prevents the Electron GUI from launching
+here) — every sub-task verified via `npm run typecheck`/`lint`
+(`--max-warnings=0`)/`npm run build --workspace=@shop/client` (and
+`--workspace=@shop/server` at the backend sub-tasks) all clean, and
+`npm run test` 492/492 throughout (13 new unit tests, no DB/IPC,
+pure `validateGrnCsvRows`/`parseGrnCsv` logic — all 10 required cases
+plus 3 extra file-level checks, every money/quantity value
+hand-calculated in a comment).
+
+Money/stock correctness (P9C-6) verified via a throwaway
+`tmp-verify-grn-csv.ts` (deleted after use, confirmed via a clean
+`git status`) exercising the real repositories directly against
+`data/shop-dev.db`, using real existing rows (`ITM-0002` "Compressor 2
+Ton", `SUP-0001` "Test Supplier"): created a fresh 10-unit PO, ran a
+2-row CSV (one valid 4-unit row, one 99-unit row that must be
+rejected) through `parseGrnCsv`/`validateGrnCsvRows` exactly as the
+handler does, then recorded a GRN from the accepted row via the
+unchanged `grn.repository.ts`.
+
+```text
+dry-run accepted[0]: quantityReceivedMilli 4000, unitCostPaisa 800000, sellingPricePaisa 950000
+dry-run rejected[0]: "Qty received (99) exceeds remaining qty (6) for ITM-0002"
+stock_movement:      quantity 4000, unit_cost 800000, source_type 'grn'
+party_ledger:        amount -3200000, entry_type 'purchase', source_type 'grn'
+```
+
+Hand calculation: 4 × 1000 = 4000 milli (matches); Rs 8,000 × 100 =
+800,000 paisa (matches); Rs 9,500 × 100 = 950,000 paisa (matches); the
+rejected row's "remaining qty (6)" — not the PO's original 10 — proves
+the running-decrement-across-rows logic is live (10 − 4 accepted = 6);
+credit ledger total = 800,000 × 4000 / 1000 = 3,200,000 paisa = Rs
+32,000, negative for a credit receipt (shop owes supplier) (matches).
+
+### 10.5 Not done / deferred
+
+- No real click-through in a running Electron window — same sandbox
+  blocker as every session since Session 48. Click-through list for
+  the owner: (1) open a `sent`/`partially_received` PO, confirm both
+  "New GRN" and "Upload GRN CSV" are enabled and both are disabled for
+  `draft`/`fully_received`/`cancelled`; (2) Upload GRN CSV → fill
+  Step 1 → download the template → confirm it lists the PO's remaining
+  lines → fill in cost/price on one line → upload → confirm the
+  accepted/rejected report renders correctly → Import → Step 3 shows
+  the correct total → Confirm & Record GRN → toast + PO detail
+  refreshes.
+- Multi-PO CSV, barcode/serial/batch tracking — explicitly out of
+  scope per the brief.

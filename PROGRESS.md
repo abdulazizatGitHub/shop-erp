@@ -41,6 +41,138 @@
 
 ---
 
+## [2026-09-13] Session 57 — Phase 9-CSV: GRN CSV import against a PO, COMPLETE
+
+**Goal:** Add a CSV-import path for GRNs — staff uploads a supplier
+invoice as a CSV against a specific PO, gets a validated dry-run
+report, and confirms to record the GRN through the unchanged
+`grn.repository.ts`.
+
+**Done:**
+
+- `packages/core/src/import/csv.ts` — additively exported `parseCsvLine`
+  (was private), zero behaviour change to `parseCsv`'s existing callers.
+- `packages/core/src/grn/grn-csv-import.ts` — new: `GRN_CSV_COLUMNS`,
+  `parseGrnCsv` (file-level: exact case-sensitive exact-order header,
+  non-empty data), `validateGrnCsvRows` (row-level: item exists → on
+  this PO → qty positive and ≤ remaining, tracked and decremented
+  **across rows in the same file** → cost/price positive → optional
+  wholesale → notes ≤200 chars).
+- `packages/core/src/grn/grn-csv-import.test.ts` — new, 13 tests (the
+  10 required cases + 3 extra file-level checks), every money/quantity
+  value hand-calculated in a comment.
+- `packages/core/src/index.ts` — barrel exports for the above.
+- `packages/db/src/repositories/item-lookup.repository.ts` — new:
+  `getItemsByCode`, a plain function (not a `KyselyItemRepository`
+  method — that file was already at 301 lines, matching the exact
+  precedent `price-history.repository.ts` set last session).
+- `packages/contracts/src/grn/grn.ts` — new `GrnCsvRawRow`/
+  `GrnCsvDryRunInput` schemas (`{ purchaseOrderId, rows }` only — no
+  client-supplied `tenantId`, unlike the brief's own draft).
+- `apps/server/src/ipc/channels.ts` — new `grn.csvDryRun = 'grn:csvDryRun'`.
+- `apps/server/src/ipc/handlers/grn.handler.ts` — new handler (file
+  75→128 lines, still well under the 260-line threshold given); looks
+  up the PO's lines via the existing `KyselyPurchaseOrderRepository`
+  and items by code via the new lookup, then calls
+  `validateGrnCsvRows` — no changes to `grn.repository.ts`/
+  `purchase-order.repository.ts` themselves.
+- `apps/server/src/preload.ts` + `apps/client/src/types/electron-api.d.ts`
+  — `grn.csvDryRun` exposed, with client-side mirror types
+  (`ValidatedGrnRow`/`RejectedGrnRow`/`GrnCsvValidationResult`).
+- `apps/client/src/lib/downloadCsv.ts` — additive `downloadCsvRows()`
+  for multi-row templates; the original `downloadCsv()` and its four
+  existing callers untouched.
+- `apps/client/src/pages/purchase-orders/` — new: `grnCsvParse.ts`
+  (client-side header/row split only — no business rules; apps/client
+  can't import `@shop/core`, so this mirrors `grn-csv-import.ts`'s
+  file-level logic, the same duplication pattern `ITEM_COLUMNS` already
+  uses), `GrnCsvStep1.tsx` (date/bill-ref/payment-mode, credit warns but
+  never blocks), `GrnCsvStep2.tsx` (upload, dry-run report, template
+  download), `GrnCsvStep3.tsx` (summary + confirm), `GrnCsvImportModal.tsx`
+  (orchestrator — own `Modal`, not the shared `ImportModal`; see
+  discrepancy 1 below).
+- `PoDetailGrnsSection.tsx` — new "Upload GRN CSV" button beside "New GRN".
+- `PurchaseOrderDetailModal.tsx` — `GRN_ALLOWED_STATUSES_EXCLUDED` widened
+  to also exclude `draft` (owner decision, Q1 — a real behaviour fix:
+  "New GRN" was previously wrongly enabled for a `draft` PO; now both
+  buttons share `sent`/`partially_received`-only).
+- `PurchaseOrdersPage.tsx` — owns `GrnCsvImportModal`'s state, mirroring
+  the existing `NewGrnModal` wiring (same `detailRefreshKey` bump on success).
+- `PROJECT.md`, `docs/phases/PHASE_9.md` (new §10) updated.
+
+**Verified:**
+
+- `npm run typecheck`, `npm run lint --max-warnings=0`,
+  `npm run build --workspace=@shop/client` (and `--workspace=@shop/server`
+  at the backend sub-tasks) all clean after every sub-task.
+- `npm run test`: 479 → 492/492 (13 new), held through every later sub-task.
+- Money/stock correctness (P9C-6) — same class of verification as last
+  session, same sandbox reason (Electron GUI still can't launch here,
+  `ELECTRON_RUN_AS_NODE=1`): a throwaway `tmp-verify-grn-csv.ts` (deleted
+  after use, confirmed via a clean `git status`) called
+  `parseGrnCsv`/`validateGrnCsvRows`/`grnRepo.create` directly against
+  the real `data/shop-dev.db`, using real existing rows (`ITM-0002`
+  "Compressor 2 Ton", `SUP-0001` "Test Supplier"). A fresh 10-unit PO,
+  a 2-row CSV (one valid 4-unit row, one 99-unit row that must be
+  rejected): dry-run accepted `quantityReceivedMilli 4000`,
+  `unitCostPaisa 800000`, `sellingPricePaisa 950000` — matches
+  4×1000=4000, Rs 8,000×100=800,000, Rs 9,500×100=950,000 exactly.
+  Rejected row read "exceeds remaining qty (6)", not the PO's original
+  10 — proof the running-decrement-across-rows-in-one-file logic is
+  live (10 − 4 already accepted = 6). Recorded GRN's `stock_movement`
+  (`quantity 4000`, `unit_cost 800000`) and `party_ledger`
+  (`amount -3200000`) matched hand calculation exactly: 800,000 ×
+  4000/1000 = 3,200,000 paisa = Rs 32,000, negative (credit, shop owes
+  supplier).
+
+**Not done / deferred:**
+
+- No real click-through in a running Electron window — sandbox
+  limitation, unchanged since Session 48. Click-through list handed to
+  the owner (see `docs/phases/PHASE_9.md` §10.5).
+- Multi-PO CSV, barcode/serial/batch tracking — explicitly out of scope
+  per the brief.
+
+**Bugs found:** None. `GRN_ALLOWED_STATUSES_EXCLUDED`'s `draft` gap
+(§Done above) was a real pre-existing behaviour bug in last session's
+own new code, caught and fixed this session per owner instruction — not
+logged as a numbered PROJECT.md bug since it was fixed in the same
+session it was found, per CLAUDE.md §8's exception for bugs blocking
+the current task's own correctness.
+
+**Decisions taken:** See `docs/phases/PHASE_9.md` §10.2–10.3 for the
+full detail — most load-bearing: a genuine internal contradiction in
+the session brief (Step 2's "no IPC call yet" vs. the same brief's own
+`grn:csvDryRun` endpoint) was surfaced and asked about rather than
+guessed past; owner confirmed the dry-run channel is the real
+validation path. Six further discrepancies (ImportModal's fixed
+two-page shape, no client-supplied tenantId, exact-order header
+checking, reusing `ParsedCsvRow` over a duplicate type, the pre-fill
+decision, and `Money.multiplyByQuantity`/`Money.sum` over a hand-rolled
+total formula) all owner-confirmed before writing code.
+
+**Blocked on:** Nothing for this session's own scope. Electron GUI
+sandbox limitation unchanged.
+
+**Next session should:** Hand the owner the click-through list in
+`docs/phases/PHASE_9.md` §10.5 for real-hardware verification.
+
+**Checklist:**
+
+- [x] All verification checks passed (typecheck/lint/build/492-tests
+      every sub-task; money/stock hand-verified via real repository
+      calls against the real dev DB, per the same owner-approved
+      approach as last session)
+- [x] No unresolved bugs introduced by this phase (the one behaviour
+      fix was resolved within this same session, not left open)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none outstanding)
+- [x] Test suite passing (492/492)
+
+---
+
 ## [2026-09-13] Session 56 — Phase 9-UI: Purchase Orders + GRN screens, COMPLETE
 
 **Goal:** Build the Purchase Order and GRN UI screens on top of Phase 9's

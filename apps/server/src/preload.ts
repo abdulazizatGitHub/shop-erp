@@ -21,6 +21,7 @@ import type {
   DailySalesReportRowDto,
   DeliverJobInput,
   DeliverJobResult,
+  GrnCsvDryRunInput,
   GrnIdInput,
   GrnListForPurchaseOrderInput,
   IssuePartsToJobInput,
@@ -85,6 +86,7 @@ import type {
   WageMonthRowDto,
 } from '@shop/contracts';
 import type {
+  GrnCsvValidationResult,
   GrnRecord,
   GrnSummary,
   JobPartRecord,
@@ -241,6 +243,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.grn.listForPO, input) as Promise<readonly GrnSummary[]>,
     cancel: (input: GrnIdInput): Promise<void> =>
       ipcRenderer.invoke(channels.grn.cancel, input) as Promise<void>,
+    csvDryRun: (input: GrnCsvDryRunInput): Promise<GrnCsvValidationResult> =>
+      ipcRenderer.invoke(channels.grn.csvDryRun, input) as Promise<GrnCsvValidationResult>,
   },
   sale: {
     create: (input: CreateSaleInput): Promise<CreateSaleAndPrintResult> =>

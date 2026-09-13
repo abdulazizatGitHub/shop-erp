@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PurchaseOrderRecord, PurchaseOrderSummary } from '../../types/electron-api.js';
 import { Button, LoadingState, PageHeader, useToast } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { GrnCsvImportModal } from './GrnCsvImportModal.js';
 import { GrnDetailModal } from './GrnDetailModal.js';
 import { NewGrnModal } from './NewGrnModal.js';
 import { NewPoModal } from './NewPoModal.js';
@@ -15,6 +16,7 @@ export function PurchaseOrdersPage(): React.JSX.Element {
   const [newPoOpen, setNewPoOpen] = useState(false);
   const [viewingRow, setViewingRow] = useState<PurchaseOrderSummary | null>(null);
   const [newGrnPo, setNewGrnPo] = useState<PurchaseOrderRecord | null>(null);
+  const [csvImportPo, setCsvImportPo] = useState<PurchaseOrderRecord | null>(null);
   const [viewingGrnId, setViewingGrnId] = useState<string | null>(null);
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
@@ -108,6 +110,9 @@ export function PurchaseOrdersPage(): React.JSX.Element {
         onNewGrn={(po) => {
           setNewGrnPo(po);
         }}
+        onUploadGrnCsv={(po) => {
+          setCsvImportPo(po);
+        }}
         onViewGrn={(grnId) => {
           setViewingGrnId(grnId);
         }}
@@ -122,6 +127,20 @@ export function PurchaseOrdersPage(): React.JSX.Element {
         onCreated={(docNo) => {
           showToast({ variant: 'success', message: `GRN ${docNo} recorded — stock updated` });
           setNewGrnPo(null);
+          loadPurchaseOrders();
+          setDetailRefreshKey((k) => k + 1);
+        }}
+      />
+
+      <GrnCsvImportModal
+        open={csvImportPo !== null}
+        po={csvImportPo}
+        onClose={() => {
+          setCsvImportPo(null);
+        }}
+        onCreated={(docNo) => {
+          showToast({ variant: 'success', message: `GRN ${docNo} recorded — stock updated` });
+          setCsvImportPo(null);
           loadPurchaseOrders();
           setDetailRefreshKey((k) => k + 1);
         }}

@@ -17,11 +17,15 @@ export interface PurchaseOrderDetailModalProps {
   readonly onClose: () => void;
   readonly onCancelled: () => void;
   readonly onNewGrn: (po: PurchaseOrderRecord) => void;
+  readonly onUploadGrnCsv: (po: PurchaseOrderRecord) => void;
   readonly onViewGrn: (grnId: string) => void;
 }
 
 const CANCELLABLE_STATUSES = new Set(['draft', 'sent']);
-const GRN_ALLOWED_STATUSES_EXCLUDED = new Set(['fully_received', 'cancelled']);
+// P9C: widened to also exclude draft — goods cannot have arrived if the
+// order was never sent, so neither manual GRN entry nor CSV upload makes
+// sense for a draft PO. Applies to both "New GRN" and "Upload GRN CSV".
+const GRN_ALLOWED_STATUSES_EXCLUDED = new Set(['draft', 'fully_received', 'cancelled']);
 
 export function PurchaseOrderDetailModal({
   open,
@@ -31,6 +35,7 @@ export function PurchaseOrderDetailModal({
   onClose,
   onCancelled,
   onNewGrn,
+  onUploadGrnCsv,
   onViewGrn,
 }: PurchaseOrderDetailModalProps): React.JSX.Element {
   const { showToast } = useToast();
@@ -135,6 +140,9 @@ export function PurchaseOrderDetailModal({
               canCreateGrn={!GRN_ALLOWED_STATUSES_EXCLUDED.has(po.status)}
               onNewGrn={() => {
                 onNewGrn(po);
+              }}
+              onUploadCsv={() => {
+                onUploadGrnCsv(po);
               }}
               onViewGrn={onViewGrn}
             />

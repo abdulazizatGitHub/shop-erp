@@ -33,6 +33,26 @@ export const GrnIdInput = z.object({
 });
 export type GrnIdInput = z.infer<typeof GrnIdInput>;
 
+/**
+ * P9C. One raw CSV row, as parsed client-side — mirrors
+ * @shop/core's ParsedCsvRow exactly (rowNumber + cells keyed by the exact
+ * GRN_CSV_COLUMNS header names), so the handler can hand rows straight to
+ * validateGrnCsvRows with no reshaping. All values are still raw strings;
+ * paisa/milli conversion happens server-side in validateGrnCsvRows, never
+ * here — see grn-csv-import.ts.
+ */
+export const GrnCsvRawRow = z.object({
+  rowNumber: z.number().int().positive(),
+  cells: z.record(z.string(), z.string()),
+});
+export type GrnCsvRawRow = z.infer<typeof GrnCsvRawRow>;
+
+export const GrnCsvDryRunInput = z.object({
+  purchaseOrderId: z.string().uuid(),
+  rows: z.array(GrnCsvRawRow).min(1),
+});
+export type GrnCsvDryRunInput = z.infer<typeof GrnCsvDryRunInput>;
+
 export const GrnListForPurchaseOrderInput = z.object({
   purchaseOrderId: z.string().uuid(),
 });

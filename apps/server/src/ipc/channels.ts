@@ -69,6 +69,7 @@ export const channels = {
     get: 'grn:get',
     listForPO: 'grn:listForPO',
     cancel: 'grn:cancel',
+    csvDryRun: 'grn:csvDryRun',
   },
   payment: { receive: 'payment:receive', pay: 'payment:pay' },
   job: {

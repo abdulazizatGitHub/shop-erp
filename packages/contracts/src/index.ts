@@ -127,6 +127,8 @@ export {
   GrnLineDto,
   GrnDto,
   GrnSummaryDto,
+  GrnCsvRawRow,
+  GrnCsvDryRunInput,
 } from './grn/grn.js';
 
 export {

@@ -15,6 +15,7 @@ export interface PoDetailGrnsSectionProps {
   readonly grns: readonly GrnSummary[] | null;
   readonly canCreateGrn: boolean;
   readonly onNewGrn: () => void;
+  readonly onUploadCsv: () => void;
   readonly onViewGrn: (id: string) => void;
 }
 
@@ -22,6 +23,7 @@ export function PoDetailGrnsSection({
   grns,
   canCreateGrn,
   onNewGrn,
+  onUploadCsv,
   onViewGrn,
 }: PoDetailGrnsSectionProps): React.JSX.Element {
   return (
@@ -29,9 +31,14 @@ export function PoDetailGrnsSection({
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-ink">Goods Receipts</h3>
         {canCreateGrn && (
-          <Button variant="primary" onClick={onNewGrn}>
-            New GRN
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onUploadCsv}>
+              Upload GRN CSV
+            </Button>
+            <Button variant="primary" onClick={onNewGrn}>
+              New GRN
+            </Button>
+          </div>
         )}
       </div>
 

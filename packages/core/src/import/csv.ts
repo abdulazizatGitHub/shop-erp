@@ -4,7 +4,7 @@
  * produce the same Record<string,string>[] shape, so parseRows below
  * doesn't care which one fed it.
  */
-function parseCsvLine(line: string): string[] {
+export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;

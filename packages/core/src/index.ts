@@ -159,6 +159,15 @@ export type {
   GrnRecord,
   GrnSummary,
 } from './grn/grn.repository.port.js';
+export { GRN_CSV_COLUMNS, parseGrnCsv, validateGrnCsvRows } from './grn/grn-csv-import.js';
+export type {
+  GrnCsvItemLookup,
+  PoLineForCsvImport,
+  ValidatedGrnRow,
+  RejectedGrnRow,
+  GrnCsvValidationResult,
+  ParseGrnCsvResult,
+} from './grn/grn-csv-import.js';
 
 export {
   resolvePricePaisa,

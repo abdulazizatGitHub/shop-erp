@@ -20,6 +20,7 @@ import type {
   DailySalesReportRowDto,
   DeliverJobInput,
   DeliverJobResult,
+  GrnCsvDryRunInput,
   GrnIdInput,
   GrnListForPurchaseOrderInput,
   ImportItemsInput,
@@ -206,6 +207,31 @@ export interface GrnRecord {
   readonly status: string;
   readonly notes: string | null;
   readonly lines: readonly GrnLineRecord[];
+}
+
+/** Mirrors @shop/core's ValidatedGrnRow. */
+export interface ValidatedGrnRow {
+  readonly rowNumber: number;
+  readonly itemId: string;
+  readonly purchaseOrderLineId: string;
+  readonly quantityReceivedMilli: number;
+  readonly unitCostPaisa: number;
+  readonly sellingPricePaisa: number;
+  readonly wholesalePricePaisa: number | null;
+  readonly notes: string | null;
+}
+
+/** Mirrors @shop/core's RejectedGrnRow. */
+export interface RejectedGrnRow {
+  readonly rowNumber: number;
+  readonly itemCode: string | null;
+  readonly reason: string;
+}
+
+/** Mirrors @shop/core's GrnCsvValidationResult. */
+export interface GrnCsvValidationResult {
+  readonly accepted: readonly ValidatedGrnRow[];
+  readonly rejected: readonly RejectedGrnRow[];
 }
 
 /** Mirrors @shop/db's ItemPriceHistoryRow. */
@@ -399,6 +425,7 @@ export interface ElectronApi {
     readonly get: (input: GrnIdInput) => Promise<GrnRecord | null>;
     readonly listForPO: (input: GrnListForPurchaseOrderInput) => Promise<readonly GrnSummary[]>;
     readonly cancel: (input: GrnIdInput) => Promise<void>;
+    readonly csvDryRun: (input: GrnCsvDryRunInput) => Promise<GrnCsvValidationResult>;
   };
   readonly sale: {
     readonly create: (input: CreateSaleInput) => Promise<CreateSaleAndPrintResult>;
