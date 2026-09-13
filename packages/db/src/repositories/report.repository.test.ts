@@ -10,6 +10,7 @@ import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
 import type { Database as Schema } from '../kysely-schema.js';
+import { KyselyExpenseRepository } from './expense.repository.js';
 import { KyselyItemRepository } from './item.repository.js';
 import { KyselyPartyRepository } from './party.repository.js';
 import { KyselyPurchaseRepository } from './purchase.repository.js';
@@ -17,7 +18,9 @@ import { KyselySaleRepository } from './sale.repository.js';
 import {
   getCashBookReport,
   getDailySalesReport,
+  getExpenseSummaryReport,
   getReceivablesAgingReport,
+  getStockPerformanceReport,
   getStockValuationReport,
   getUnitPlReport,
 } from './report.repository.js';
@@ -34,9 +37,22 @@ let itemRepo: KyselyItemRepository;
 let saleRepo: KyselySaleRepository;
 let purchaseRepo: KyselyPurchaseRepository;
 let partyRepo: KyselyPartyRepository;
+let expenseRepo: KyselyExpenseRepository;
 let businessUnitId: string;
 let repairBusinessUnitId: string;
+let sharedBusinessUnitId: string;
 let warehouseId: string;
+
+function insertExpenseCategory(name: string, isOwnerDrawing = false): string {
+  const id = newId();
+  rawDb
+    .prepare(
+      `INSERT INTO expense_category (id, tenant_id, name, kind, is_billable, is_owner_drawing, sort_order)
+       VALUES (?, ?, ?, 'variable', 0, ?, 0)`,
+    )
+    .run(id, TENANT_ID, name, isOwnerDrawing ? 1 : 0);
+  return id;
+}
 
 function uomId(name: string): string {
   return (
@@ -90,6 +106,7 @@ beforeEach(() => {
   saleRepo = new KyselySaleRepository(kysely, TENANT_ID, DEVICE_CODE);
   purchaseRepo = new KyselyPurchaseRepository(kysely, TENANT_ID, DEVICE_CODE);
   partyRepo = new KyselyPartyRepository(kysely, TENANT_ID, DEVICE_CODE);
+  expenseRepo = new KyselyExpenseRepository(kysely, TENANT_ID, DEVICE_CODE);
 
   businessUnitId = (
     rawDb
@@ -99,6 +116,11 @@ beforeEach(() => {
   repairBusinessUnitId = (
     rawDb
       .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'REPAIR'`)
+      .get(TENANT_ID) as { id: string }
+  ).id;
+  sharedBusinessUnitId = (
+    rawDb
+      .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'SHARED'`)
       .get(TENANT_ID) as { id: string }
   ).id;
   warehouseId = (
@@ -267,6 +289,130 @@ describe('R1 — getDailySalesReport', () => {
   it('returns no rows for a date range with no confirmed sales', async () => {
     const rows = await getDailySalesReport(kysely, TENANT_ID, '2026-01-01', '2026-01-31');
     expect(rows).toHaveLength(0);
+  });
+
+  // P10-2a: report:dailySales now accepts { from, to } instead of a single
+  // date — these three prove the range behavior the new contract input
+  // relies on (the repository function itself is unchanged; the handler
+  // now passes input.from/input.to instead of input.date twice).
+  it('P10-2a: from === to reproduces the old single-date behavior — one sale of Rs 6,000', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Single Day Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 600000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // 1 sale x Rs 6,000 = 600,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-29',
+      paymentMode: 'cash',
+      paidAmountPaisa: 600000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: null }],
+    });
+
+    const rows = await getDailySalesReport(kysely, TENANT_ID, '2026-08-29', '2026-08-29');
+    expect(rows).toHaveLength(1);
+    // 1 sale x Rs 6,000 = 600,000 paisa
+    expect(rows[0]?.totalSalesPaisa).toBe(600000);
+  });
+
+  it('P10-2a: a date range returns one row per date, each with its own total, summing correctly', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Range Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 150000,
+    });
+    insertStockMovement(item.id, 10000);
+
+    // Aug 29: 1 sale x Rs 6,000 = 600,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-29',
+      paymentMode: 'cash',
+      paidAmountPaisa: 600000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 4000, unitPricePaisa: 150000 }],
+    });
+    // Aug 30 (middle of the range): 1 sale x Rs 3,000 = 300,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-30',
+      paymentMode: 'cash',
+      paidAmountPaisa: 300000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 2000, unitPricePaisa: 150000 }],
+    });
+    // Aug 31: 1 sale x Rs 1,500 = 150,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-31',
+      paymentMode: 'cash',
+      paidAmountPaisa: 150000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 150000 }],
+    });
+
+    const rows = await getDailySalesReport(kysely, TENANT_ID, '2026-08-29', '2026-08-31');
+
+    // Three separate rows, one per date — not a single aggregate row.
+    expect(rows).toHaveLength(3);
+    const aug29 = rows.find((r) => r.date === '2026-08-29');
+    const aug30 = rows.find((r) => r.date === '2026-08-30');
+    const aug31 = rows.find((r) => r.date === '2026-08-31');
+    // Aug 29: 600,000 paisa
+    expect(aug29?.totalSalesPaisa).toBe(600000);
+    // Aug 30: 300,000 paisa
+    expect(aug30?.totalSalesPaisa).toBe(300000);
+    // Aug 31: 150,000 paisa
+    expect(aug31?.totalSalesPaisa).toBe(150000);
+
+    // sum: 600,000 + 300,000 + 150,000 = 1,050,000 paisa
+    const sum = rows.reduce((acc, r) => acc + r.totalSalesPaisa, 0);
+    expect(sum).toBe(1050000);
+  });
+
+  it('P10-2a: a sale outside the queried range is excluded entirely', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Exclusion Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 200000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Outside the queried range — Rs 2,000 on 2026-09-01
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-01',
+      paymentMode: 'cash',
+      paidAmountPaisa: 200000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 200000 }],
+    });
+
+    const rows = await getDailySalesReport(kysely, TENANT_ID, '2026-08-29', '2026-08-31');
+
+    expect(rows).toHaveLength(0);
+    expect(rows.find((r) => r.date === '2026-09-01')).toBeUndefined();
   });
 });
 
@@ -587,5 +733,285 @@ describe('R5 — getUnitPlReport', () => {
       expect(row.cogsPaisa).toBe(0);
       expect(row.directMarginPaisa).toBe(0);
     }
+  });
+
+  // P10-2b: report:unitPl now accepts { from, to } from the client instead
+  // of a server-hardcoded all-time range. getUnitPlReport itself already
+  // took dateFrom/dateTo — these prove the date filter it already runs
+  // (sale_date BETWEEN, via v_unit_direct_margin) actually excludes/
+  // includes a sale correctly, which the pre-existing tests above did not
+  // specifically target with a sale placed OUTSIDE a real range.
+  it('P10-2b: a sale outside the queried date range does not contribute revenue', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Out Of Range Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 400000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Rs 4,000 sale on 2026-08-20 — outside the September range queried below.
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-20',
+      paymentMode: 'cash',
+      paidAmountPaisa: 400000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 400000 }],
+    });
+
+    const report = await getUnitPlReport(kysely, TENANT_ID, '2026-09-01', '2026-09-30');
+
+    const parts = report.rows.find((r) => r.unitCode === 'PARTS');
+    // Outside the range -> excluded entirely -> 0 paisa
+    expect(parts?.revenuePaisa).toBe(0);
+  });
+
+  it('P10-2b: a sale inside the queried date range contributes its exact revenue', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'In Range Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 400000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Rs 4,000 sale on 2026-08-20 — inside the August range queried below.
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-20',
+      paymentMode: 'cash',
+      paidAmountPaisa: 400000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 400000 }],
+    });
+
+    const report = await getUnitPlReport(kysely, TENANT_ID, '2026-08-01', '2026-08-31');
+
+    const parts = report.rows.find((r) => r.unitCode === 'PARTS');
+    // 1 sale x Rs 4,000 = 400,000 paisa
+    expect(parts?.revenuePaisa).toBe(400000);
+  });
+});
+
+describe('P10-2c — getStockPerformanceReport', () => {
+  const RANGE_FROM = '2026-08-01';
+  const RANGE_TO = '2026-08-31';
+
+  it('sorts items by totalSoldMilli DESC — item A (sold more) appears before item B', async () => {
+    const itemA = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Best Seller A',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(itemA.id, 20000);
+    const itemB = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Slow Seller B',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(itemB.id, 20000);
+
+    // A: 3 sales x 1000 milli = 3000 milli sold in range
+    for (let i = 0; i < 3; i++) {
+      await saleRepo.createSale({
+        customerId: null,
+        warehouseId: null,
+        saleDate: '2026-08-10',
+        paymentMode: 'cash',
+        paidAmountPaisa: 100000,
+        notes: null,
+        lines: [{ itemId: itemA.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+      });
+    }
+    // B: 1 sale x 1000 milli = 1000 milli sold in range
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-10',
+      paymentMode: 'cash',
+      paidAmountPaisa: 100000,
+      notes: null,
+      lines: [{ itemId: itemB.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+    });
+
+    const rows = await getStockPerformanceReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    // A: 3 x 1000milli = 3000 milli, B: 1 x 1000milli = 1000 milli
+    const rowA = rows.find((r) => r.itemId === itemA.id);
+    const rowB = rows.find((r) => r.itemId === itemB.id);
+    expect(rowA?.totalSoldMilli).toBe(3000);
+    expect(rowB?.totalSoldMilli).toBe(1000);
+
+    const indexA = rows.findIndex((r) => r.itemId === itemA.id);
+    const indexB = rows.findIndex((r) => r.itemId === itemB.id);
+    expect(indexA).toBeLessThan(indexB);
+  });
+
+  it('a sale outside the date range does not contribute to totalSoldMilli', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Outside Range Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(item.id, 10000);
+
+    // Sold on 2026-07-15 — before RANGE_FROM ('2026-08-01').
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-07-15',
+      paymentMode: 'cash',
+      paidAmountPaisa: 100000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+    });
+
+    const rows = await getStockPerformanceReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    const row = rows.find((r) => r.itemId === item.id);
+    expect(row).toBeDefined();
+    expect(row?.totalSoldMilli).toBe(0);
+    expect(row?.revenuePaisa).toBe(0);
+  });
+
+  it('an item with stock but zero sales in range still appears (owner-confirmed P10-2c decision)', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Never Sold This Month',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    // 5 pieces on hand (opening stock only, no sale ever).
+    insertStockMovement(item.id, 5000);
+
+    const rows = await getStockPerformanceReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    const row = rows.find((r) => r.itemId === item.id);
+    expect(row).toBeDefined();
+    // 5 pieces on hand = 5000 milli
+    expect(row?.quantityMilli).toBe(5000);
+    expect(row?.totalSoldMilli).toBe(0);
+    expect(row?.revenuePaisa).toBe(0);
+  });
+});
+
+describe('P10-2d — getExpenseSummaryReport', () => {
+  const RANGE_FROM = '2026-08-01';
+  const RANGE_TO = '2026-08-31';
+
+  it('groups by category + business unit, with correct totalPaisa and count per category', async () => {
+    // 'Electricity' is already a seeded category name (bootstrap.ts) —
+    // uses a distinct test-only name to avoid the tenant_id+name UNIQUE
+    // constraint, same amounts/behavior the brief specifies for "Electricity".
+    const electricityId = insertExpenseCategory('Test Electricity');
+    const fuelId = insertExpenseCategory('Fuel');
+
+    // Electricity #1: Rs 4,500 = 450,000 paisa, unit SHARED
+    await expenseRepo.createExpense({
+      categoryId: electricityId,
+      expenseDate: '2026-08-05',
+      amountPaisa: 450000,
+      businessUnitId: sharedBusinessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+    // Electricity #2: Rs 2,000 = 200,000 paisa, unit SHARED
+    await expenseRepo.createExpense({
+      categoryId: electricityId,
+      expenseDate: '2026-08-15',
+      amountPaisa: 200000,
+      businessUnitId: sharedBusinessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+    // Fuel: Rs 800 = 80,000 paisa, unit REPAIR
+    await expenseRepo.createExpense({
+      categoryId: fuelId,
+      expenseDate: '2026-08-10',
+      amountPaisa: 80000,
+      businessUnitId: repairBusinessUnitId,
+      vehicle: 'Bike-1',
+      method: 'cash',
+      notes: null,
+    });
+
+    const rows = await getExpenseSummaryReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    expect(rows).toHaveLength(2);
+
+    const electricity = rows.find((r) => r.categoryName === 'Test Electricity');
+    // 450,000 + 200,000 = 650,000 paisa
+    expect(electricity?.totalPaisa).toBe(650000);
+    expect(electricity?.count).toBe(2);
+    expect(electricity?.businessUnitCode).toBe('SHARED');
+
+    const fuel = rows.find((r) => r.categoryName === 'Fuel');
+    // Rs 800 = 80,000 paisa
+    expect(fuel?.totalPaisa).toBe(80000);
+    expect(fuel?.count).toBe(1);
+    expect(fuel?.businessUnitCode).toBe('REPAIR');
+  });
+
+  it('an expense outside the date range does not appear', async () => {
+    const categoryId = insertExpenseCategory('Phone/Internet');
+
+    // Outside the queried range.
+    await expenseRepo.createExpense({
+      categoryId,
+      expenseDate: '2026-09-05',
+      amountPaisa: 300000,
+      businessUnitId: sharedBusinessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+
+    const rows = await getExpenseSummaryReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    expect(rows.find((r) => r.categoryName === 'Phone/Internet')).toBeUndefined();
+  });
+
+  it('excludes owner-drawing categories from the summary (they are not real expenses)', async () => {
+    const drawingCategoryId = insertExpenseCategory('Owner Drawing', true);
+
+    await expenseRepo.createExpense({
+      categoryId: drawingCategoryId,
+      expenseDate: '2026-08-12',
+      amountPaisa: 1000000,
+      businessUnitId: sharedBusinessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+
+    const rows = await getExpenseSummaryReport(kysely, TENANT_ID, RANGE_FROM, RANGE_TO);
+
+    expect(rows.find((r) => r.categoryName === 'Owner Drawing')).toBeUndefined();
   });
 });

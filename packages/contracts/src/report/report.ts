@@ -4,14 +4,19 @@ import { z } from 'zod';
  * P4.5-6 — Reports screen. Every DTO here mirrors a return type in
  * packages/db/src/repositories/report.repository.ts exactly (see that
  * file for the SQL/business logic — this package only shapes the wire
- * format). R2/R3/R5 take no input from the client at all: asOfDate/date
- * range are computed server-side (today, and an all-time range
- * respectively) so the screen's "no inputs" requirement holds even at
- * the wire level, not just in the UI.
+ * format). R2/R3 take no input from the client at all: asOfDate is
+ * computed server-side (today) so those screens' "no inputs" requirement
+ * holds even at the wire level, not just in the UI. R5 (Unit P&L) took no
+ * input either until P10-2b widened it to a client-supplied date range.
  */
 
+// P10-2a: widened from a single `date` to a `{ from, to }` range — the
+// repository function (getDailySalesReport) already took dateFrom/dateTo
+// separately, so this only changes what the client can ask for. Passing
+// from === to reproduces the old single-date behavior exactly.
 export const DailySalesReportInput = z.object({
-  date: z.string().min(1),
+  from: z.string().min(1),
+  to: z.string().min(1),
 });
 export type DailySalesReportInput = z.infer<typeof DailySalesReportInput>;
 
@@ -45,6 +50,14 @@ export const StockValuationReportDto = z.object({
 });
 export type StockValuationReportDto = z.infer<typeof StockValuationReportDto>;
 
+// P10-4: additive — asOfDate defaults to today server-side when omitted
+// (unchanged behavior for any existing caller), so DateRangeSelector's
+// `to` date can drive the aging bucket cutoff on the Receivables tab.
+export const ReceivablesReportInput = z.object({
+  asOfDate: z.string().min(1).optional(),
+});
+export type ReceivablesReportInput = z.infer<typeof ReceivablesReportInput>;
+
 /** Mirrors ReceivablesAgingRow exactly. */
 export const ReceivablesAgingRowDto = z.object({
   customerId: z.string().uuid(),
@@ -74,6 +87,15 @@ export const CashBookRowDto = z.object({
 });
 export type CashBookRowDto = z.infer<typeof CashBookRowDto>;
 
+// P10-2b: the repository function (getUnitPlReport) already took
+// dateFrom/dateTo separately — only the handler hardcoded an all-time
+// range. This lets the client actually choose one.
+export const UnitPlReportInput = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type UnitPlReportInput = z.infer<typeof UnitPlReportInput>;
+
 /** Mirrors UnitPlRow exactly. */
 export const UnitPlRowDto = z.object({
   unitCode: z.enum(['PARTS', 'REPAIR', 'TOTAL']),
@@ -92,6 +114,45 @@ export const UnitPlReportDto = z.object({
   disclaimer: z.string(),
 });
 export type UnitPlReportDto = z.infer<typeof UnitPlReportDto>;
+
+// P10-2c: new report, no prior view. quantityMilli is all-time stock on
+// hand; totalSoldMilli/revenuePaisa are scoped to [from, to]. Every
+// track_stock item appears (owner-confirmed) — a zero-sale item still
+// returns a row with totalSoldMilli/revenuePaisa both 0.
+export const StockPerformanceInput = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type StockPerformanceInput = z.infer<typeof StockPerformanceInput>;
+
+/** Mirrors StockPerformanceRow exactly. */
+export const StockPerformanceRowDto = z.object({
+  itemId: z.string().uuid(),
+  itemName: z.string(),
+  unitName: z.string(),
+  quantityMilli: z.number().int(),
+  totalSoldMilli: z.number().int(),
+  revenuePaisa: z.number().int(),
+});
+export type StockPerformanceRowDto = z.infer<typeof StockPerformanceRowDto>;
+
+// P10-2d: new report, no prior view. Owner-drawing expense categories are
+// excluded server-side (see getExpenseSummaryReport's own comment) —
+// never returned in this DTO, not filtered client-side.
+export const ExpenseSummaryInput = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type ExpenseSummaryInput = z.infer<typeof ExpenseSummaryInput>;
+
+/** Mirrors ExpenseSummaryRow exactly. */
+export const ExpenseSummaryRowDto = z.object({
+  categoryName: z.string(),
+  businessUnitCode: z.string(),
+  totalPaisa: z.number().int(),
+  count: z.number().int(),
+});
+export type ExpenseSummaryRowDto = z.infer<typeof ExpenseSummaryRowDto>;
 
 export const WageMonthInput = z.object({
   year: z.number().int().min(2024).max(2099),

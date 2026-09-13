@@ -49,8 +49,13 @@ import type {
   PurchaseListInput,
   PurchaseListRowDto,
   PurchaseOrderIdInput,
+  ExpenseSummaryInput,
+  ExpenseSummaryRowDto,
+  ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
+  StockPerformanceInput,
+  StockPerformanceRowDto,
   SaleSearchInput,
   SaleSummaryDto,
   SetReceiptPaperSizeInput,
@@ -82,6 +87,7 @@ import type {
   SupplierDto,
   SupplierSearchInput,
   UnitPlReportDto,
+  UnitPlReportInput,
   WageMonthInput,
   WageMonthRowDto,
 } from '@shop/contracts';
@@ -275,12 +281,22 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.report.dailySales, input) as Promise<
         readonly DailySalesReportRowDto[]
       >,
-    receivables: (): Promise<readonly ReceivablesAgingRowDto[]> =>
-      ipcRenderer.invoke(channels.report.receivables) as Promise<readonly ReceivablesAgingRowDto[]>,
+    receivables: (input?: ReceivablesReportInput): Promise<readonly ReceivablesAgingRowDto[]> =>
+      ipcRenderer.invoke(channels.report.receivables, input) as Promise<
+        readonly ReceivablesAgingRowDto[]
+      >,
     cashBook: (input: CashBookReportInput): Promise<readonly CashBookRowDto[]> =>
       ipcRenderer.invoke(channels.report.cashBook, input) as Promise<readonly CashBookRowDto[]>,
-    unitPl: (): Promise<UnitPlReportDto> =>
-      ipcRenderer.invoke(channels.report.unitPl) as Promise<UnitPlReportDto>,
+    unitPl: (input: UnitPlReportInput): Promise<UnitPlReportDto> =>
+      ipcRenderer.invoke(channels.report.unitPl, input) as Promise<UnitPlReportDto>,
+    stockPerformance: (input: StockPerformanceInput): Promise<readonly StockPerformanceRowDto[]> =>
+      ipcRenderer.invoke(channels.report.stockPerformance, input) as Promise<
+        readonly StockPerformanceRowDto[]
+      >,
+    expenseSummary: (input: ExpenseSummaryInput): Promise<readonly ExpenseSummaryRowDto[]> =>
+      ipcRenderer.invoke(channels.report.expenseSummary, input) as Promise<
+        readonly ExpenseSummaryRowDto[]
+      >,
     wageMonth: (input: WageMonthInput): Promise<readonly WageMonthRowDto[]> =>
       ipcRenderer.invoke(channels.report.wageMonth, input) as Promise<readonly WageMonthRowDto[]>,
   },

@@ -385,3 +385,113 @@ export async function getUnitPlReport(
     disclaimer: UNIT_PL_DISCLAIMER,
   };
 }
+
+export interface StockPerformanceRow {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly unitName: string;
+  readonly quantityMilli: number;
+  readonly totalSoldMilli: number;
+  readonly revenuePaisa: number;
+}
+
+interface StockPerformanceSourceRow {
+  itemId: string;
+  itemName: string;
+  unitName: string;
+  quantityMilli: number | null;
+  totalSoldMilli: number;
+  revenuePaisa: number;
+}
+
+/**
+ * P10-2c — new (no prior view). quantityMilli is current stock on hand,
+ * all-time, all warehouses — same v_stock_on_hand scalar-subquery pattern
+ * item.repository.ts already uses for the same figure. totalSoldMilli/
+ * revenuePaisa are scoped to [dateFrom, dateTo] only, via two separate
+ * pre-aggregated subqueries (no per-row business logic, just SUM/GROUP
+ * BY) joined onto every track_stock item — a zero-sale item in range
+ * still appears, with both figures at 0 (owner-confirmed, P10-2c).
+ * Sorted by totalSoldMilli DESC (best sellers first).
+ */
+export async function getStockPerformanceReport(
+  db: Kysely<Database>,
+  tenantId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<readonly StockPerformanceRow[]> {
+  const result = await sql<StockPerformanceSourceRow>`
+    SELECT
+      i.id                                      AS itemId,
+      i.name_en                                 AS itemName,
+      u.name                                     AS unitName,
+      (SELECT SUM(qty_milli) FROM v_stock_on_hand
+         WHERE item_id = i.id AND tenant_id = i.tenant_id)   AS quantityMilli,
+      COALESCE(sold.totalSoldMilli, 0)          AS totalSoldMilli,
+      COALESCE(rev.revenuePaisa, 0)             AS revenuePaisa
+    FROM        item i
+    JOIN        uom u ON u.id = i.stock_uom_id
+    LEFT JOIN (
+      SELECT      item_id, SUM(-quantity) AS totalSoldMilli
+      FROM        stock_movement
+      WHERE       tenant_id = ${tenantId} AND movement_type = 'sale'
+        AND       movement_date BETWEEN ${dateFrom} AND ${dateTo}
+      GROUP BY    item_id
+    ) sold ON sold.item_id = i.id
+    LEFT JOIN (
+      SELECT      sl.item_id, SUM(sl.line_total) AS revenuePaisa
+      FROM        sale_line sl
+      JOIN        sale s ON s.id = sl.sale_id
+      WHERE       sl.tenant_id = ${tenantId} AND s.status = 'confirmed'
+        AND       s.sale_date BETWEEN ${dateFrom} AND ${dateTo}
+      GROUP BY    sl.item_id
+    ) rev ON rev.item_id = i.id
+    WHERE       i.tenant_id = ${tenantId} AND i.deleted_at IS NULL AND i.track_stock = 1
+    ORDER BY    totalSoldMilli DESC
+  `.execute(db);
+
+  return result.rows.map((row) => ({
+    ...row,
+    quantityMilli: row.quantityMilli ?? 0,
+  }));
+}
+
+export interface ExpenseSummaryRow {
+  readonly categoryName: string;
+  readonly businessUnitCode: string;
+  readonly totalPaisa: number;
+  readonly count: number;
+}
+
+/**
+ * P10-2d — new (no prior view). Owner-drawing categories
+ * (expense_category.is_owner_drawing = 1, "not a real expense" per its
+ * own column comment) are excluded, matching the existing
+ * v_unit_direct_expense/v_owner_drawings precedent (0003_shared_overhead.sql)
+ * of reporting drawings separately rather than folding them into expense
+ * totals. Grouped by category + business unit for the given date range.
+ */
+export async function getExpenseSummaryReport(
+  db: Kysely<Database>,
+  tenantId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<readonly ExpenseSummaryRow[]> {
+  const result = await sql<ExpenseSummaryRow>`
+    SELECT
+      ec.name                      AS categoryName,
+      bu.code                      AS businessUnitCode,
+      SUM(e.amount)                AS totalPaisa,
+      COUNT(*)                     AS count
+    FROM        expense e
+    JOIN        expense_category ec ON ec.id = e.category_id
+    JOIN        business_unit bu    ON bu.id = e.business_unit_id
+    WHERE       e.tenant_id = ${tenantId}
+      AND       ec.is_owner_drawing = 0
+      AND       e.expense_date BETWEEN ${dateFrom} AND ${dateTo}
+    GROUP BY    ec.name, bu.code
+    ORDER BY    ec.name, bu.code
+  `.execute(db);
+
+  return result.rows;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Money } from '@shop/shared';
 import {
   Alert,
   EmptyState,
@@ -10,12 +11,28 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
+  colors,
 } from '@shop/ui';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { JobSplitRecord } from '../../types/electron-api.js';
+import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
+import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
+import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+function toCsvRows(rows: readonly JobSplitRecord[]): Record<string, string | number>[] {
+  return rows.map((r) => ({
+    'Job No': r.docNo,
+    Customer: r.customerName ?? 'Walk-in',
+    'Received Date': r.receivedDate,
+    // divide paisa by 100 for CSV export
+    'Parts Margin (Rs)': (r.partsMarginPaisa / 100).toFixed(2),
+    // divide paisa by 100 for CSV export
+    'Labour Revenue (Rs)': (r.labourChargePaisa / 100).toFixed(2),
+    // divide paisa by 100 for CSV export
+    'Total Billed (Rs)': (r.totalBillPaisa / 100).toFixed(2),
+  }));
 }
 
 interface KpiCardProps {
@@ -32,16 +49,45 @@ function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   );
 }
 
+interface JobChartPoint {
+  readonly docNo: string;
+  readonly partsMarginRupees: number;
+  readonly partsMarginPaisa: number;
+  readonly labourChargeRupees: number;
+  readonly labourChargePaisa: number;
+}
+
+function toChartData(rows: readonly JobSplitRecord[]): readonly JobChartPoint[] {
+  return rows.map((row) => ({
+    docNo: row.docNo,
+    // divide paisa by 100 for display only
+    partsMarginRupees: row.partsMarginPaisa / 100,
+    partsMarginPaisa: row.partsMarginPaisa,
+    labourChargeRupees: row.labourChargePaisa / 100,
+    labourChargePaisa: row.labourChargePaisa,
+  }));
+}
+
+// recharts v3's Tooltip formatter type is a strict intersection that a
+// narrowly-typed function doesn't structurally satisfy — accept unknown
+// and narrow internally instead (still no `any`, per CODING_STANDARDS.md).
+function formatJobTooltip(_value: unknown, name: unknown, item: unknown): string {
+  const payload = (item as { payload?: JobChartPoint }).payload;
+  const paisa = name === 'Parts Margin' ? payload?.partsMarginPaisa : payload?.labourChargePaisa;
+  return Money.format(Money.of(paisa ?? 0));
+}
+
 /**
  * job:getJobSplit only takes one jobId (see v_job_split, packages/core's
  * JobRepositoryPort) — there is no date-ranged list version. This filters
  * job:list's receivedDate client-side, then fans out one getJobSplit call
  * per job in the range. Fine for a repair shop's job volumes; flagged as
  * a known N+1 in PHASE_6.md §8 rather than adding a new read endpoint mid-session.
+ * P10-4: the local dateFrom/dateTo state is now the shared DateRangeSelector
+ * (This Month default) — the fan-out pattern itself is unchanged.
  */
 export function JobSplitReport(): React.JSX.Element {
-  const [dateFrom, setDateFrom] = useState(todayIso());
-  const [dateTo, setDateTo] = useState(todayIso());
+  const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly JobSplitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,44 +97,33 @@ export function JobSplitReport(): React.JSX.Element {
     ipc.job
       .list({ status: null, assignedTo: null, customerId: null })
       .then(async (jobs) => {
-        const inRange = jobs.filter((j) => j.receivedDate >= dateFrom && j.receivedDate <= dateTo);
+        const inRange = jobs.filter(
+          (j) => j.receivedDate >= range.from && j.receivedDate <= range.to,
+        );
         const splits = await Promise.all(inRange.map((j) => ipc.job.getJobSplit(j.id)));
         setRows(splits.filter((s): s is JobSplitRecord => s !== null));
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load job split report');
       });
-  }, [dateFrom, dateTo]);
+  }, [range]);
 
   const partsMarginPaisa = rows ? rows.reduce((sum, r) => sum + r.partsMarginPaisa, 0) : 0;
   const labourChargePaisa = rows ? rows.reduce((sum, r) => sum + r.labourChargePaisa, 0) : 0;
   const totalBillPaisa = rows ? rows.reduce((sum, r) => sum + r.totalBillPaisa, 0) : 0;
+  const chartData = toChartData(rows ?? []);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-4">
-        <label className="flex w-56 flex-col gap-1 text-sm text-ink-muted">
-          From
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => {
-              setDateFrom(e.target.value);
-            }}
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
-          />
-        </label>
-        <label className="flex w-56 flex-col gap-1 text-sm text-ink-muted">
-          To
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => {
-              setDateTo(e.target.value);
-            }}
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
-          />
-        </label>
+      <div className="flex items-center justify-between gap-4">
+        <DateRangeSelector value={range} onChange={setRange} />
+        <ExportCsvButton
+          disabled={!rows || rows.length === 0}
+          onClick={() => {
+            if (!rows) return;
+            downloadCsv(`jobs-${range.from}-${range.to}.csv`, toCsvRows(rows));
+          }}
+        />
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -110,6 +145,38 @@ export function JobSplitReport(): React.JSX.Element {
               label="Total Billed"
               value={<MoneyDisplay paisaValue={totalBillPaisa} size="xl" />}
             />
+          </div>
+
+          <div className="border-t border-line pt-4">
+            <p className="mb-2 text-sm font-medium text-ink-muted">
+              Parts margin vs. labour revenue
+            </p>
+            {chartData.length === 0 ? (
+              <EmptyState message="No jobs in this period." />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={[...chartData]}>
+                  <CartesianGrid stroke={colors.line.default} vertical={false} />
+                  <XAxis dataKey="docNo" tick={{ fontSize: 12, fill: colors.ink.muted }} />
+                  <YAxis tick={{ fontSize: 12, fill: colors.ink.muted }} />
+                  <Tooltip formatter={formatJobTooltip} />
+                  <Bar
+                    dataKey="partsMarginRupees"
+                    name="Parts Margin"
+                    stackId="job"
+                    fill={colors.brand.default}
+                    isAnimationActive={false}
+                  />
+                  <Bar
+                    dataKey="labourChargeRupees"
+                    name="Labour Revenue"
+                    stackId="job"
+                    fill={colors.posAccent.default}
+                    isAnimationActive={false}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {rows.length === 0 ? (

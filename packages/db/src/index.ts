@@ -61,6 +61,8 @@ export {
   getCashBookReport,
   getReceivablesAgingReport,
   getUnitPlReport,
+  getStockPerformanceReport,
+  getExpenseSummaryReport,
 } from './repositories/report.repository.js';
 export type {
   StockValuationReport,
@@ -70,6 +72,8 @@ export type {
   ReceivablesAgingRow,
   UnitPlReport,
   UnitPlRow,
+  StockPerformanceRow,
+  ExpenseSummaryRow,
 } from './repositories/report.repository.js';
 export { getPurchasePrintData } from './repositories/purchase-print.repository.js';
 export type {

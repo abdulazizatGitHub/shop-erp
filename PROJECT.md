@@ -3,71 +3,379 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-13 (Phase 9-CSV session)
-**Update, 2026-09-13 — Phase 9-CSV (GRN CSV import against a PO) COMPLETE.**
-P9C-0 through P9C-6 all done: staff can now upload a supplier invoice as a
-CSV against a specific purchase order — three-step modal (header details
-→ upload/validate → confirm & record) launched from a new "Upload GRN
-CSV" button beside "New GRN" in `PurchaseOrderDetailModal.tsx`. Both
-buttons now share one enable rule, widened this session (owner decision,
-a correctness fix not just a CSV-import concern — see §6 of
-`docs/phases/PHASE_9.md`): enabled only for `sent`/`partially_received`,
-disabled for `draft`/`fully_received`/`cancelled` (previously "New GRN"
-alone was wrongly enabled for `draft`).
-New `packages/core/src/grn/grn-csv-import.ts` (`parseGrnCsv` — exact
-case-sensitive, exact-order 6-column header check, stricter than the
-existing fuzzy `parseCsv`; `validateGrnCsvRows` — item-exists →
-on-this-PO → qty-positive-and-≤-remaining → cost/price-positive →
-optional-wholesale → notes-≤200-chars, with the remaining quantity
-tracked and decremented **across rows in the same file**, so a second
-row for an item already received earlier in the same CSV is checked
-against what's actually left, not the PO's original static remaining)
-plus its own test file, 13 tests (10 required + 3 extra file-level
-cases), all money/quantity values hand-calculated in comments. New
-additive read-only `grn:csvDryRun` IPC channel — client parses the CSV
-itself (header/row split only, no business rules) then calls this
-channel for the authoritative accepted/rejected split, mirroring
-`NewGrnModal`'s existing inline-then-defensive double-check pattern; the
-actual commit still goes through the unchanged `grn:create`. New
-`packages/db/src/repositories/item-lookup.repository.ts`
-(`getItemsByCode`, a plain function — `item.repository.ts` was already
-at 301 lines, at/over the 300-line cap, matching the exact precedent
-`price-history.repository.ts` set last session). Template download is
-pre-filled with one row per remaining PO line (item code + remaining
-qty), via a new additive `downloadCsvRows()` sibling to the existing
-`downloadCsv()` — that function and its four existing callers are
-untouched. DB-verified end-to-end against the real dev DB via a
-throwaway script (deleted after use, confirmed via `git status`): a
-CSV with one valid + one over-remaining-qty row produced the exact
-expected accept/reject split, and the resulting GRN's `stock_movement`/
-`party_ledger` rows matched the hand-calculated paisa/milli values
-exactly. **Sandbox note (unchanged from every session since Session 48)**: the Electron GUI still cannot launch here
-(`ELECTRON_RUN_AS_NODE=1`), so this is real-repository verification, not
-a UI click-through — see `docs/phases/PHASE_9.md` §10 for the full
-click-through list still owed to the owner.
-**One internal contradiction in the session brief, resolved by asking
-rather than guessing**: Step 2's own wording said "no IPC call yet —
-pure client-side validation," which would have made the entire new
-`grn:csvDryRun` channel (explicitly required elsewhere in the same
-brief, with its own handler/tests/execution sub-task) dead code. Owner
-confirmed: client parses only; `grn:csvDryRun` is the actual validation
-source of truth, called immediately after parsing.
-**Six other discrepancies found and resolved before writing code (rule
-6, all owner-confirmed)**: `ImportModal`'s shared shell is a fixed
-two-page wizard, not extensible to three steps — built `GrnCsvImportModal.tsx`
-as its own stepped modal on the base `Modal` primitive instead, matching
-`NewPoModal.tsx`/`NewGrnModal.tsx`'s own precedent; the brief's
-`grn:csvDryRun` payload included a client-supplied `tenantId`, which no
-other channel in this codebase accepts (always `deps.tenantId`,
-server-side) — excluded from the Zod input; neither existing header
-helper (`parseCsv`'s fuzzy ≥60% match, `validateHeaders`'s
-set-membership-only check) enforces the brief's exact-order contract —
-wrote a dedicated strict check instead; the brief's named
-`ParsedGrnCsvRow` type is identical in shape to the existing
-`ParsedCsvRow` — reused that type directly, additively exporting
-`csv.ts`'s previously-private `parseCsvLine` so the new strict parser
-could reuse its quote-handling; pre-filled the template (owner
-confirmed, brief's own recommendation); used `Money.multiplyByQuantity`
+**Last updated:** 2026-09-13 (Phase 10, P10-5 session — PHASE 10 CLOSED)
+**Update, 2026-09-13 — Phase 10, P10-5 (CSV export) COMPLETE. PHASE 10
+(Reports & Finance Redesign) IS NOW FULLY CLOSED**, all six sub-phases
+(P10-0 through P10-5) done and verified in order across five sessions.
+`npm run verify` 515/515 (post-P10-4) → **525/525** (10 new tests: 7 in
+`exportCsv.test.ts` + 3 in `DailySalesReport.test.tsx`).
+`npm run build --workspace=@shop/client` clean, zero TypeScript errors.
+New `apps/client/src/utils/exportCsv.ts` (49 lines) — `buildCsvString`
+(pure, no DOM) and `downloadCsv` (wraps it with the Blob/anchor-click
+DOM work as a clearly separated final step); new
+`apps/client/src/components/shared/ExportCsvButton.tsx` (18 lines) —
+one shared button reused across all 8 tabs rather than repeating the
+same label/disabled-shape 8 times (CODING_STANDARDS.md's
+"three near-duplicates" rule, applied at 8). Every report tab now has
+an "Export CSV" button in the same row as its `DateRangeSelector`,
+disabled whenever its underlying data is still loading or has zero rows,
+with the exact per-tab column mapping from the brief. Every money value
+in every CSV is `paisa / 100` to 2 decimals (`.toFixed(2)`, each with
+its own `// divide paisa by 100 for CSV export` comment); Stock on
+Hand's quantity column is `milli / 1000` to 3 decimals
+(`// divide milli by 1000 for CSV export`) — never raw paisa/milli.
+**One real gap, asked about rather than silently resolved**: Daily
+Sales' brief-specified "Items" column has no backing data —
+`SaleSummaryDto` (the per-sale state already held by the tab) carries no
+line-item count, and getting a real one would need a new per-sale fetch
+or a backend DTO change, both out of scope for a CSV-only sub-phase (no
+new IPC, no changed fetching logic, per this turn's own constraints).
+Owner chose: keep the literal "Items" column name, export it empty on
+every row, rather than dropping it from the header. Cash (Rs)/Credit
+(Rs) on that same tab are derived per-row as `paidAmountPaisa` /
+`totalAmountPaisa - paidAmountPaisa` — the same split the tab's own KPI
+cards already compute summed, just per-row instead.
+**Before starting P10-5, confirmed in writing (owner's explicit
+requirement) that the P10-4 widening of `report:receivables` is
+backward-compatible**: `ReceivablesReportInput.asOfDate` is optional,
+and the handler's `input.asOfDate ?? todayIso()` reproduces the exact
+prior unconditional `todayIso()` call for any caller that omits it —
+pasted the exact handler lines as proof before writing any P10-5 code.
+**Two real tooling issues found and fixed within the session**: (1) a
+`tsc`/`eslint` disagreement — `tsc` requires a cast to `HTMLButtonElement`
+to read a rendered button's `.disabled` property (`HTMLElement` has no
+such property), while `eslint`'s typed-linting pass flagged that same
+cast as unnecessary; resolved by asserting `hasAttribute('disabled')`
+instead, which needs no cast and satisfies both tools. (2) a test's
+category name ("Electricity") collided with bootstrap.ts's seeded
+category — carried over from checking P10-2d's own test file while
+building nothing new here, just confirming no regression.
+All 10 touched/created files stay under the 300-line cap (largest:
+`DailySalesReport.tsx` at 283 lines) — no sub-component extraction
+needed. See `docs/phases/PHASE_10.md` §8 for notes carried into future
+sessions (the two-different-channels-feeding-Expenses shape, the
+per-tab-local-DateRangeSelector-state shape, the accepted Items-column
+gap).
+**Update, 2026-09-13 — Phase 10, P10-4 (charts + visual redesign, all 8
+report tabs) COMPLETE.** `recharts ^3.10.1` installed in `apps/client`
+only (never in `packages/`). `npm run verify` 515/515 throughout (no new
+business-logic tests required for this sub-phase — charts are visual);
+`npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+both exit 0. All 8 tabs now chart-backed; all 11 touched/created files
+stay under the 300-line cap (largest: `ReceivablesAgingReport.tsx`/
+`ExpensesReport.tsx` at 237 lines), so no sub-component extraction was
+needed anywhere.
+**The five tabs left un-wired after P10-3 (Stock on Hand, Receivables,
+Cash Book, Jobs, Wages) all now have `DateRangeSelector`, per your
+explicit instruction that "no tab is permitted to have charts without a
+working date range"**:
+
+- **Stock on Hand** (`StockValuationReport.tsx`): the selector scopes
+  only the new `report:stockPerformance` fetch (Best Performers table,
+  top 10 by `totalSoldMilli`) — the Stock Level table stays all-time,
+  unfiltered, per instruction. Added 3 summary cards (Items In/Out of
+  Stock, Total Inventory Value) and red text on out-of-stock rows. No
+  chart required for this tab this turn.
+- **Receivables** (`ReceivablesAgingReport.tsx`): **a real backend gap
+  found and resolved by asking, not guessing** — `report:receivables`
+  returned only pre-bucketed sums against a server-hardcoded `today()`;
+  there was no way to "derive the aging client-side using the `to` date"
+  as originally instructed, because the raw per-entry dates never cross
+  the wire and already-summed numbers can't be re-bucketed for a
+  different date. Owner chose to widen `report:receivables` (additive
+  optional `asOfDate`, same channel/DTO, defaults to today when omitted —
+  same pattern as P10-2a/b) over leaving the selector cosmetic-only.
+  Added 3 summary cards and a 4-bucket aging BarChart.
+- **Cash Book** (`CashBookReport.tsx`): replaced its own local from/to
+  date inputs outright with the shared selector. Added 4 summary cards
+  (Opening/Total In/Total Out/Closing Balance — Opening derived from the
+  first row's `runningBalancePaisa - inPaisa + outPaisa`, Closing from
+  the last row) and a running-balance LineChart.
+- **Jobs** (`JobSplitReport.tsx`): replaced its own local from/to state
+  with the selector, driving the same existing client-filter-then-fan-out
+  pattern (`job.list()` filtered by `receivedDate`, then one
+  `job.getJobSplit(id)` per job) — `getJobSplit`'s own signature never
+  changed, it never accepted a range in the first place.
+  `TechnicianCustodySummary.tsx` deliberately left untouched (a
+  current-state snapshot, no date concept, per instruction).
+  Added a stacked BarChart (Parts Margin + Labour Revenue per job),
+  rendered only when the jobs array is non-empty.
+- **Wages** (`WageMonthReport.tsx`): replaced the standalone Month/Year
+  `<Select>` pair with the selector; `report:wageMonth` still takes
+  `{year, month}` (IPC handler untouched, per instruction) — both are
+  derived client-side from `range.from` via string-slicing exactly as
+  specified. A custom range spanning more than one month shows a visible
+  note ("Showing wages for [Month Year] based on selected start date.").
+  **A second real design question, asked rather than assumed**: a
+  Gross/Advances/Net Due stacked bar can't be built correctly, since
+  Net Due = Gross − Advances + Commission — a true `stackId` can only add
+  segment heights, so stacking would either overstate the bar (when
+  Commission > 0) or misrepresent a segment. Owner chose a **grouped
+  (non-stacked)** BarChart over a lossy 2-segment stack.
+  **New Expenses tab** (`ExpensesReport.tsx`, new file, wired into
+  `ReportsPage.tsx`'s Financial group): PieChart by category +
+  BarChart by business unit, both from `report:expenseSummary` (P10-2d).
+  The required table uses the **existing** `expense:list` channel (Phase 7,
+  unrelated to P10 — its input was already `{from, to}`) for individual
+  rows, since `expenseSummary` itself only returns grouped aggregates —
+  confirmed before writing code, no new IPC channel added.
+  **Unit P&L** and **Daily Sales** (already selector-wired from P10-3)
+  each gained their required chart: a grouped BarChart (Revenue/COGS/
+  Direct Margin × Spare Parts/Repair, TOTAL row excluded) and a per-day
+  BarChart of total sales, respectively.
+  **Two real TypeScript/lint issues found and fixed within this session**,
+  affecting every chart file: (1) recharts v3's `Tooltip` `formatter` prop
+  type is a strict intersection that a plainly-typed
+  `(value, name, item) => string` function doesn't structurally satisfy —
+  fixed by typing every formatter's parameters as `unknown` and narrowing
+  internally via a type assertion (still no `any`, per
+  CODING_STANDARDS.md). (2) recharts v3 deprecated the `Cell` component
+  (used for the Expenses pie's per-slice colors) — kept it with one
+  targeted, commented `eslint-disable` rather than migrating to the newer
+  `shape`-prop API, since `Cell` still works until recharts 4.0 and the
+  migration is a separate refactor with no correctness benefit here.
+  All chart colors come from `packages/ui/src/tokens/colors.ts` (imported
+  as `colors` from `@shop/ui`) — no hardcoded hex anywhere in the 8 chart
+  files. Every money value passed to a chart's axis/bar/line is divided by
+  `/100` in the component's own data-mapping step, with the required
+  `// divide paisa by 100 for display only` comment; every tooltip instead
+  reads a companion `*Paisa` field kept alongside the divided value and
+  formats it via the existing `Money.format`, so the exact original paisa
+  figure — not a re-multiplied approximation — is always what's shown on
+  hover. Every `Bar`/`Line`/`Pie` has `isAnimationActive={false}` (no chart
+  animation props anywhere, per instruction — the shop PC's hardware spec
+  is still unconfirmed). Every chart has an explicit "No data for this
+  period."/"No jobs in this period." empty state — no chart is ever left to
+  render an unexplained blank box on zero rows.
+  **Update, 2026-09-13 — Phase 10, P10-3 (Reports page restructure +
+  DateRangeSelector) COMPLETE.** `npm run verify` 506/506 (post-P10-2) →
+  515/515 (9 new tests: 5 `dateRanges.ts` unit tests + 4
+  `DateRangeSelector` render tests). `npm run build --workspace=@shop/client`
+  clean, zero TypeScript errors. New `apps/client/src/utils/dateRanges.ts`
+  (78 lines) — five pure functions (`getToday`/`getThisWeek`/`getThisMonth`/
+  `getThisQuarter`/`getThisYear`), each taking a reference `Date` as its
+  only argument and never calling `new Date()`/`Date.now()` internally, all
+  arithmetic done in UTC (`getUTC*` accessors + `Date.UTC`) specifically to
+  avoid local-timezone drift a plain date-only string can otherwise
+  introduce. New `apps/client/src/components/shared/DateRangeSelector.tsx`
+  (97 lines) — five preset buttons + a Custom mode with two native
+  `<input type="date">` fields; takes an optional `referenceDate` prop
+  (defaults to `new Date()`) purely so tests can fix "now" without
+  violating `dateRanges.ts`'s own no-internal-`Date`-calls rule.
+  `ReportsPage.tsx` restructured (52 → 78 lines) into two `<Tabs>`
+  instances under "Operational"/"Financial" text labels with a border
+  divider — the existing `Tabs` primitive has no grouping API, so this
+  reuses it twice rather than inventing a new component (owner's explicit
+  instruction). **Scope note, flagged not silently decided**: only
+  `DailySalesReport.tsx` and `UnitPlReport.tsx` were wired to the new
+  selector this sub-phase — the turn's own constraint list named exactly
+  these two (the ones whose backend contracts P10-2 changed to
+  `{from, to}`); the other 5 tabs (Stock on Hand, Receivables, Cash Book,
+  Jobs, Wages) have incompatible date shapes today and were left untouched.
+  No "Expenses" tab was added — no `ExpensesReport.tsx` screen exists yet
+  (`report:expenseSummary` is backend-only from P10-2d); that screen is
+  P10-4 scope.
+  **One real money-correctness fix, not optional cleanup**:
+  `DailySalesReport.tsx`'s four KPI cards used to read only `summary[0]`
+  from `getDailySalesReport`'s response — correct only because the query
+  was always a single day. Once `DateRangeSelector` let this tab pick a
+  multi-day range, the report started returning **one row per date**, and
+  reading only the first row would have silently shown a wrong (too-low)
+  total the moment anyone picked "This Week" or "This Month" on this tab.
+  Fixed by summing every returned row's `totalSalesPaisa`/
+  `cashCollectedPaisa`/`creditGivenPaisa`/`invoiceCount` via `Money.add`
+  before rendering — found and fixed in this same sub-phase, not shipped
+  broken and logged as a bug.
+  **Update, 2026-09-13 — Phase 10, P10-2a through P10-2d (date-ranged
+  report backends) COMPLETE.** All four sub-tasks done in order, each
+  verified before the next started. `npm run verify`: 495/495 baseline
+  (post-P10-1) → 498 (2a) → 500 (2b) → 503 (2c) → 506 (2d).
+  `npm run build --workspace=@shop/server` clean throughout.
+  **P10-2a** — `report:dailySales` widened from `{ date }` to `{ from, to }`
+  (`packages/contracts/src/report/report.ts`). No repository/SQL change was
+  needed: `getDailySalesReport` already took `dateFrom`/`dateTo` separately
+  (`report.repository.ts:105-125`) — only `report.handler.ts` was hardcoding
+  `input.date` into both positions. `DailySalesReport.tsx`'s only call site
+  updated to `{ from: date, to: date }` (unchanged UI behavior; P10-3 will
+  add the real date-range picker). 3 new tests added to the existing
+  `report.repository.test.ts` (single-day = Rs 6,000/600,000 paisa;
+  3-day range summing to 1,050,000 paisa across 3 separate rows, not one
+  aggregate; a Sept-1 sale excluded from an Aug 29-31 query).
+  **P10-2b** — same pattern for `report:unitPl`: `getUnitPlReport` already
+  took `dateFrom`/`dateTo` and already filtered `v_unit_direct_margin` on
+  `sale_date BETWEEN` (confirmed by reading the view's own SQL,
+  `0003_shared_overhead.sql:111-124` — its date column traces back to
+  `sale.sale_date` via `v_unit_revenue`); only the handler hardcoded an
+  all-time range (`ALL_TIME_FROM = '2000-01-01'` to `todayIso()`), now
+  removed. New `UnitPlReportInput` contract; `unitPl`'s preload/
+  `electron-api.d.ts` signature changed from zero-arg to one-arg (a real,
+  narrow breaking change to that one function's shape — its single caller,
+  `UnitPlReport.tsx`, was updated in the same sub-task to pass the same
+  effectively-all-time range the server used to compute itself, so the
+  screen's behavior is unchanged until P10-3 wires a real selector). 2 new
+  tests (a sale outside a queried range contributes 0 revenue; a sale
+  inside contributes its exact Rs 4,000/400,000 paisa).
+  **P10-2c** — new `report:stockPerformance`, no prior view existed. One
+  real design decision surfaced and asked rather than assumed: whether an
+  item with stock but zero sales in the queried range should still appear.
+  **Owner decided: yes, include every `track_stock` item** (LEFT JOIN, not
+  INNER JOIN) so the same handler could later back a full per-item view,
+  not just a "top 10" slice — zero-sale items just sort to the bottom.
+  SQL: `quantityMilli` reuses `item.repository.ts`'s own
+  `v_stock_on_hand` scalar-subquery pattern (all-time, all warehouses);
+  `totalSoldMilli` sums `stock_movement.quantity` (negated) where
+  `movement_type = 'sale'` in range (confirmed the literal string by
+  reading `sale.repository.ts:339-360`, which also confirmed the sign
+  convention — sale movements are always negative); `revenuePaisa` sums
+  `sale_line.line_total` joined to `sale.status = 'confirmed'` and
+  `sale_date BETWEEN`. 3 new tests (best-seller ordering: item A sold 3x
+  1000 milli = 3000 vs. item B's 1x1000 = 1000, A sorts first;
+  out-of-range sale contributes 0; a stocked-but-unsold item still appears
+  with `totalSoldMilli = 0`).
+  **P10-2d** — new `report:expenseSummary`, no prior view existed.
+  Confirmed `expense`/`expense_category` DDL by reading the migrations
+  directly: date = `expense.expense_date`, category = via
+  `expense.category_id` → `expense_category.name`, business unit = via
+  `expense.business_unit_id` (added in `0002_business_units.sql:55`, not
+  present in the original `0001_init.sql` table — a real, confirmed
+  schema fact, not assumed) → `business_unit.code`. **One judgment call,
+  flagged rather than silently applied**: `expense_category.is_owner_drawing
+= 1` rows are excluded from the summary, following the existing
+  `v_unit_direct_expense`/`v_owner_drawings` precedent (that column's own
+  migration comment says "not a real expense") — not contradicted when
+  flagged. 3 new tests: grouped totals (two Electricity-equivalent
+  expenses summing 450,000 + 200,000 = 650,000 paisa/count 2; one Fuel
+  expense = 80,000 paisa/count 1 — used a distinct test category name
+  since "Electricity" is already a seeded category and collided on the
+  `(tenant_id, name)` UNIQUE constraint on first attempt, fixed
+  immediately); an out-of-range expense excluded; an owner-drawing expense
+  excluded.
+  **Not touched in P10-2, deliberately**: no `requirePermission()` was
+  added to any of the four handlers (owner-confirmed) — matches the
+  existing no-permission-check precedent on every other report handler,
+  tracked separately as `BUG-ADR9` (HIGH, unchanged).
+  **Update, 2026-09-13 — Phase 10, P10-1 (zero-stock hard block on the
+  sale screen) COMPLETE.** P10-0 (environment
+  audit) and P10-1 done; P10-2 through P10-5 not started, owner approval
+  required before each. Baseline `npm run verify`: 492/492. After P10-1:
+  495/495 (3 new tests).
+  **What P10-1 built**: an item with `stockOnHandMilli <= 0` (owner-approved
+  condition — exactly mirrors `resolveStockBadge()`'s existing "Out of
+  stock" badge check, `apps/client/src/components/shared/StockBadge.tsx:19`
+  — so a stock-tracked item that has **never had a movement**,
+  `stockOnHandMilli === null`, stays addable, unchanged from today) can no
+  longer be added to the sale cart, with no override:
+  `ItemSearchPanel.tsx`'s `onSelect` (item click/keyboard-select) now
+  returns immediately for such an item — the inline qty row never opens —
+  and `confirmPending()` carries the same check as defense in depth for its
+  own Enter key. No backend change was needed: `item:search` already
+  returns `stockOnHandMilli` on every `ItemDto` (added in an earlier
+  session, E-1).
+  **BUG-Y's `ConfirmDialog` was narrowed, not removed** — a real
+  distinction found and confirmed with the owner before writing code: the
+  live `ConfirmDialog` warning-gate (`SalePage.tsx:228-241`, wired through
+  `useSaleFlow.ts`/`saleWarnings.ts`) was never negative-stock-only, it
+  fired on **either** `creditLimitExceeded` **or** `stockBelowZero`
+  together. Removing it entirely (as an early literal reading of the brief
+  suggested) would have silently deleted the still-wanted credit-limit
+  warning, which nothing in this phase asked to touch. Owner-approved fix:
+  `useSaleFlow.ts:213` now gates the dialog on `creditLimitExceeded` alone;
+  `saleWarnings.ts`'s `computeSaleWarningText()` was simplified to always
+  return the credit-limit title/message (its `SaleResult` parameter became
+  dead once the stock branch was removed, so it was dropped from the
+  signature — the one call site in `useSaleFlow.ts` updated to match). The
+  `ConfirmDialog` JSX and its credit-limit call site in `SalePage.tsx` were
+  **not touched** — same file, same lines, same props. Backend
+  (`packages/db`/`packages/core`/`packages/contracts`) still computes and
+  returns `stockBelowZero` on every `sale:create` response, unchanged — per
+  `docs/SYSTEM_DESIGN.md` §8 ("stock going negative: warn loudly, record
+  the movement, surface on a report... never silently block a real sale"),
+  that field still exists for the reporting seam; the sale screen simply no
+  longer reacts to it as a UI warning, since the new pre-emptive hard block
+  makes it unreachable through the normal add-to-cart flow.
+  New `apps/client/src/pages/sales/ItemSearchPanel.test.tsx` (3 tests,
+  render-based, mocking `../../lib/ipc.js` per the existing
+  `JobsPage.test.tsx` convention): an out-of-stock item cannot be selected
+  or confirmed (textbox count stays at 1 — only the search box — after a
+  click); a normally-stocked item (10,000 milli) selects and confirms
+  exactly as before (`onConfirmLine` called with `1000` milli, i.e.
+  `Qty.fromUnits('1')`); a never-moved item (`stockOnHandMilli: null`) is
+  explicitly proven **not** blocked, guarding the null-vs-zero distinction
+  above against a future regression.
+  Verified: `grep -rn "stockBelowZero" apps/client/src/pages/sales/` → zero
+  hits; `grep -rn "BUG-Y\|negativeStock\|belowZero" apps/client/src` → zero
+  hits (one transitional hit in `saleWarnings.ts`'s own comment was found
+  and reworded to reference PROJECT.md's Known Bugs instead of the literal
+  string, since the exit criterion requires zero hits, not "explained
+  away"); `ConfirmDialog`'s credit-limit call site confirmed still present
+  at `SalePage.tsx:228`. `npm run verify` 495/495 both before and after the
+  comment reword. **Not yet verified in a real running window** — sandbox
+  Electron GUI launch remains broken in this environment (unchanged since
+  Session 48); render-test verification only this task.
+  **Update, 2026-09-13 — Phase 9-CSV (GRN CSV import against a PO) COMPLETE.**
+  P9C-0 through P9C-6 all done: staff can now upload a supplier invoice as a
+  CSV against a specific purchase order — three-step modal (header details
+  → upload/validate → confirm & record) launched from a new "Upload GRN
+  CSV" button beside "New GRN" in `PurchaseOrderDetailModal.tsx`. Both
+  buttons now share one enable rule, widened this session (owner decision,
+  a correctness fix not just a CSV-import concern — see §6 of
+  `docs/phases/PHASE_9.md`): enabled only for `sent`/`partially_received`,
+  disabled for `draft`/`fully_received`/`cancelled` (previously "New GRN"
+  alone was wrongly enabled for `draft`).
+  New `packages/core/src/grn/grn-csv-import.ts` (`parseGrnCsv` — exact
+  case-sensitive, exact-order 6-column header check, stricter than the
+  existing fuzzy `parseCsv`; `validateGrnCsvRows` — item-exists →
+  on-this-PO → qty-positive-and-≤-remaining → cost/price-positive →
+  optional-wholesale → notes-≤200-chars, with the remaining quantity
+  tracked and decremented **across rows in the same file**, so a second
+  row for an item already received earlier in the same CSV is checked
+  against what's actually left, not the PO's original static remaining)
+  plus its own test file, 13 tests (10 required + 3 extra file-level
+  cases), all money/quantity values hand-calculated in comments. New
+  additive read-only `grn:csvDryRun` IPC channel — client parses the CSV
+  itself (header/row split only, no business rules) then calls this
+  channel for the authoritative accepted/rejected split, mirroring
+  `NewGrnModal`'s existing inline-then-defensive double-check pattern; the
+  actual commit still goes through the unchanged `grn:create`. New
+  `packages/db/src/repositories/item-lookup.repository.ts`
+  (`getItemsByCode`, a plain function — `item.repository.ts` was already
+  at 301 lines, at/over the 300-line cap, matching the exact precedent
+  `price-history.repository.ts` set last session). Template download is
+  pre-filled with one row per remaining PO line (item code + remaining
+  qty), via a new additive `downloadCsvRows()` sibling to the existing
+  `downloadCsv()` — that function and its four existing callers are
+  untouched. DB-verified end-to-end against the real dev DB via a
+  throwaway script (deleted after use, confirmed via `git status`): a
+  CSV with one valid + one over-remaining-qty row produced the exact
+  expected accept/reject split, and the resulting GRN's `stock_movement`/
+  `party_ledger` rows matched the hand-calculated paisa/milli values
+  exactly. **Sandbox note (unchanged from every session since Session 48)**: the Electron GUI still cannot launch here
+  (`ELECTRON_RUN_AS_NODE=1`), so this is real-repository verification, not
+  a UI click-through — see `docs/phases/PHASE_9.md` §10 for the full
+  click-through list still owed to the owner.
+  **One internal contradiction in the session brief, resolved by asking
+  rather than guessing**: Step 2's own wording said "no IPC call yet —
+  pure client-side validation," which would have made the entire new
+  `grn:csvDryRun` channel (explicitly required elsewhere in the same
+  brief, with its own handler/tests/execution sub-task) dead code. Owner
+  confirmed: client parses only; `grn:csvDryRun` is the actual validation
+  source of truth, called immediately after parsing.
+  **Six other discrepancies found and resolved before writing code (rule
+  6, all owner-confirmed)**: `ImportModal`'s shared shell is a fixed
+  two-page wizard, not extensible to three steps — built `GrnCsvImportModal.tsx`
+  as its own stepped modal on the base `Modal` primitive instead, matching
+  `NewPoModal.tsx`/`NewGrnModal.tsx`'s own precedent; the brief's
+  `grn:csvDryRun` payload included a client-supplied `tenantId`, which no
+  other channel in this codebase accepts (always `deps.tenantId`,
+  server-side) — excluded from the Zod input; neither existing header
+  helper (`parseCsv`'s fuzzy ≥60% match, `validateHeaders`'s
+  set-membership-only check) enforces the brief's exact-order contract —
+  wrote a dedicated strict check instead; the brief's named
+  `ParsedGrnCsvRow` type is identical in shape to the existing
+  `ParsedCsvRow` — reused that type directly, additively exporting
+  `csv.ts`'s previously-private `parseCsvLine` so the new strict parser
+  could reuse its quote-handling; pre-filled the template (owner
+  confirmed, brief's own recommendation); used `Money.multiplyByQuantity`
 
 - `Money.sum` for the total-value calculation rather than a hand-rolled
   formula, with the required hand-calculated comment in

@@ -92,6 +92,8 @@ export const channels = {
     dailySales: 'report:dailySales',
     receivables: 'report:receivables',
     stockValuation: 'report:stockValuation',
+    stockPerformance: 'report:stockPerformance',
+    expenseSummary: 'report:expenseSummary',
     cashBook: 'report:cashBook',
     unitPl: 'report:unitPl',
     wageMonth: 'report:wageMonth',

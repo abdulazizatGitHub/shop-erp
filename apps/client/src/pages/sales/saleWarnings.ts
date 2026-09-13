@@ -1,31 +1,20 @@
-import type { SaleResult } from '@shop/contracts';
-
 export interface SaleWarningText {
   readonly title: string;
   readonly messages: readonly string[];
 }
 
 /**
- * BUG-Y fix: this used to be inline alertdialog text; ConfirmDialog (P4.5-0)
- * replaces it. Data gap, flagged rather than fabricated: SaleResult's
- * warnings are booleans only (stockBelowZero/creditLimitExceeded) — there
- * is no per-item name available to name in the message, so the wording
- * below is deliberately item-agnostic rather than inventing a name.
- * Extracted out of useSaleFlow.ts (pure function, no hooks) to keep it
- * under the 300-line file cap.
+ * This warning-gate originally covered two conditions (see PROJECT.md
+ * Known Bugs for the pre-P10 history of this dialog's own UI form).
+ * P10-1 narrowed it to credit-limit only — the other condition is now
+ * prevented pre-emptively at add-to-cart time instead, so useSaleFlow
+ * only opens the gate on creditLimitExceeded, and this text is always the
+ * same when it does. Kept as its own function (not inlined) so the
+ * warning copy stays in one named place if a second warning is ever added.
  */
-export function computeSaleWarningText(lastResult: SaleResult | null): SaleWarningText {
-  const title =
-    lastResult?.warnings.stockBelowZero === true && lastResult.warnings.creditLimitExceeded
-      ? 'Stock below zero & credit limit exceeded'
-      : lastResult?.warnings.stockBelowZero === true
-        ? 'Stock below zero'
-        : 'Credit limit exceeded';
-  const messages = [
-    lastResult?.warnings.stockBelowZero === true &&
-      'This sale will take stock below zero for one or more items. Stock will go negative.',
-    lastResult?.warnings.creditLimitExceeded === true &&
-      "This sale exceeds the customer's credit limit.",
-  ].filter((message): message is string => typeof message === 'string');
-  return { title, messages };
+export function computeSaleWarningText(): SaleWarningText {
+  return {
+    title: 'Credit limit exceeded',
+    messages: ["This sale exceeds the customer's credit limit."],
+  };
 }

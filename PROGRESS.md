@@ -41,6 +41,630 @@
 
 ---
 
+## [2026-09-13] Session 62 — Phase 10, P10-5: CSV export on all 8 report tabs, COMPLETE — PHASE 10 CLOSED
+
+**Goal:** Build a pure `downloadCsv`/`buildCsvString` utility and add an
+"Export CSV" button (with the brief's exact per-tab column mapping) to
+all 8 report tabs — the final sub-phase of Phase 10.
+
+**Before starting, confirmed in writing (owner's explicit pre-condition
+for P10-5)**: pasted the exact `report:receivables` handler lines
+(`report.handler.ts:69-84`) showing `input.asOfDate ?? todayIso()` —
+proving the P10-4 widening is backward-compatible (any caller omitting
+`asOfDate` gets the identical `todayIso()` result as before).
+
+**Done — pre-code audit first:** confirmed `apps/client/src/utils/
+exportCsv.ts` did not exist; re-read all 8 tab components in full to
+record each one's exact current post-fetch state shape and check it
+against the brief's column list. Found one real gap, flagged and asked
+about rather than resolved silently: Daily Sales' required "Items"
+column has no backing field anywhere in `SaleSummaryDto` (the state
+already held by that tab) — a real count would need a new per-sale
+fetch or a backend DTO change, both out of scope for a CSV-only
+sub-phase. Owner chose: export the column with an empty value on every
+row, keeping the literal column name rather than dropping it.
+
+**Built:**
+
+- `apps/client/src/utils/exportCsv.ts` (49 lines) — `buildCsvString`
+  (pure: no DOM calls, builds the CRLF-joined, comma/quote/newline-aware
+  quoted CSV string) and `downloadCsv` (calls `buildCsvString`, then
+  does the Blob/anchor-click DOM work as a clearly separate final step;
+  returns immediately without touching the DOM when `rows` is empty).
+- `apps/client/src/components/shared/ExportCsvButton.tsx` (18 lines) —
+  one shared button (label "Export CSV", `disabled` prop) reused across
+  all 8 tabs instead of repeating the same JSX/disabled-logic 8 times.
+- All 8 tabs wired, in the specified order (Daily Sales → Stock on Hand
+  → Receivables → Cash Book → Jobs → Wages → Unit P&L → Expenses), each
+  with: a `toCsvRows` mapping function using the brief's exact column
+  names; money as `(paisa / 100).toFixed(2)` with a
+  `// divide paisa by 100 for CSV export` comment at every conversion;
+  Stock on Hand's quantity as `(milli / 1000).toFixed(3)` with the
+  equivalent milli comment; the button placed in the same row as that
+  tab's `DateRangeSelector`, disabled whenever the underlying data is
+  still loading (`null`) or has zero rows; filename
+  `{report-name}-{from}-{to}.csv` derived from that tab's own selector
+  state. Daily Sales' Cash (Rs)/Credit (Rs) columns are derived per-row
+  as `paidAmountPaisa` / `totalAmountPaisa - paidAmountPaisa` — the same
+  split the tab's own KPI cards already compute, summed; Unit P&L's CSV
+  includes the TOTAL row (unlike its P10-4 chart, which excludes it),
+  mirroring the visible table exactly.
+- `npm run build --workspace=@shop/client` run and passed after each of
+  the 8 tabs individually, before moving to the next.
+
+**Verified:**
+
+- New tests: `exportCsv.test.ts` (7 — 6 `buildCsvString` cases exactly
+  as specified: basic, comma, double-quote, empty rows, multiple rows,
+  CRLF-in-field; 1 `downloadCsv` case proving no DOM call on empty
+  rows via `vi.spyOn(document, 'createElement')`); `DailySalesReport.test.tsx`
+  (3 — button disabled while loading, disabled on empty sales array,
+  enabled with >=1 row).
+- Final `npm run verify`: 90 test files, **525/525**, exit 0 (515 + 10
+  new, above the required ≥524 floor).
+- `npm run build --workspace=@shop/client`: exit 0, zero TypeScript
+  errors.
+- Two real tooling issues found and fixed within the session, before
+  any check was reported green: (1) a genuine `tsc`/`eslint`
+  disagreement — `tsc` requires a cast to read a rendered button's
+  `.disabled` property (`HTMLElement` has none), `eslint`'s typed-linting
+  flagged that same cast as unnecessary; resolved by asserting
+  `button.hasAttribute('disabled')` instead, needing no cast, satisfying
+  both. (2) `exportCsv.test.ts`'s first attempt monkey-patched
+  `document.createElement` directly, which `eslint`'s
+  `@typescript-eslint/no-deprecated` flagged (a lib.dom.d.ts overload
+  quirk) — replaced with `vi.spyOn(document, 'createElement')`.
+- Final line counts confirmed under the 300-line cap for all 10
+  touched/created files (largest: `DailySalesReport.tsx` at 283 lines,
+  `exportCsv.ts` at 49, `ExportCsvButton.tsx` at 18) — no sub-component
+  extraction needed anywhere.
+
+**Not done / deferred:** nothing — this was Phase 10's final sub-phase.
+Not verified in a real running window — sandbox Electron GUI launch
+remains broken in this environment (unchanged since Session 48); all
+verification this entire phase was render-test- and build-based.
+
+**Bugs found:** none shipped — see PHASE_10.md §6 for the full
+across-phase accounting (every issue found in P10-2 through P10-5 was
+caught and fixed within its own session, before any verification was
+ever reported green).
+
+**Decisions taken:** none ADR-worthy — see PHASE_10.md §5 for the five
+P10-5-specific decisions (the empty Items column, the derived Cash/Credit
+split, the shared `ExportCsvButton`, including TOTAL in Unit P&L's CSV,
+and the `hasAttribute` test pattern).
+
+**Blocked on:** owner approval to close Phase 10 (this session's
+verification is complete and awaiting sign-off).
+
+**Next session should:** start whatever Phase 11 the owner defines next
+— Phase 10 leaves no known open work of its own. See PHASE_10.md §8 for
+context worth carrying forward (the per-tab-local `DateRangeSelector`
+state shape, Expenses' two-channel data source, the accepted Items-column
+gap) if a future phase touches any of these 8 report tabs again.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (all of Phase 10 done and
+      verified, sub-phase by sub-phase, before this close-out)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing — 525/525
+
+## [2026-09-13] Session 61 — Phase 10, P10-4: charts + DateRangeSelector on all 8 report tabs, COMPLETE
+
+**Goal:** Add recharts-based charts to all 8 report tabs and wire
+`DateRangeSelector` into the five tabs P10-3 left un-wired (Stock on
+Hand, Receivables, Cash Book, Jobs, Wages), per the owner's explicit
+instruction that no tab may have charts without a working date range.
+Work tab by tab in the specified order, verifying a client build after
+each.
+
+**Done — pre-code audit first:** read all 8 tab components in full
+(`StockValuationReport.tsx`, `ReceivablesAgingReport.tsx`,
+`CashBookReport.tsx`, `JobSplitReport.tsx`/`JobsReport.tsx`/
+`TechnicianCustodySummary.tsx`, `WageMonthReport.tsx`, `UnitPlReport.tsx`,
+`DailySalesReport.tsx`) plus `colors.ts`, confirming exact current line
+counts, IPC shapes, and selector-wiring state before touching anything.
+Two real blockers surfaced during the audit and were asked about rather
+than guessed:
+
+1. `report:receivables` returns only pre-bucketed sums against a
+   server-hardcoded `today()` — no raw per-entry dates cross the wire, so
+   "derive the aging client-side using the `to` date" was actually
+   impossible. Owner chose to widen the channel (additive optional
+   `asOfDate`, same channel/DTO shape, defaults to today — same pattern
+   P10-2a/b already used) over a cosmetic-only selector.
+2. Wages' instructed Gross/Advances/Net Due **stacked** bar can't be
+   built correctly (Net Due = Gross − Advances + Commission; a stackId
+   can only add). Owner chose a grouped (non-stacked) BarChart over a
+   lossy 2-segment stack that would misrepresent staff with commission.
+
+**Backend (minimal, additive only):**
+
+- `packages/contracts/src/report/report.ts` (+ `index.ts` barrel) — new
+  `ReceivablesReportInput = { asOfDate?: string }`.
+- `apps/server/src/ipc/handlers/report.handler.ts` — `receivables`
+  handler now parses this input, `getReceivablesAgingReport(...,
+input.asOfDate ?? todayIso())`. No repository/SQL change — the
+  repository function already took `asOfDate` as a parameter.
+- `apps/server/src/preload.ts` / `apps/client/src/types/electron-api.d.ts`
+  — `receivables` signature widened from zero-arg to
+  `(input?: ReceivablesReportInput)`.
+
+**Frontend, tab by tab (build verified after each):**
+
+- **Daily Sales** — added a per-day BarChart (total sales in Rs).
+- **Stock on Hand** — wired `DateRangeSelector` scoped only to the new
+  `report:stockPerformance` fetch (Best Performers table, top 10 by
+  `totalSoldMilli`); the Stock Level table stays all-time/unfiltered, per
+  instruction. Added 3 summary cards and red text on out-of-stock rows.
+  No chart required for this tab this turn (confirmed — the brief's
+  abbreviated Stock on Hand section lists only cards + tables).
+- **Receivables** — widened backend as above; selector's `to` date now
+  drives the aging cutoff. Added 3 summary cards and a 4-bucket aging
+  BarChart.
+- **Cash Book** — replaced its own local from/to inputs with the shared
+  selector. Added 4 summary cards (Opening derived from the first row's
+  `runningBalancePaisa - inPaisa + outPaisa`, Closing from the last row)
+  and a running-balance LineChart.
+- **Jobs** (`JobSplitReport.tsx`) — replaced its own local from/to state
+  with the selector, driving the same existing client-filter-then-fan-out
+  pattern; `job.getJobSplit`'s signature is unchanged (it never took a
+  range). Added a stacked BarChart (Parts Margin + Labour Revenue),
+  rendered only when jobs is non-empty. `TechnicianCustodySummary.tsx`
+  deliberately untouched (current-state snapshot, no date concept).
+- **Wages** — replaced the Month/Year `<Select>` pair with the selector;
+  `report:wageMonth` still takes `{year, month}` (handler untouched),
+  both derived client-side from `range.from` via string-slicing. A
+  multi-month custom range shows a visible note. Added the grouped
+  (non-stacked) BarChart per the owner's decision above.
+- **Unit P&L** — added a grouped BarChart (Revenue/COGS/Direct Margin ×
+  Spare Parts/Repair, TOTAL row excluded).
+- **Expenses** — brand new tab, `ExpensesReport.tsx`, wired into
+  `ReportsPage.tsx`'s Financial group. PieChart (by category) + BarChart
+  (by business unit) from `report:expenseSummary` (P10-2d). The required
+  per-row table uses the **existing** `expense:list` channel (Phase 7,
+  unrelated to P10 — already `{from, to}`-shaped), since
+  `expenseSummary` itself only returns grouped aggregates — confirmed
+  before writing code; no new IPC channel added.
+
+**Cross-cutting, applied identically across all 8 tabs:**
+
+- `recharts ^3.10.1` installed in `apps/client` only (checked absent
+  first, confirmed the exact version installed).
+- Every chart color comes from `colors` (`@shop/ui` → `packages/ui/src/
+tokens/colors.ts`) — zero hardcoded hex in any of the 8 chart files.
+- Every money value passed to an axis/bar/line is divided by 100 in the
+  data-mapping step, each with the required `// divide paisa by 100 for
+display only` comment; a companion `*Paisa` field is kept alongside so
+  tooltips format the exact original paisa value via the existing
+  `Money.format`, never a re-multiplied approximation of the divided
+  number.
+- Every `Bar`/`Line`/`Pie` has `isAnimationActive={false}` — no
+  animation props anywhere (the shop PC's hardware spec is still
+  unconfirmed).
+- Every chart has an explicit empty state ("No data for this period." /
+  "No jobs in this period.") — never an unexplained blank box.
+- All 11 touched/created files stay under 300 lines (largest:
+  `ReceivablesAgingReport.tsx`/`ExpensesReport.tsx` at 237) — no
+  sub-component extraction was needed anywhere.
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client` run and passed after each of
+  the 8 tabs individually, in the specified order, before moving to the
+  next.
+- Final `npm run verify`: 88 test files, **515/515**, exit 0 (unchanged
+  from P10-3 — charts are visual, no new business-logic tests required
+  for this sub-phase).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server`: both exit 0, zero TypeScript errors.
+- Two real TypeScript/lint issues found and fixed within this session,
+  before any build was reported green: (1) recharts v3's `Tooltip`
+  `formatter` prop type is a strict intersection that a plainly-typed
+  `(value, name, item) => string` function doesn't structurally satisfy
+  — fixed by typing every one of the 8 formatter functions' parameters
+  as `unknown` and narrowing internally via a type assertion (no `any`
+  introduced). (2) recharts v3 deprecated `Cell` (used for the Expenses
+  pie's slice colors) — kept with one targeted, commented
+  `eslint-disable` rather than migrating to the newer `shape`-prop API,
+  since `Cell` still works until recharts 4.0.
+
+**Not done / deferred:**
+
+- P10-5 (CSV export utility + per-tab Export CSV button) — not started,
+  owner has not yet said go.
+- Not verified in a real running window — sandbox Electron GUI launch
+  remains broken in this environment (unchanged since Session 48).
+
+**Bugs found:** none shipped (the two TS/lint issues above were caught
+and fixed before any build was reported green, not carried forward).
+
+**Decisions taken:** none ADR-worthy — see PHASE_10.md §5 for the seven
+scoped decisions specific to this sub-phase (the `receivables` widening,
+the grouped-vs-stacked Wages chart, the five tabs' exact wiring, reusing
+`expense:list` for the Expenses table, the `unknown`-typed tooltip
+formatters, and keeping deprecated `Cell`).
+
+**Blocked on:** owner approval to start P10-5.
+
+**Next session should:** on approval, build
+`apps/client/src/utils/exportCsv.ts` (pure `downloadCsv` function, no
+IPC) first and unit-test it standalone before wiring an Export CSV
+button into any report tab — per the phase brief's own column mapping
+per tab.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P10-4 done and verified,
+      tab-by-tab, before any P10-5 work was started)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing — 515/515
+
+## [2026-09-13] Session 60 — Phase 10, P10-3: Reports page restructure + DateRangeSelector, COMPLETE
+
+**Goal:** Restructure `ReportsPage.tsx` into "Operational"/"Financial"
+visual groups, build a shared `DateRangeSelector` with six presets backed
+by pure date-math functions, and wire it into the two report tabs whose
+backend contracts P10-2 changed (`DailySalesReport.tsx`,
+`UnitPlReport.tsx`).
+
+**Done:**
+
+- Read `ReportsPage.tsx` (52 lines, flat `Tabs` list, one `Card`
+  switching on a single `ReportTab` union), all 4 files in
+  `apps/client/src/components/shared/` (none named `DateRangeSelector`),
+  and the existing `Tabs` component (`packages/ui/src/primitives/Tabs.tsx`,
+  43 lines) — confirmed it has **no grouping API** (`items`/`active`/
+  `onChange` only), so per instruction, two separate `Tabs` instances
+  were used instead of inventing a new grouped-tab component.
+- New `apps/client/src/utils/dateRanges.ts` (78 lines, new directory —
+  confirmed it didn't exist): `getToday`/`getThisWeek`/`getThisMonth`/
+  `getThisQuarter`/`getThisYear`, each a pure function taking a reference
+  `Date` and never calling `new Date()`/`Date.now()` internally, with all
+  arithmetic in UTC (`getUTC*` + `Date.UTC`) to avoid local-timezone
+  drift from a date-only string. New `dateRanges.test.ts`, 5 tests
+  against the fixed reference `new Date('2026-09-13')` (a Sunday) —
+  every value hand-matched to the brief's own worked example.
+- New `apps/client/src/components/shared/DateRangeSelector.tsx`
+  (97 lines): five preset buttons plus a Custom mode with two native
+  `<input type="date">` fields. Takes an optional `referenceDate` prop
+  (default `new Date()`) purely so a preset click is testable against a
+  fixed date without breaking `dateRanges.ts`'s own
+  no-internal-`Date`-calls rule — real callers never pass it. New
+  `DateRangeSelector.test.tsx`, 4 tests (all 6 buttons render; "This
+  Month" with `referenceDate=2026-09-13` calls `onChange` with the exact
+  `{from:'2026-09-01', to:'2026-09-30'}`; Custom shows two date inputs;
+  changing Custom's from-date preserves the existing to-date).
+- `ReportsPage.tsx` rewritten (52 → 78 lines): `OPERATIONAL_TABS`
+  (Daily Sales, Stock on Hand, Receivables, Jobs) and `FINANCIAL_TABS`
+  (Cash Book, Unit P&L, Wages) as two separate `<Tabs>` calls sharing one
+  `active`/`onChange` pair, each under a small uppercase group label,
+  separated by a `border-t` divider. No Expenses tab — flagged, not
+  silently added or skipped: no `ExpensesReport.tsx` screen exists yet
+  (`report:expenseSummary` is backend-only from P10-2d); that screen is
+  P10-4 scope.
+- `DailySalesReport.tsx`: `date` state replaced with a `range: DateRange`
+  state (`useState(() => getToday(new Date()))`), the old plain
+  `<input type="date">` replaced with `<DateRangeSelector>`, both IPC
+  calls (`report.dailySales`, `sale.listByDate`) now use `range.from`/
+  `range.to`. **Real money-correctness fix, not optional**: the KPI cards
+  used to read only `summary[0]` — correct only because the query was
+  always a single day. Once the range could span multiple days,
+  `getDailySalesReport` started returning one row per date, so `summary[0]`
+  alone would have silently shown a wrong (too-low) total the moment
+  someone picked "This Week"/"This Month" on this tab. Fixed by summing
+  every row's four fields via `Money.add` (new `sumDailySalesRows`
+  helper) before rendering — caught and fixed in this same sub-phase, not
+  shipped and logged as a bug.
+- `UnitPlReport.tsx`: replaced the P10-2b-added `ALL_TIME_FROM`/
+  `todayIso()` server-mirroring hack with a real `range: DateRange` state
+  defaulting to `getThisMonth(new Date())` (per the brief's own default
+  rule: Daily Sales -> Today, every other tab -> This Month) and a
+  `<DateRangeSelector>`; the effect now depends on `[range]` instead of
+  `[]`.
+
+**Scope decision, flagged rather than silently assumed**: only these two
+tabs were wired to `DateRangeSelector` this sub-phase — the turn's own
+constraint list named exactly these two. The other 5 tabs (Stock on
+Hand, Receivables, Cash Book, Jobs, Wages) have date shapes today that
+don't match a generic `{from, to}` selector (point-in-time valuation,
+server-computed "today", an already-different own `{dateFrom,dateTo}`
+pair with its own UI, no date concept, and `{year,month}` respectively)
+and were left untouched, not silently missed.
+
+**Verified:**
+
+- `npm run verify`: 506/506 (post-P10-2) → **515/515** (9 new tests: 5
+  `dateRanges.ts` + 4 `DateRangeSelector`), exit 0, typecheck clean, lint
+  clean.
+- `npm run build --workspace=@shop/client`: exit 0, zero TypeScript
+  errors (the "use client" directive warnings from `lucide-react` are
+  pre-existing bundler noise, not build failures).
+- Line counts confirmed under the 300-line cap: `ReportsPage.tsx` 78,
+  `DateRangeSelector.tsx` 97, `dateRanges.ts` 78.
+- Two real issues found and fixed within this session, before `npm run
+verify` was ever reported green: (1) a `*/` sequence inside
+  `dateRanges.ts`'s own JSDoc comment prematurely closed the block
+  comment, breaking the esbuild transform — reworded the comment;
+  (2) `DateRangeSelector.test.tsx`'s array-destructuring of a
+  `NodeListOf<Element>` failed `tsc` (`must have a [Symbol.iterator]()
+method`) under this project's TS target — switched to index access
+  (`querySelectorAll(...)[0]`).
+
+**Not done / deferred:**
+
+- P10-4 (charts + visual redesign, all 8 tabs including a new Expenses
+  tab) and P10-5 (CSV export) — not started, owner has not yet said go.
+- `DateRangeSelector` not wired into the other 5 report tabs — see scope
+  decision above; no phase/bug logged, since it's this sub-phase's own
+  explicit scope, not an oversight.
+- Not verified in a real running window — sandbox Electron GUI launch
+  remains broken in this environment (unchanged since Session 48).
+
+**Bugs found:** none shipped (the two issues above were caught and fixed
+before green, not carried forward).
+
+**Decisions taken:** none ADR-worthy — see PHASE_10.md §5 for the five
+scoped decisions specific to this sub-phase (two-tabs-only wiring, the
+KPI-summing fix, reusing `Tabs` twice instead of a new component, no
+Expenses tab yet, and the injectable `referenceDate` test seam).
+
+**Blocked on:** owner approval to start P10-4.
+
+**Next session should:** on approval, read all 7 existing report tab
+components in full before touching any of them (P10-4 restyles/charts
+every tab), confirm `recharts` is still absent (per the P10-0 audit) and
+install it in `apps/client` only, then build one tab at a time in the
+brief's own a-h order, verifying after each.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P10-3 done and verified before
+      any P10-4 work was started)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing — 515/515
+
+## [2026-09-13] Session 59 — Phase 10, P10-2a-d: date-ranged report backends, COMPLETE
+
+**Goal:** Build the four backend sub-tasks P10-2a through P10-2d — widen
+`report:dailySales` and `report:unitPl` to accept a `{ from, to }` date
+range, and add two brand-new handlers, `report:stockPerformance` and
+`report:expenseSummary` — one sub-task at a time, each with a pre-code
+statement (input shape, SQL, files, hand-calculated test values) approved
+before writing any code, and each fully verified before the next started.
+
+**Done:**
+
+- **P10-2a**: `DailySalesReportInput` widened from `{ date }` to
+  `{ from, to }` (`packages/contracts/src/report/report.ts`);
+  `report.handler.ts`'s `dailySales` handler now passes `input.from`/
+  `input.to` instead of `input.date` twice. No repository/SQL change —
+  `getDailySalesReport` already took `dateFrom`/`dateTo` separately.
+  `DailySalesReport.tsx`'s only call site updated to `{ from: date, to:
+date }` (same behavior, confirmed via `npm run verify`'s typecheck —
+  no render test needed per instruction). 3 new tests in
+  `report.repository.test.ts`.
+- **P10-2b**: same pattern for `report:unitPl` — new `UnitPlReportInput`
+  contract; `report.handler.ts` no longer hardcodes
+  `ALL_TIME_FROM`/`todayIso()` (both removed from that file, `todayIso()`
+  still used by `receivables`). Confirmed by reading the migration SQL
+  directly that `v_unit_direct_margin`'s date column is `sale_date`
+  (`0003_shared_overhead.sql:111-124`, traced to `sale.sale_date` via
+  `v_unit_revenue`) — already the exact column `getUnitPlReport` filtered
+  on. `unitPl`'s preload/`electron-api.d.ts` signature changed from
+  zero-arg to one-arg (its only caller, `UnitPlReport.tsx`, updated in
+  the same sub-task to pass the same effectively-all-time range the
+  server used to compute itself — no visible behavior change until P10-3
+  wires a real date selector). 2 new tests.
+- **P10-2c**: new `report:stockPerformance` (no prior view). **Asked
+  before deciding**: should a stock-tracked item with zero sales in the
+  queried range still appear? Owner said yes — LEFT JOIN, not INNER JOIN,
+  so a future full-catalog view can reuse the same handler; zero-sale
+  items just sort to the bottom of the `totalSoldMilli DESC` order.
+  Confirmed the sale stock-movement type string (`'sale'`, always
+  negative quantity) and its `movement_date` column by reading
+  `sale.repository.ts:339-360` directly rather than assuming.
+  `quantityMilli` reuses `item.repository.ts`'s own `v_stock_on_hand`
+  scalar-subquery pattern. New contracts, channel, handler
+  (`report.handler.ts`), preload, `electron-api.d.ts`, `packages/db`
+  barrel export. 3 new tests (best-seller ordering — item A's 3x1000
+  milli beats item B's 1x1000 milli; out-of-range exclusion; a
+  stocked-but-unsold item still appears with zeros).
+- **P10-2d**: new `report:expenseSummary` (no prior view). Confirmed the
+  `expense`/`expense_category` DDL by reading the migrations directly —
+  notably that `expense.business_unit_id` was added later
+  (`0002_business_units.sql:55`), not present in the original
+  `0001_init.sql` table. **One judgment call, flagged rather than
+  silently applied**: excluded `is_owner_drawing = 1` categories (that
+  column's own comment says "not a real expense"; the existing
+  `v_unit_direct_expense`/`v_owner_drawings` views already exclude/report
+  them separately) — stated as a decision inferred from precedent, not
+  contradicted. 3 new tests: grouped totals (two expenses summing
+  450,000 + 200,000 = 650,000 paisa/count 2 in one category, one expense
+  = 80,000 paisa/count 1 in another — a test category name collided with
+  a seeded bootstrap category ("Electricity") on first run, caught by
+  the test failure itself and fixed by using a distinct test-only name);
+  an out-of-range expense excluded; an owner-drawing expense excluded.
+- **Deliberately not done**: no `requirePermission()` added to any of the
+  four handlers (owner explicitly confirmed before P10-2a started) —
+  matches every other report handler's existing precedent; `BUG-ADR9`
+  (HIGH, PROJECT.md) stays as the tracking record for that gap, unchanged.
+
+**Verified:**
+
+- `npm run verify` after each sub-task, all green: 495 (baseline,
+  post-P10-1) → 498 (2a) → 500 (2b) → 503 (2c) → 506 (2d). Final: 86 test
+  files, 506/506, typecheck clean, lint clean.
+- `npm run build --workspace=@shop/server` — clean, exit 0 (checked after
+  all four sub-tasks).
+- Every money/quantity assertion in every new test carries a
+  hand-calculated comment above it, per CLAUDE.md §6/CODING_STANDARDS.md
+  §7 (e.g. `// 450,000 + 200,000 = 650,000 paisa`).
+- Two real lint/build hiccups found and fixed immediately, not carried
+  forward: (1) a `@typescript-eslint/no-unnecessary-condition` error on
+  `StockPerformanceRow.quantityMilli` — the scalar-subquery's `SUM(...)`
+  can genuinely return `NULL` in SQLite but the interface declared
+  `number`; split into a separate `StockPerformanceSourceRow` (nullable)
+  mapped to the public `number` type, same pattern `StockValuationRow`
+  already uses for `lastPurchaseCostPaisa`. (2) `UnitPlReportInput` was
+  defined in `report.ts` but not re-exported from
+  `packages/contracts/src/index.ts`'s barrel — caught by `tsc`, fixed by
+  adding the missing export (`StockPerformanceInput`/`RowDto` and
+  `ExpenseSummaryInput`/`RowDto` were added to the same export list
+  proactively, avoiding the same miss twice).
+
+**Not done / deferred:**
+
+- P10-3 (Reports page restructure + `DateRangeSelector`) through P10-5
+  (CSV export) — not started, owner has not yet said go for P10-3.
+- Not verified in a real running window — sandbox Electron GUI launch
+  remains broken in this environment (unchanged since Session 48).
+
+**Bugs found:** none (the lint/barrel-export misses above were caught
+and fixed within this same session before `npm run verify` was ever
+reported green, not shipped issues).
+
+**Decisions taken:** none ADR-worthy — see PHASE_10.md §5 for the four
+scoped, owner-confirmed decisions specific to these sub-tasks (no
+repository/SQL change needed for 2a/2b; include-all-items for 2c;
+exclude-owner-drawings for 2d).
+
+**Blocked on:** owner approval to start P10-3.
+
+**Next session should:** on approval, read `ReportsPage.tsx` fully, then
+build `apps/client/src/components/shared/DateRangeSelector.tsx` as pure
+date-math functions first (testable independently of any component),
+before touching the page's tab layout.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (all four P10-2 sub-tasks done and
+      verified in order before any P10-3 work was started)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing — 506/506
+
+## [2026-09-13] Session 58 — Phase 10, P10-1: zero-stock hard block on the sale screen, COMPLETE
+
+**Goal:** Kick off Phase 10 (Reports & Finance Redesign) with P10-0 (environment
+audit against the session brief's assumptions A-H) and P10-1 (an item with
+`quantityMilli <= 0` can no longer be added to the sale cart under any
+circumstance, no override — replacing the old warn-and-allow behaviour for
+that specific case).
+
+**Done:**
+
+- P10-0 audit: read all 13 required files, ran `git log`/`npm run verify`
+  (492/492 baseline), and checked assumptions A-H against live code —
+  confirmed D/E/F (`stockPerformance`/`expenseSummary`/`recharts` all
+  absent), B/C (`dailySales` takes one `date`; `unitPl` takes no input at
+  all — both need widening in P10-2), and found A and G/H materially
+  wrong against the brief's own text: (A) Jobs tab's IPC calls are
+  `job.getJobSplit`/`getTechnicianCustody`, not `report:*`; (G) the live
+  "BUG-Y" `ConfirmDialog` is a combined credit-limit + stock-below-zero
+  gate, not stock-only — flagged to the owner before touching it; (H)
+  `ItemDto.stockOnHandMilli` already exists and is already returned by
+  `item:search` (no backend change needed for P10-1), and the "Out of
+  stock" badge already exists cosmetically — only the actual add-to-cart
+  block was missing. Wrote `docs/phases/PHASE_10.md` from the template.
+- P10-1, after owner confirmation of the exact scope (narrow the existing
+  `ConfirmDialog` to credit-limit only; add the hard block separately in
+  `ItemSearchPanel.tsx`; match `resolveStockBadge()`'s own
+  `stockOnHandMilli !== null && <= 0` condition, leaving a never-moved
+  item, `stockOnHandMilli === null`, addable exactly as today):
+  - `apps/client/src/pages/sales/ItemSearchPanel.tsx` — hard-block guard
+    added in both the `onSelect` handler (blocks the click/keyboard-select
+    path — the inline qty row never opens for an out-of-stock item) and
+    `confirmPending()` (defense in depth for its own Enter key).
+  - `apps/client/src/pages/sales/useSaleFlow.ts` — the warning-gate
+    condition (`if (result.warnings.creditLimitExceeded ||
+result.warnings.stockBelowZero)`) narrowed to `creditLimitExceeded`
+    alone; the now-parameterless `computeSaleWarningText()` call site
+    updated.
+  - `apps/client/src/pages/sales/saleWarnings.ts` — `computeSaleWarningText`
+    simplified to always return the credit-limit title/message (its
+    `SaleResult` parameter dropped — it had become dead once the stock
+    branch was removed, and ESLint's `no-unused-vars` doesn't exempt a
+    sole trailing unused parameter, only one that precedes a used one,
+    e.g. `report.handler.ts`'s `_event`).
+  - `apps/client/src/pages/sales/SalePage.tsx` — **not touched**. Its
+    `ConfirmDialog` block (lines 228-241) reads generically from
+    `flow.step`/`flow.warningTitle`/`flow.warningMessages`, so narrowing
+    happened entirely upstream.
+  - New `apps/client/src/pages/sales/ItemSearchPanel.test.tsx` (3 tests,
+    mocking `../../lib/ipc.js` per `JobsPage.test.tsx`'s convention): an
+    out-of-stock item cannot be selected or confirmed; a normally-stocked
+    item still confirms exactly as before (`onConfirmLine` called with
+    `1000` milli = `Qty.fromUnits('1')`); a never-moved
+    (`stockOnHandMilli: null`) item is explicitly proven **not** blocked.
+
+**Verified:**
+
+- `npm run verify` (baseline) — 492/492, exit 0.
+- `npm run verify` (after P10-1) — 86 test files, **495/495**, exit 0
+  (typecheck clean, lint clean, +3 new tests).
+- `grep -rn "stockBelowZero" apps/client/src/pages/sales/` — zero hits.
+- `grep -rn "BUG-Y\|negativeStock\|belowZero" apps/client/src` — zero hits
+  (one transitional hit was found in `saleWarnings.ts`'s own comment,
+  referencing "BUG-Y fix" by name; reworded to cite PROJECT.md's Known
+  Bugs instead, since the exit criterion requires zero hits, then
+  re-verified clean and re-ran `npm run verify` — still 495/495).
+- `ConfirmDialog`'s credit-limit call site confirmed still present —
+  `apps/client/src/pages/sales/SalePage.tsx:228` (import at line 2,
+  closing tag line 241) — unchanged.
+
+**Not done / deferred:**
+
+- P10-2 (date-ranged `dailySales`/`unitPl`, new `stockPerformance`/
+  `expenseSummary` handlers) through P10-5 (CSV export) — not started,
+  owner explicitly withheld approval to proceed past P10-1 this session.
+- Not verified in a real running window — sandbox Electron GUI launch
+  remains broken in this environment (unchanged since Session 48);
+  render-test verification only for this task.
+
+**Bugs found:** none (the BUG-Y `ConfirmDialog` scope mismatch was a
+live-code-vs-brief discrepancy, not a new bug — resolved by asking, not
+fixed as a bug).
+
+**Decisions taken:** none new (ADR-worthy) — the credit-limit-vs-stock
+split and the null-vs-zero stock handling were both scoped, owner-approved
+decisions specific to this task, not architectural changes.
+
+**Blocked on:** owner approval to start P10-2.
+
+**Next session should:** on approval, start P10-2a (`report:dailySales`
+→ `{ from, to }`) — read `report.repository.ts`/`report.handler.ts`/
+`packages/contracts/src/report/report.ts`/preload/`electron-api.d.ts`
+first, one sub-task at a time per P10-2b/c/d, each with its own
+hand-calculated money/quantity test comment before moving to the next.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P10-1 done and verified before
+      any P10-2 work was started)
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing — 495/495
+
 ## [2026-09-13] Session 57 — Phase 9-CSV: GRN CSV import against a PO, COMPLETE
 
 **Goal:** Add a CSV-import path for GRNs — staff uploads a supplier

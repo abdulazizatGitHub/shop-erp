@@ -105,6 +105,12 @@ export function ItemSearchPanel({
 
   function confirmPending(): void {
     if (!pendingItem) return;
+    // P10-1 hard block: mirrors resolveStockBadge's own out-of-stock
+    // condition exactly (null = not tracked or never moved, not "zero" —
+    // owner-confirmed this stays addable, only a confirmed <=0 balance
+    // blocks). Defense in depth — onSelect below already keeps an
+    // out-of-stock item from ever reaching pendingItem in the first place.
+    if (pendingItem.stockOnHandMilli !== null && pendingItem.stockOnHandMilli <= 0) return;
     let quantityMilli: number;
     try {
       quantityMilli = Qty.fromUnits(qtyInput);
@@ -155,6 +161,10 @@ export function ItemSearchPanel({
         </div>
       }
       onSelect={(item) => {
+        // P10-1 hard block: an out-of-stock item (marked via the
+        // "Out of stock" badge on its card, resolveStockBadge.ts) cannot
+        // be selected at all — no override, no inline qty row opens.
+        if (item.stockOnHandMilli !== null && item.stockOnHandMilli <= 0) return;
         setPendingItem(item);
         setQtyInput('1');
         setSaleUnit('stock');

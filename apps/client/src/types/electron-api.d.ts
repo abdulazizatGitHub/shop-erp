@@ -48,8 +48,13 @@ import type {
   PurchaseOrderIdInput,
   PartyAnyDto,
   PartySearchAnyInput,
+  ExpenseSummaryInput,
+  ExpenseSummaryRowDto,
+  ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
+  StockPerformanceInput,
+  StockPerformanceRowDto,
   SaleResult,
   SaleSearchInput,
   SaleSummaryDto,
@@ -73,6 +78,7 @@ import type {
   SupplierDto,
   SupplierSearchInput,
   UnitPlReportDto,
+  UnitPlReportInput,
   WageMonthInput,
   WageMonthRowDto,
 } from '@shop/contracts';
@@ -510,9 +516,17 @@ export interface ElectronApi {
     readonly dailySales: (
       input: DailySalesReportInput,
     ) => Promise<readonly DailySalesReportRowDto[]>;
-    readonly receivables: () => Promise<readonly ReceivablesAgingRowDto[]>;
+    readonly receivables: (
+      input?: ReceivablesReportInput,
+    ) => Promise<readonly ReceivablesAgingRowDto[]>;
     readonly cashBook: (input: CashBookReportInput) => Promise<readonly CashBookRowDto[]>;
-    readonly unitPl: () => Promise<UnitPlReportDto>;
+    readonly unitPl: (input: UnitPlReportInput) => Promise<UnitPlReportDto>;
+    readonly stockPerformance: (
+      input: StockPerformanceInput,
+    ) => Promise<readonly StockPerformanceRowDto[]>;
+    readonly expenseSummary: (
+      input: ExpenseSummaryInput,
+    ) => Promise<readonly ExpenseSummaryRowDto[]>;
     readonly wageMonth: (input: WageMonthInput) => Promise<readonly WageMonthRowDto[]>;
   };
 }

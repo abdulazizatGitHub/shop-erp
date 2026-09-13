@@ -208,7 +208,10 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
       const result = await ipc.sale.create(input);
       setLastResult(result);
       setPrintError(result.printError);
-      if (result.warnings.creditLimitExceeded || result.warnings.stockBelowZero) {
+      // P10-1: stock going below zero is now caught pre-emptively at
+      // add-to-cart time (ItemSearchPanel's hard block) — it no longer
+      // opens this warning-gate. Only the credit-limit warning still does.
+      if (result.warnings.creditLimitExceeded) {
         setStep('warning-gate');
       } else {
         finishSuccess(result);
@@ -242,7 +245,7 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
     setPaymentMode,
   });
 
-  const { title: warningTitle, messages: warningMessages } = computeSaleWarningText(lastResult);
+  const { title: warningTitle, messages: warningMessages } = computeSaleWarningText();
 
   return {
     lookups: cartFlow.lookups,

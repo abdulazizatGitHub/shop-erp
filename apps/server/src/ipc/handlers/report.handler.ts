@@ -2,17 +2,25 @@ import { ipcMain } from 'electron';
 import {
   CashBookReportInput,
   DailySalesReportInput,
+  ExpenseSummaryInput,
+  ReceivablesReportInput,
+  StockPerformanceInput,
+  UnitPlReportInput,
   WageMonthInput,
   type CashBookRowDto,
   type DailySalesReportRowDto,
+  type ExpenseSummaryRowDto,
   type ReceivablesAgingRowDto,
+  type StockPerformanceRowDto,
   type WageMonthRowDto,
 } from '@shop/contracts';
 import {
   createKyselyDb,
   getCashBookReport,
   getDailySalesReport,
+  getExpenseSummaryReport,
   getReceivablesAgingReport,
+  getStockPerformanceReport,
   getStockValuationReport,
   getUnitPlReport,
   getWageMonthReport,
@@ -31,12 +39,6 @@ export interface ReportHandlerDeps {
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
-
-// R5 (Unit P&L) has no "no date range" concept at the repository layer —
-// getUnitPlReport requires dateFrom/dateTo. The screen's "no inputs"
-// requirement is met by computing an effectively-all-time range here,
-// server-side, rather than exposing a date picker in the UI.
-const ALL_TIME_FROM = '2000-01-01';
 
 export function registerReportHandlers(deps: ReportHandlerDeps): void {
   ipcMain.handle(
@@ -57,7 +59,7 @@ export function registerReportHandlers(deps: ReportHandlerDeps): void {
       const input = DailySalesReportInput.parse(raw);
       const db = openDatabase(deps.dbPath);
       try {
-        return await getDailySalesReport(createKyselyDb(db), deps.tenantId, input.date, input.date);
+        return await getDailySalesReport(createKyselyDb(db), deps.tenantId, input.from, input.to);
       } finally {
         db.close();
       }
@@ -66,10 +68,51 @@ export function registerReportHandlers(deps: ReportHandlerDeps): void {
 
   ipcMain.handle(
     channels.report.receivables,
-    withError(async (): Promise<readonly ReceivablesAgingRowDto[]> => {
+    withError(async (_event, raw: unknown): Promise<readonly ReceivablesAgingRowDto[]> => {
+      const input = ReceivablesReportInput.parse(raw ?? {});
       const db = openDatabase(deps.dbPath);
       try {
-        return await getReceivablesAgingReport(createKyselyDb(db), deps.tenantId, todayIso());
+        return await getReceivablesAgingReport(
+          createKyselyDb(db),
+          deps.tenantId,
+          input.asOfDate ?? todayIso(),
+        );
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.report.stockPerformance,
+    withError(async (_event, raw: unknown): Promise<readonly StockPerformanceRowDto[]> => {
+      const input = StockPerformanceInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getStockPerformanceReport(
+          createKyselyDb(db),
+          deps.tenantId,
+          input.from,
+          input.to,
+        );
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.report.expenseSummary,
+    withError(async (_event, raw: unknown): Promise<readonly ExpenseSummaryRowDto[]> => {
+      const input = ExpenseSummaryInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getExpenseSummaryReport(
+          createKyselyDb(db),
+          deps.tenantId,
+          input.from,
+          input.to,
+        );
       } finally {
         db.close();
       }
@@ -96,10 +139,11 @@ export function registerReportHandlers(deps: ReportHandlerDeps): void {
 
   ipcMain.handle(
     channels.report.unitPl,
-    withError(async (): Promise<UnitPlReport> => {
+    withError(async (_event, raw: unknown): Promise<UnitPlReport> => {
+      const input = UnitPlReportInput.parse(raw);
       const db = openDatabase(deps.dbPath);
       try {
-        return await getUnitPlReport(createKyselyDb(db), deps.tenantId, ALL_TIME_FROM, todayIso());
+        return await getUnitPlReport(createKyselyDb(db), deps.tenantId, input.from, input.to);
       } finally {
         db.close();
       }
