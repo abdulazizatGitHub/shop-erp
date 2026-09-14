@@ -29,6 +29,7 @@ import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { DailyCashFlowChart } from './DailyCashFlowChart.js';
 
 const ROWS_PER_PAGE = 10;
 
@@ -53,7 +54,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-2xl bg-surface p-6 shadow-sm">
       <p className="text-sm font-medium text-ink-muted">{label}</p>
       <div className="mt-1">{value}</div>
     </div>
@@ -124,16 +125,18 @@ export function CashBookReport(): React.JSX.Element {
   const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <DateRangeSelector value={range} onChange={setRange} />
-        <ExportCsvButton
-          disabled={!rows || rows.length === 0}
-          onClick={() => {
-            if (!rows) return;
-            downloadCsv(`cash-record-${range.from}-${range.to}.csv`, toCsvRows(rows));
-          }}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={!rows || rows.length === 0}
+            onClick={() => {
+              if (!rows) return;
+              downloadCsv(`cash-record-${range.from}-${range.to}.csv`, toCsvRows(rows));
+            }}
+          />
+        </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -160,8 +163,13 @@ export function CashBookReport(): React.JSX.Element {
             />
           </div>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">Running balance</p>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Daily Cash Flow</h2>
+            <DailyCashFlowChart rows={rows} />
+          </div>
+
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Running Balance</h2>
             {chartData.length === 0 ? (
               <EmptyState message="No data for this period." />
             ) : (
@@ -184,8 +192,8 @@ export function CashBookReport(): React.JSX.Element {
             )}
           </div>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">Transactions</p>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Transactions</h2>
             {rows.length === 0 ? (
               <EmptyState message="No cash movements in this date range." />
             ) : (

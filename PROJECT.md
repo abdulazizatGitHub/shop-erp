@@ -2070,6 +2070,7 @@ for any new icon need in apps/client going forward.
 | 9 (UI + CSV) | Purchase Orders + GRN screens, item price history, CSV import | ✅ COMPLETE — PO/GRN UI screens built on the Phase 9 backend, item price history view, GRN-against-PO CSV import                                                                                                                                                                                                                                                                                                                                                                                                                                         | 2026-09-12/13. 515/515 tests (post-P10-1 baseline). See `PROGRESS.md`                                                                 |
 | 10           | Reports & Finance Redesign                                    | ✅ COMPLETE — all six sub-phases (P10-0–P10-5) done and verified: zero-stock hard block on the sale screen, `report:dailySales`/`report:unitPl` widened to date ranges, new `report:stockPerformance`/`report:expenseSummary`, Reports page restructured into Operational/Financial groups with a shared `DateRangeSelector`, all 8 report tabs chart-backed (recharts), CSV export on every tab                                                                                                                                                         | P10-0–P10-5 (2026-09-13). 525/525 tests. See `docs/phases/PHASE_10.md`                                                                |
 | 11           | Reports UI Polish & Navigation Redesign                       | ✅ COMPLETE — all seven sub-phases (P11-0–P11-6) done and verified: sidebar Reports group made expandable (Daily Reports/Accounts), plain-language terminology across all 8 report tabs, shared `Pagination` component wired into every long table, two new report channels (`periodComparison`, `itemSoldSummary`), Sales tab rebuilt into 6 sections with sparklines/trend indicators, remaining 7 tabs' visual polish (negative-valuation guard, Jobs chart grouped-not-stacked, always-visible Wages month note)                                     | P11-0–P11-6 (2026-09-13/14). 541/541 tests. See `docs/phases/PHASE_11.md`                                                             |
+| 12           | Reports Visual Structure & Chart Additions                    | ✅ COMPLETE — all eight sub-phases (P12-0–P12-7) done and verified: `ReportsPage.tsx`'s shared outer Card removed in favour of a `bg-surface-page` background with independent `rounded-2xl` section cards on all 8 tabs, 7 new charts added (Stock Health donut + Best Performers bar, per-customer stacked aging bar, Parts vs Labour donut, Daily Cash Flow bar, Revenue vs Margin donut, Wage cost by role donut), zero new IPC channels, renderer-only                                                                                              | P12-0–P12-7 (2026-09-14). 565/565 tests. See `docs/phases/PHASE_12.md`                                                                |
 
 ---
 
@@ -3867,6 +3868,69 @@ Tab/Shift+Tab between the panel's first and last focusable elements)
 in `Modal.tsx`.
 Status: OPEN — pre-existing, not introduced by the UI redesign; fix in
 a dedicated accessibility pass.
+
+### BUG-27: Reports sidebar group stayed/started expanded when not on the Reports tab — MEDIUM, FIXED
+
+Found in: Phase 12 close-out, 2026-09-14, owner testing before commit.
+Description: `Sidebar.tsx`'s `reportsGroupExpanded` state initialized
+straight from `localStorage`'s `sidebar-reports-expanded` key regardless of
+`activeTab`, and the effect that auto-expands the group on entering Reports
+had no corresponding branch to collapse it when leaving. A stale `'true'`
+value in storage (or a manual chevron click while on any other tab) left
+the group visibly expanded on app launch on Sales, and it stayed expanded
+after navigating away from Reports to any other tab.
+Impact: Confusing sidebar state — "Daily Reports"/"Accounts" sub-items
+shown for a group whose parent tab isn't even active.
+Fix: Initial state now computed as
+`activeTab === 'reports' && readStoredReportsExpanded()`; the existing
+entering-Reports effect gained an `else if (activeTab !== 'reports')`
+branch that collapses the group on any navigation away, regardless of how
+it became expanded (auto or manual).
+Status: FIXED — 2026-09-14. Verified via `Sidebar.test.tsx` (2 new tests:
+launch-collapsed-despite-stale-storage, collapse-on-nav-away-after-manual-
+or-auto-expand), `npm run verify` 569/569.
+
+### BUG-28: Reports page showed both Operational and Financial tab groups simultaneously — MEDIUM, FIXED
+
+Found in: Phase 12 close-out, 2026-09-14, owner testing before commit.
+Description: `ReportsPage.tsx` rendered both `OPERATIONAL_TABS` and
+`FINANCIAL_TABS` unconditionally, with no check against the `activeGroup`
+prop — clicking "Daily Reports" or "Accounts" in the sidebar changed which
+group's first tab was selected, but both groups' tab rows (and both
+"Operational"/"Financial" labels) remained visible regardless.
+Impact: Confusing — the owner sees all 8 report tabs and both section
+labels no matter which sidebar sub-item they clicked, defeating the point
+of the Daily Reports/Accounts split.
+Fix: Each tab-group block is now wrapped in `{activeGroup === 'daily' && ...}`
+/ `{activeGroup === 'accounts' && ...}`, so only the active group's 4 tabs
+and its own label render.
+Status: FIXED — 2026-09-14. Verified via new `ReportsPage.test.tsx` (2
+tests: `activeGroup="daily"` shows only Operational tabs/label,
+`activeGroup="accounts"` shows only Financial tabs/label), `npm run verify`
+569/569.
+
+### BUG-26: Stock tab's "Items Out of Stock" KPI and its own new Stock Health donut disagree on negative-quantity items — LOW
+
+Found in: Phase 12, P12-1, 2026-09-14 — noticed while designing the new
+Stock Health donut's bucketing logic and comparing it against the
+pre-existing Phase-11 KPI card next to it.
+Description: `StockValuationReport.tsx`'s "Items Out of Stock" KPI card
+counts `quantityOnHandMilli === 0`. A negative on-hand quantity (possible
+in this app's real dev data, per the owner) is therefore counted in
+neither the "Items In Stock" nor "Items Out of Stock" KPI. The new P12-1
+Stock Health donut right next to it deliberately buckets `> 0` (In Stock)
+vs. everything else (Out of Stock), so every item is always counted in
+exactly one of its two slices.
+Impact: On a period with any negative-stock item, the two KPI numbers and
+the donut's two slice counts will not agree with each other on the same
+screen — confusing, though neither is wrong about what it claims to count
+(one counts exact zeros, the other counts non-positive).
+Fix: Change the KPI card's out-of-stock check from `=== 0` to `<= 0` to
+match the donut's bucketing, once a bug-fix phase is open. Not fixed here —
+P12-1 only added the new donut, per its own scope; touching the pre-existing
+KPI card's logic was out of scope for a visual-structure phase.
+Status: UNFIXED — waiting for a bug-fix phase, or a decision that exact
+zero-only counting is intentional for the KPI card.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 

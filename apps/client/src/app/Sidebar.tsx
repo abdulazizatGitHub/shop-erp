@@ -117,7 +117,9 @@ export function Sidebar({
 }: SidebarProps): React.JSX.Element {
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
   const [expanded, setExpanded] = useState(readStoredExpanded);
-  const [reportsGroupExpanded, setReportsGroupExpanded] = useState(readStoredReportsExpanded);
+  const [reportsGroupExpanded, setReportsGroupExpanded] = useState(
+    () => activeTab === 'reports' && readStoredReportsExpanded(),
+  );
   const prevActiveTabRef = useRef(activeTab);
 
   useEffect(() => {
@@ -138,6 +140,13 @@ export function Sidebar({
     const enteringReports = activeTab === 'reports' && prevActiveTabRef.current !== 'reports';
     if (enteringReports) {
       setReportsGroupExpanded(true);
+    } else if (activeTab !== 'reports') {
+      // BUG-1 fix — collapse whenever the active tab isn't Reports, whether
+      // the group got expanded via auto-expand-on-entry or a manual chevron
+      // click while sitting on some other tab. Never touches localStorage:
+      // that's the manual toggle's own persistence, untouched here, and
+      // re-entering Reports always re-expands via the branch above anyway.
+      setReportsGroupExpanded(false);
     }
     prevActiveTabRef.current = activeTab;
   }, [activeTab]);

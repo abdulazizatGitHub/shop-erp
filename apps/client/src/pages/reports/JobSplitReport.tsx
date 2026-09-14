@@ -30,6 +30,7 @@ import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { PartsLabourDonut } from './PartsLabourDonut.js';
 
 const ROWS_PER_PAGE = 10;
 
@@ -54,7 +55,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-2xl bg-surface p-6 shadow-sm">
       <p className="text-sm font-medium text-ink-muted">{label}</p>
       <div className="mt-1">{value}</div>
     </div>
@@ -129,16 +130,18 @@ export function JobSplitReport(): React.JSX.Element {
   const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <DateRangeSelector value={range} onChange={setRange} />
-        <ExportCsvButton
-          disabled={!rows || rows.length === 0}
-          onClick={() => {
-            if (!rows) return;
-            downloadCsv(`jobs-${range.from}-${range.to}.csv`, toCsvRows(rows));
-          }}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={!rows || rows.length === 0}
+            onClick={() => {
+              if (!rows) return;
+              downloadCsv(`jobs-${range.from}-${range.to}.csv`, toCsvRows(rows));
+            }}
+          />
+        </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -162,10 +165,18 @@ export function JobSplitReport(): React.JSX.Element {
             />
           </div>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">
-              Parts margin vs. labour revenue
-            </p>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Parts vs Labour</h2>
+            <PartsLabourDonut
+              partsMarginPaisa={partsMarginPaisa}
+              labourChargePaisa={labourChargePaisa}
+            />
+          </div>
+
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
+              Parts Margin vs. Labour Revenue by Job
+            </h2>
             {chartData.length === 0 ? (
               <EmptyState message="No jobs in this period." />
             ) : (
@@ -193,50 +204,53 @@ export function JobSplitReport(): React.JSX.Element {
             )}
           </div>
 
-          {rows.length === 0 ? (
-            <EmptyState message="No jobs received in this date range." />
-          ) : (
-            <>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Job No</TableHeaderCell>
-                    <TableHeaderCell>Date</TableHeaderCell>
-                    <TableHeaderCell>Customer</TableHeaderCell>
-                    <TableHeaderCell>Technician</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Parts Margin</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Labour</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Total</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {visibleRows.map((r) => (
-                    <TableRow key={r.jobId}>
-                      <TableCell>{r.docNo}</TableCell>
-                      <TableCell>{r.receivedDate}</TableCell>
-                      <TableCell>{r.customerName ?? 'Walk-in'}</TableCell>
-                      <TableCell>{r.technicianName ?? 'Unassigned'}</TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={r.partsMarginPaisa} size="sm" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={r.labourChargePaisa} size="sm" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={r.totalBillPaisa} size="sm" />
-                      </TableCell>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Jobs</h2>
+            {rows.length === 0 ? (
+              <EmptyState message="No jobs received in this date range." />
+            ) : (
+              <>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Job No</TableHeaderCell>
+                      <TableHeaderCell>Date</TableHeaderCell>
+                      <TableHeaderCell>Customer</TableHeaderCell>
+                      <TableHeaderCell>Technician</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Parts Margin</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Labour</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Total</TableHeaderCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <Pagination
-                totalRows={rows.length}
-                rowsPerPage={ROWS_PER_PAGE}
-                currentPage={page}
-                onPageChange={setPage}
-              />
-            </>
-          )}
+                  </TableHead>
+                  <TableBody>
+                    {visibleRows.map((r) => (
+                      <TableRow key={r.jobId}>
+                        <TableCell>{r.docNo}</TableCell>
+                        <TableCell>{r.receivedDate}</TableCell>
+                        <TableCell>{r.customerName ?? 'Walk-in'}</TableCell>
+                        <TableCell>{r.technicianName ?? 'Unassigned'}</TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={r.partsMarginPaisa} size="sm" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={r.labourChargePaisa} size="sm" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={r.totalBillPaisa} size="sm" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pagination
+                  totalRows={rows.length}
+                  rowsPerPage={ROWS_PER_PAGE}
+                  currentPage={page}
+                  onPageChange={setPage}
+                />
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

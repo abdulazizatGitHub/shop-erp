@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { SidebarProps } from './Sidebar.js';
 import { Sidebar } from './Sidebar.js';
+
+function renderSidebar(props: Partial<SidebarProps> = {}) {
+  return render(
+    <Sidebar
+      activeTab="sales"
+      onSelectTab={() => {}}
+      activeReportsGroup="daily"
+      onSelectReportsGroup={() => {}}
+      {...props}
+    />,
+  );
+}
 
 vi.mock('../lib/ipc.js', () => ({
   ipc: {
@@ -57,6 +70,52 @@ describe('Sidebar — P11-1 Reports expandable nav group', () => {
     // from the DOM, not just CSS-hidden.
     expect(screen.queryByText('Daily Reports')).toBeNull();
     expect(screen.queryByText('Accounts')).toBeNull();
+
+    localStorage.clear();
+  });
+
+  it('BUG-1: renders collapsed on launch even when a stale "expanded" value is stored, if activeTab is not reports', () => {
+    localStorage.setItem('sidebar-expanded', 'true');
+    localStorage.setItem('sidebar-reports-expanded', 'true');
+
+    renderSidebar({ activeTab: 'sales' });
+
+    expect(screen.getByRole('button', { name: 'Reports', expanded: false })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Daily Reports' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Accounts' })).toBeNull();
+
+    localStorage.clear();
+  });
+
+  it('BUG-1: collapses the group when activeTab changes away from reports, whether it was auto-expanded or manually opened', () => {
+    localStorage.setItem('sidebar-expanded', 'true');
+
+    const { rerender } = renderSidebar({ activeTab: 'sales' });
+
+    expect(screen.getByRole('button', { name: 'Reports', expanded: false })).toBeTruthy();
+
+    // Transitioning INTO Reports from another tab auto-expands the disclosure.
+    rerender(
+      <Sidebar
+        activeTab="reports"
+        onSelectTab={() => {}}
+        activeReportsGroup="daily"
+        onSelectReportsGroup={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Reports', expanded: true })).toBeTruthy();
+
+    // Navigating to another tab must collapse it again.
+    rerender(
+      <Sidebar
+        activeTab="sales"
+        onSelectTab={() => {}}
+        activeReportsGroup="daily"
+        onSelectReportsGroup={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Reports', expanded: false })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Daily Reports' })).toBeNull();
 
     localStorage.clear();
   });

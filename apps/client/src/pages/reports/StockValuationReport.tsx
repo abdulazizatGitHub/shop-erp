@@ -20,7 +20,9 @@ import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { BestPerformersBarChart } from './BestPerformersBarChart.js';
 import { BestPerformersTable } from './BestPerformersTable.js';
+import { StockHealthDonut } from './StockHealthDonut.js';
 
 const ROWS_PER_PAGE = 10;
 
@@ -44,7 +46,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-2xl bg-surface p-6 shadow-sm">
       <p className="text-sm font-medium text-ink-muted">{label}</p>
       <div className="mt-1">{value}</div>
     </div>
@@ -132,7 +134,19 @@ export function StockValuationReport(): React.JSX.Element {
   if (!report) return <LoadingState message="Loading stock valuation…" />;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={report.lines.length === 0}
+            onClick={() => {
+              downloadCsv(`stock-${range.from}-${range.to}.csv`, toCsvRows(report.lines));
+            }}
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-3 gap-4">
         <KpiCard
           label="Items In Stock"
@@ -148,32 +162,31 @@ export function StockValuationReport(): React.JSX.Element {
         />
       </div>
 
-      <div className="border-t border-line pt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-medium text-ink-muted">Best Performers</p>
-          <div className="flex items-center gap-4">
-            <DateRangeSelector value={range} onChange={setRange} />
-            <ExportCsvButton
-              disabled={report.lines.length === 0}
-              onClick={() => {
-                downloadCsv(`stock-${range.from}-${range.to}.csv`, toCsvRows(report.lines));
-              }}
-            />
-          </div>
-        </div>
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">Stock Health</h2>
+        <StockHealthDonut lines={report.lines} />
+      </div>
+
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">Best Performers</h2>
         {performance === null ? (
           <LoadingState message="Loading best performers…" />
         ) : (
-          <BestPerformersTable
-            rows={performance}
-            page={performancePage}
-            onPageChange={setPerformancePage}
-          />
+          <>
+            <BestPerformersBarChart rows={performance} />
+            <div className="mt-6">
+              <BestPerformersTable
+                rows={performance}
+                page={performancePage}
+                onPageChange={setPerformancePage}
+              />
+            </div>
+          </>
         )}
       </div>
 
-      <div className="border-t border-line pt-4">
-        <p className="mb-2 text-sm font-medium text-ink-muted">Stock Level</p>
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">Stock Level</h2>
         <TextInput
           variant="search"
           placeholder="Search items by name"
@@ -232,11 +245,10 @@ export function StockValuationReport(): React.JSX.Element {
             />
           </>
         )}
-      </div>
-
-      <div className="flex items-center justify-end gap-3 border-t border-line pt-3">
-        <span className="text-lg font-semibold text-ink">Total Valuation</span>
-        <MoneyDisplay paisaValue={report.totalValuationPaisa} size="xl" />
+        <div className="mt-4 flex items-center justify-end gap-3 border-t border-line pt-3">
+          <span className="text-lg font-semibold text-ink">Total Valuation</span>
+          <MoneyDisplay paisaValue={report.totalValuationPaisa} size="xl" />
+        </div>
       </div>
     </div>
   );

@@ -3,7 +3,6 @@ import type { ItemSoldSummaryRowDto, PeriodComparisonDto, SaleSummaryDto } from 
 import {
   Alert,
   Badge,
-  Card,
   EmptyState,
   LoadingState,
   MoneyDisplay,
@@ -137,32 +136,37 @@ export function DailySalesReport(): React.JSX.Element {
         <LoadingState message="Loading Sales…" />
       ) : (
         <>
-          <Card title="Summary">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Summary</h2>
             <SalesSummaryCards
               current={comparison.current}
               previous={comparison.previous}
               from={range.from}
             />
-          </Card>
+          </div>
 
-          <Card title="Sales Trend">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Sales Trend</h2>
             <SalesTrendChart
               current={comparison.current}
               previous={comparison.previous}
               currentRange={range}
               previousRange={previousRange}
             />
-          </Card>
+          </div>
 
-          <Card title="Cash vs Credit">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Cash vs Credit</h2>
             <CashCreditPie current={comparison.current} />
-          </Card>
+          </div>
 
-          <Card title="What Was Sold">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">What Was Sold</h2>
             <ItemsSoldTable rows={itemSummary} />
-          </Card>
+          </div>
 
-          <Card title="Transactions">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Transactions</h2>
             {sales.length === 0 ? (
               <EmptyState message="No sales recorded in this range." />
             ) : (
@@ -205,7 +209,7 @@ export function DailySalesReport(): React.JSX.Element {
                 />
               </>
             )}
-          </Card>
+          </div>
         </>
       )}
     </div>

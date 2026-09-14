@@ -21,6 +21,7 @@ import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { CustomerAgingBarChart } from './CustomerAgingBarChart.js';
 
 const ROWS_PER_PAGE = 10;
 
@@ -88,7 +89,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-2xl bg-surface p-6 shadow-sm">
       <p className="text-sm font-medium text-ink-muted">{label}</p>
       <div className="mt-1">{value}</div>
     </div>
@@ -181,15 +182,17 @@ export function ReceivablesAgingReport(): React.JSX.Element {
   if (!rows) return <LoadingState message="Loading Udhaar (Who Owes Me)…" />;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <DateRangeSelector value={range} onChange={setRange} />
-        <ExportCsvButton
-          disabled={owing.length === 0}
-          onClick={() => {
-            downloadCsv(`udhaar-${range.from}-${range.to}.csv`, toCsvRows(owing));
-          }}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={owing.length === 0}
+            onClick={() => {
+              downloadCsv(`udhaar-${range.from}-${range.to}.csv`, toCsvRows(owing));
+            }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -207,8 +210,10 @@ export function ReceivablesAgingReport(): React.JSX.Element {
         />
       </div>
 
-      <div className="border-t border-line pt-4">
-        <p className="mb-2 text-sm font-medium text-ink-muted">Aging breakdown</p>
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">
+          Aging Breakdown — All Customers Combined
+        </h2>
         {owing.length === 0 ? (
           <EmptyState message="No data for this period." />
         ) : (
@@ -229,8 +234,13 @@ export function ReceivablesAgingReport(): React.JSX.Element {
         )}
       </div>
 
-      <div className="border-t border-line pt-4">
-        <p className="mb-2 text-sm font-medium text-ink-muted">Customers</p>
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">Aging Breakdown — By Customer</h2>
+        <CustomerAgingBarChart rows={owing} />
+      </div>
+
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-ink">Customers</h2>
         {owing.length === 0 ? (
           <EmptyState message="No customers currently owe a balance." />
         ) : (
@@ -277,11 +287,10 @@ export function ReceivablesAgingReport(): React.JSX.Element {
             />
           </>
         )}
-      </div>
-
-      <div className="flex items-center justify-end gap-3 border-t border-line pt-3">
-        <span className="text-lg font-semibold text-ink">Total Udhaar (Who Owes Me)</span>
-        <MoneyDisplay paisaValue={totalPaisa} size="xl" />
+        <div className="mt-4 flex items-center justify-end gap-3 border-t border-line pt-3">
+          <span className="text-lg font-semibold text-ink">Total Udhaar (Who Owes Me)</span>
+          <MoneyDisplay paisaValue={totalPaisa} size="xl" />
+        </div>
       </div>
     </div>
   );

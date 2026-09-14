@@ -41,6 +41,183 @@
 
 ---
 
+## [2026-09-14] Session 67 — Phase 12 close-out: 2 bug fixes before commit (sidebar auto-collapse, inactive report group tabs)
+
+**Goal:** Fix two bugs found during Phase 12 close-out testing, before
+committing any of Phase 12's work. No new features.
+
+**Done:**
+
+- BUG-27 fix — `Sidebar.tsx`: `reportsGroupExpanded`'s initial state now
+  computed as `activeTab === 'reports' && readStoredReportsExpanded()`
+  instead of storage alone; the entering-Reports effect gained an
+  `else if (activeTab !== 'reports') { setReportsGroupExpanded(false); }`
+  branch so the group collapses on any navigation away, whether it got
+  expanded automatically or via a manual chevron click.
+- BUG-28 fix — `ReportsPage.tsx`: the Operational and Financial tab-group
+  blocks (each with its own section label) are now each wrapped in
+  `{activeGroup === 'daily' && ...}` / `{activeGroup === 'accounts' && ...}`
+  instead of always rendering both.
+- Added 2 new tests to `Sidebar.test.tsx` (launch-collapsed-despite-stale-
+  storage; collapse-on-nav-away after either auto- or manual-expand) and a
+  new `ReportsPage.test.tsx` (2 tests: each `activeGroup` value shows only
+  its own 4 tabs and label, mocking all 8 child report components).
+- Added a Phase 12 entry to `docs/PHASES.md` (was previously only in
+  `docs/phases/PHASE_12.md`).
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client` — exit 0, both immediately after
+  the code changes and again after the final `git add -A`
+- `npm run verify` — 99 test files, **569/569 passing**, exit 0 (569 = 565
+  Phase-12 baseline + 2 new Sidebar tests + 2 new ReportsPage tests, exactly
+  as predicted before writing them)
+- Reasoned through and confirmed two specific scenarios the owner asked
+  about before writing code: (1) manually toggling the group open while on
+  a non-Reports tab, then navigating to another non-Reports tab, still
+  collapses it — the fix's effect depends only on `activeTab`, not on _how_
+  the group became expanded; (2) manually collapsing the group while on
+  Reports, then leaving and returning to Reports, DOES re-expand it — this
+  is existing, correct, unchanged behavior per the original P11-1 design
+  and the bug's own required-behavior list, not something to fix
+
+**Not done / deferred:** Nothing — both bugs fully fixed, no other work
+started per explicit instruction.
+
+**Bugs found:** BUG-27, BUG-28 — both found and fixed in this same session,
+logged as FIXED in PROJECT.md (not left open, since fixing them was this
+session's entire purpose).
+
+**Decisions taken:** None new — both fixes were mechanical, directly
+following the owner's own approved diagnosis from the prior turn.
+
+**Blocked on:** Q1–Q5, Q7, Q8, Q11 in PROJECT.md (unrelated).
+
+**Next session should:** Nothing outstanding from Phase 12. Read PROJECT.md
+"Open Questions" and `docs/PHASES.md` for what's next.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status (BUG-27/BUG-28 logged as FIXED)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (`npm run verify` — 569/569, exit 0)
+
+---
+
+## [2026-09-14] Session 66 — Phase 12, P12-0–P12-7: Reports visual structure & chart additions, COMPLETE — PHASE 12 CLOSED
+
+**Goal:** Give every report tab the same visual structure (independent
+rounded white cards on a light-grey page background, matching Suppliers/
+Items/Purchase Orders) and add 7 new charts across 6 tabs, renderer-only,
+zero new IPC channels.
+
+**Done:**
+
+- P12-0 — removed `ReportsPage.tsx`'s shared outer `<Card>` (was nesting
+  every tab's own cards inside a second card); outer wrapper now
+  `flex min-h-full flex-col gap-6 bg-surface-page`; converted
+  `DailySalesReport.tsx`'s 5 `<Card>` usages to the new local
+  `rounded-2xl bg-surface p-6 shadow-sm` pattern for consistency with the
+  other 7 tabs about to move to it.
+- P12-1 (Stock) — `StockHealthDonut.tsx` (new, + `computeStockHealthSlices`
+  pure function) and `BestPerformersBarChart.tsx` (new) added;
+  `StockValuationReport.tsx` restructured into 5 cards.
+- P12-2 (Udhaar) — `CustomerAgingBarChart.tsx` (new, + `buildCustomerAgingBars`
+  pure function, stacked 4-bucket bar per customer); `ReceivablesAgingReport.tsx`
+  restructured into 5 cards with two distinctly-titled aging charts
+  ("All Customers Combined" vs. "By Customer").
+- P12-3 (Jobs) — `PartsLabourDonut.tsx` (new, + `buildPartsLabourSlices`);
+  `JobSplitReport.tsx` restructured into 5 cards, `JobsReport.tsx` now wraps
+  `TechnicianCustodySummary` in its own Card 6.
+- P12-4 (Cash Record) — `DailyCashFlowChart.tsx` (new, + `buildDailyCashFlow`
+  group-by-date pure function); `CashBookReport.tsx` restructured into 5
+  cards, Daily Cash Flow placed above the existing Running Balance line chart.
+- P12-5 (Business Profit) — `RevenueMarginDonut.tsx` (new, +
+  `buildRevenueMarginSlices`, reads the report's own pre-computed `TOTAL`
+  row rather than re-summing); `UnitPlReport.tsx` restructured into 4 cards.
+- P12-6 (Wages) — `WageByRoleDonut.tsx` (new, + `buildWageByRoleSlices`,
+  reuses `ExpensesReport.tsx`'s existing cycling `PIE_COLORS` array for its
+  unbounded role set); `WageMonthReport.tsx` restructured into 4 cards, month
+  note moved inside Card 1.
+- P12-7 (Expenses) — `ExpensesReport.tsx` restructured into 3 cards; no new
+  chart (both existing charts kept, now sharing one card).
+- Added 6 new pure-function test files (one per new donut/bar-chart pure
+  function), 24 new tests total.
+- Environment fix: killed 4 leftover `electron.exe` processes and ran
+  `npm rebuild better-sqlite3` after `npm run verify` failed 281/565 tests
+  with a `NODE_MODULE_VERSION` ABI mismatch (same class of issue as Phase
+  11's own environment note) — unrelated to this phase's own code, all
+  failures were in `packages/db` repository tests.
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client` — exit 0 after every one of
+  P12-0 through P12-7's steps (11 separate build checks total)
+- `npm run build --workspace=@shop/server` — exit 0 (no-op, zero backend
+  files touched)
+- `npm run verify` — 98 test files, **565/565 passing**, exit 0 (baseline
+  541/541; +24 new tests, 0 regressions)
+- `grep -rn "isAnimationActive" apps/client/src/pages/reports/` — every
+  `Bar`/`Line`/`Pie` element across every file has it; cross-checked 1:1
+  by element count per file (e.g. `CustomerAgingBarChart.tsx`: 4 `Bar`s / 4
+  occurrences; each donut: 1 `Pie` / 1 occurrence)
+- `grep -c "ipcMain.handle" apps/server/src/ipc/handlers/report.handler.ts`
+  — still 10, unchanged
+- `grep -n "bg-surface-page" apps/client/src/pages/reports/ReportsPage.tsx`
+  — confirmed on the outer wrapper (line 117)
+- `grep -rn "from.*ui.*Card" apps/client/src/pages/reports/*.tsx` (excluding
+  `.test.tsx`) — zero hits; confirmed no report tab file, including
+  `ReportsPage.tsx` itself, imports the shared `Card` primitive anymore
+- Full line-count list, every touched/created file — largest is
+  `ReceivablesAgingReport.tsx` at 297, all others lower; every file under
+  the 300-line cap (see PHASE_12.md §5 / this session's chat transcript for
+  the full per-file list)
+- Two lint-only issues (a `number` inside a template literal;
+  `expect.any(String)` triggering `no-unsafe-assignment`) caught by
+  `npm run verify` and fixed before this session's own close-out
+
+**Not done / deferred:** Nothing deferred — all 7 tabs (P12-1 through
+P12-7) and the P12-0 prerequisite are complete.
+
+**Bugs found:** BUG-26 (LOW, new) — Stock tab's pre-existing "Items Out of
+Stock" KPI (`=== 0`) and the new Stock Health donut (`<= 0`) disagree on
+negative-quantity items. Logged, not fixed — the KPI's logic was
+pre-existing and out of this visual-structure phase's scope.
+
+**Decisions taken:** See PHASE_12.md §6 — outer-Card removal, local
+card-pattern adoption over the shared `Card.tsx` primitive, Sales tab
+included in the card-pattern conversion, pure-function extraction for every
+new chart's math (recharts/`ResponsiveContainer` cannot be meaningfully
+render-tested under jsdom — confirmed zero width, no chart children, in
+this session), Stock Health donut's `<=0` bucketing choice, Business
+Profit's `TOTAL`-row reuse, Wages' reuse of `ExpensesReport.tsx`'s existing
+color-cycling array, and two brief-spec-token corrections (`text-ink-base`
+→ `text-ink`, `colors.ink.base` → `colors.ink.default`).
+
+**Blocked on:** Q1–Q5, Q7, Q8, Q11 in PROJECT.md (unrelated to this phase).
+
+**Next session should:** Read PROJECT.md's "Open Questions" section and
+`docs/PHASES.md` for what's next — nothing from Phase 12 was deferred.
+BUG-26 is available to pick up in a future bug-fix phase.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase's own changes (BUG-26 is
+      a pre-existing inconsistency surfaced by this phase's new donut, not
+      a bug this phase introduced)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (Phase 12 fully closed)
+- [x] Any new bugs documented in PROJECT.md (BUG-26)
+- [x] Test suite passing (`npm run verify` — 565/565, exit 0)
+
+---
+
 ## [2026-09-14] Session 65 — Phase 11, P11-6: remaining 7 tabs' visual polish, COMPLETE — PHASE 11 CLOSED
 
 **Goal:** Finish Phase 11's final sub-phase — a visual polish pass on the 7

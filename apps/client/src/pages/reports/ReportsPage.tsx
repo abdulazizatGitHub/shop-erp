@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, PageHeader, Tabs, type TabItem } from '@shop/ui';
+import { PageHeader, Tabs, type TabItem } from '@shop/ui';
 import type { ReportsGroup } from '../../app/navigation.js';
 import { CashBookReport } from './CashBookReport.js';
 import { DailySalesReport } from './DailySalesReport.js';
@@ -114,31 +114,35 @@ export function ReportsPage({
   }, [tab, onActiveGroupChange]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6 bg-surface-page">
       <PageHeader title="Reports" />
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <p className={GROUP_LABEL_CLASS}>Operational</p>
-          <Tabs items={OPERATIONAL_TABS} active={tab} onChange={setTab} />
-        </div>
+        {activeGroup === 'daily' && (
+          <div className="flex flex-col gap-2">
+            <p className={GROUP_LABEL_CLASS}>Operational</p>
+            <Tabs items={OPERATIONAL_TABS} active={tab} onChange={setTab} />
+          </div>
+        )}
 
-        <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <p className={GROUP_LABEL_CLASS}>Financial</p>
-          <Tabs items={FINANCIAL_TABS} active={tab} onChange={setTab} />
-        </div>
+        {activeGroup === 'accounts' && (
+          <div className="flex flex-col gap-2">
+            <p className={GROUP_LABEL_CLASS}>Financial</p>
+            <Tabs items={FINANCIAL_TABS} active={tab} onChange={setTab} />
+          </div>
+        )}
       </div>
 
-      <Card title={TAB_TITLES[tab]}>
-        {tab === 'dailySales' && <DailySalesReport />}
-        {tab === 'stockValuation' && <StockValuationReport />}
-        {tab === 'receivables' && <ReceivablesAgingReport />}
-        {tab === 'jobs' && <JobsReport />}
-        {tab === 'cashBook' && <CashBookReport />}
-        {tab === 'unitPl' && <UnitPlReport />}
-        {tab === 'wages' && <WageMonthReport />}
-        {tab === 'expenses' && <ExpensesReport />}
-      </Card>
+      <h2 className="text-lg font-semibold text-ink">{TAB_TITLES[tab]}</h2>
+
+      {tab === 'dailySales' && <DailySalesReport />}
+      {tab === 'stockValuation' && <StockValuationReport />}
+      {tab === 'receivables' && <ReceivablesAgingReport />}
+      {tab === 'jobs' && <JobsReport />}
+      {tab === 'cashBook' && <CashBookReport />}
+      {tab === 'unitPl' && <UnitPlReport />}
+      {tab === 'wages' && <WageMonthReport />}
+      {tab === 'expenses' && <ExpensesReport />}
     </div>
   );
 }

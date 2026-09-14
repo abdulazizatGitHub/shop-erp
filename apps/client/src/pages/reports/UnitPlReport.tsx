@@ -29,6 +29,7 @@ import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { RevenueMarginDonut } from './RevenueMarginDonut.js';
 
 function toCsvRows(rows: readonly UnitPlRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -100,18 +101,21 @@ export function UnitPlReport(): React.JSX.Element {
   }, [range]);
 
   const chartData = report ? toChartData(report.rows) : [];
+  const totalRow = report?.rows.find((row) => row.unitCode === 'TOTAL') ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <DateRangeSelector value={range} onChange={setRange} />
-        <ExportCsvButton
-          disabled={!report || report.rows.length === 0}
-          onClick={() => {
-            if (!report) return;
-            downloadCsv(`business-profit-${range.from}-${range.to}.csv`, toCsvRows(report.rows));
-          }}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={!report || report.rows.length === 0}
+            onClick={() => {
+              if (!report) return;
+              downloadCsv(`business-profit-${range.from}-${range.to}.csv`, toCsvRows(report.rows));
+            }}
+          />
+        </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -120,10 +124,22 @@ export function UnitPlReport(): React.JSX.Element {
         <LoadingState message="Loading Business Profit…" />
       ) : (
         <>
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Revenue vs Margin</h2>
+            {totalRow ? (
+              <RevenueMarginDonut
+                directMarginPaisa={totalRow.directMarginPaisa}
+                cogsPaisa={totalRow.cogsPaisa}
+              />
+            ) : (
+              <p className="py-8 text-center text-ink-faint">No data for this period.</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
               Revenue, COGS &amp; Direct Margin
-            </p>
+            </h2>
             {chartData.length === 0 ? (
               <EmptyState message="No data for this period." />
             ) : (
@@ -157,41 +173,43 @@ export function UnitPlReport(): React.JSX.Element {
             )}
           </div>
 
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Business Unit</TableHeaderCell>
-                <TableHeaderCell className="text-right">Revenue</TableHeaderCell>
-                <TableHeaderCell className="text-right">
-                  {report.rows[0]?.cogsColumnLabel ?? 'COGS'}
-                </TableHeaderCell>
-                <TableHeaderCell className="text-right">Direct Margin</TableHeaderCell>
-                <TableHeaderCell className="text-right">Margin %</TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {report.rows.map((row) => (
-                <TableRow key={row.unitCode}>
-                  <TableCell className={row.unitCode === 'TOTAL' ? 'font-semibold' : ''}>
-                    {row.unitName}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <MoneyDisplay paisaValue={row.revenuePaisa} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <MoneyDisplay paisaValue={row.cogsPaisa} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <MoneyDisplay paisaValue={row.directMarginPaisa} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums text-ink">
-                    {row.directMarginPercent.toFixed(2)}%
-                  </TableCell>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Business Unit</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Revenue</TableHeaderCell>
+                  <TableHeaderCell className="text-right">
+                    {report.rows[0]?.cogsColumnLabel ?? 'COGS'}
+                  </TableHeaderCell>
+                  <TableHeaderCell className="text-right">Direct Margin</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Margin %</TableHeaderCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <p className="text-xs text-ink-faint">{report.disclaimer}</p>
+              </TableHead>
+              <TableBody>
+                {report.rows.map((row) => (
+                  <TableRow key={row.unitCode}>
+                    <TableCell className={row.unitCode === 'TOTAL' ? 'font-semibold' : ''}>
+                      {row.unitName}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <MoneyDisplay paisaValue={row.revenuePaisa} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <MoneyDisplay paisaValue={row.cogsPaisa} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <MoneyDisplay paisaValue={row.directMarginPaisa} />
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-ink">
+                      {row.directMarginPercent.toFixed(2)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <p className="mt-3 text-xs text-ink-faint">{report.disclaimer}</p>
+          </div>
         </>
       )}
     </div>

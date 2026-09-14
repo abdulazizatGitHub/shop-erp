@@ -155,16 +155,18 @@ export function ExpensesReport(): React.JSX.Element {
   const visibleExpenses = (expenses ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <DateRangeSelector value={range} onChange={setRange} />
-        <ExportCsvButton
-          disabled={!expenses || expenses.length === 0}
-          onClick={() => {
-            if (!expenses) return;
-            downloadCsv(`expenses-${range.from}-${range.to}.csv`, toCsvRows(expenses));
-          }}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <DateRangeSelector value={range} onChange={setRange} />
+          <ExportCsvButton
+            disabled={!expenses || expenses.length === 0}
+            onClick={() => {
+              if (!expenses) return;
+              downloadCsv(`expenses-${range.from}-${range.to}.csv`, toCsvRows(expenses));
+            }}
+          />
+        </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -173,64 +175,66 @@ export function ExpensesReport(): React.JSX.Element {
         <LoadingState message="Loading expenses…" />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="border-t border-line pt-4">
-              <p className="mb-2 text-sm font-medium text-ink-muted">By category</p>
-              {categorySlices.length === 0 ? (
-                <EmptyState message="No data for this period." />
-              ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie
-                      data={[...categorySlices]}
-                      dataKey="amountRupees"
-                      nameKey="categoryName"
-                      outerRadius={80}
-                      isAnimationActive={false}
-                    >
-                      {categorySlices.map((slice, index) => (
-                        // eslint-disable-next-line @typescript-eslint/no-deprecated -- recharts v3 deprecated Cell in favor of the `shape` prop; Cell still works until recharts 4.0, migrating is a separate refactor out of P10-4's scope
-                        <Cell
-                          key={slice.categoryName}
-                          fill={PIE_COLORS[index % PIE_COLORS.length] ?? colors.brand.default}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={formatCategoryTooltip} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h2 className="mb-4 text-lg font-semibold text-ink">By Category</h2>
+                {categorySlices.length === 0 ? (
+                  <EmptyState message="No data for this period." />
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={[...categorySlices]}
+                        dataKey="amountRupees"
+                        nameKey="categoryName"
+                        outerRadius={80}
+                        isAnimationActive={false}
+                      >
+                        {categorySlices.map((slice, index) => (
+                          // eslint-disable-next-line @typescript-eslint/no-deprecated -- recharts v3 deprecated Cell in favor of the `shape` prop; Cell still works until recharts 4.0, migrating is a separate refactor out of P10-4's scope
+                          <Cell
+                            key={slice.categoryName}
+                            fill={PIE_COLORS[index % PIE_COLORS.length] ?? colors.brand.default}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={formatCategoryTooltip} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
 
-            <div className="border-t border-line pt-4">
-              <p className="mb-2 text-sm font-medium text-ink-muted">By business unit</p>
-              {unitBars.length === 0 ? (
-                <EmptyState message="No data for this period." />
-              ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={[...unitBars]}>
-                    <CartesianGrid stroke={colors.line.default} vertical={false} />
-                    <XAxis
-                      dataKey="businessUnitCode"
-                      tick={{ fontSize: 12, fill: colors.ink.muted }}
-                    />
-                    <YAxis tick={{ fontSize: 12, fill: colors.ink.muted }} />
-                    <Tooltip formatter={formatUnitTooltip} />
-                    <Bar
-                      dataKey="amountRupees"
-                      name="Amount"
-                      fill={colors.brand.default}
-                      isAnimationActive={false}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+              <div>
+                <h2 className="mb-4 text-lg font-semibold text-ink">By Business Unit</h2>
+                {unitBars.length === 0 ? (
+                  <EmptyState message="No data for this period." />
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={[...unitBars]}>
+                      <CartesianGrid stroke={colors.line.default} vertical={false} />
+                      <XAxis
+                        dataKey="businessUnitCode"
+                        tick={{ fontSize: 12, fill: colors.ink.muted }}
+                      />
+                      <YAxis tick={{ fontSize: 12, fill: colors.ink.muted }} />
+                      <Tooltip formatter={formatUnitTooltip} />
+                      <Bar
+                        dataKey="amountRupees"
+                        name="Amount"
+                        fill={colors.brand.default}
+                        isAnimationActive={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">Expenses</p>
+          <div className="rounded-2xl bg-surface p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">Expenses</h2>
             {expenses.length === 0 ? (
               <EmptyState message="No expenses recorded in this range." />
             ) : (
