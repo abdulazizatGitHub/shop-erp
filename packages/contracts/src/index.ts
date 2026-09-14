@@ -159,6 +159,11 @@ export {
   StockPerformanceRowDto,
   ExpenseSummaryInput,
   ExpenseSummaryRowDto,
+  PeriodComparisonInput,
+  DayBucketDto,
+  PeriodComparisonDto,
+  ItemSoldSummaryInput,
+  ItemSoldSummaryRowDto,
   WageMonthInput,
   WageMonthRowDto,
 } from './report/report.js';

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { DailySalesReportRowDto, SaleSummaryDto } from '@shop/contracts';
-import { Money } from '@shop/shared';
+import type { ItemSoldSummaryRowDto, PeriodComparisonDto, SaleSummaryDto } from '@shop/contracts';
 import {
   Alert,
   Badge,
+  Card,
   EmptyState,
   LoadingState,
   MoneyDisplay,
@@ -13,14 +13,19 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-  colors,
 } from '@shop/ui';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
-import { getToday, type DateRange } from '../../utils/dateRanges.js';
+import { getPreviousPeriod, getToday, type DateRange } from '../../utils/dateRanges.js';
+import { CashCreditPie } from './CashCreditPie.js';
+import { ItemsSoldTable } from './ItemsSoldTable.js';
+import { SalesSummaryCards } from './SalesSummaryCards.js';
+import { SalesTrendChart } from './SalesTrendChart.js';
+
+const ROWS_PER_PAGE = 10;
 
 /**
  * P10-5: SaleSummaryDto carries no line-item count — a real "Items" value
@@ -46,105 +51,53 @@ function toCsvRows(
   }));
 }
 
-interface DailySalesChartPoint {
-  readonly date: string;
-  readonly totalSalesRupees: number;
-  readonly totalSalesPaisa: number;
-}
-
-function toChartData(rows: readonly DailySalesReportRowDto[]): readonly DailySalesChartPoint[] {
-  return rows.map((row) => ({
-    date: row.date,
-    // divide paisa by 100 for display only
-    totalSalesRupees: row.totalSalesPaisa / 100,
-    totalSalesPaisa: row.totalSalesPaisa,
-  }));
-}
-
-// recharts v3's Tooltip formatter type is a strict intersection that a
-// narrowly-typed function doesn't structurally satisfy — accept unknown
-// and narrow internally instead (still no `any`, per CODING_STANDARDS.md).
-function formatMoneyTooltip(_value: unknown, _name: unknown, item: unknown): string {
-  const payload = (item as { payload?: DailySalesChartPoint }).payload;
-  return Money.format(Money.of(payload?.totalSalesPaisa ?? 0));
-}
-
-interface KpiCardProps {
-  readonly label: string;
-  readonly value: React.ReactNode;
-}
-
-function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-line bg-surface p-4">
-      <p className="text-sm font-medium text-ink-muted">{label}</p>
-      <div className="mt-1">{value}</div>
-    </div>
-  );
-}
-
-interface DailySalesTotals {
-  readonly invoiceCount: number;
-  readonly totalSalesPaisa: number;
-  readonly cashCollectedPaisa: number;
-  readonly creditGivenPaisa: number;
-}
-
 /**
- * P10-3: getDailySalesReport returns one row per date in the range, not
- * one aggregate row — summary[0] alone was only ever correct because the
- * range used to always be a single day. Now that DateRangeSelector can
- * pick a multi-day range on this tab, every returned row must be summed
- * for the KPI cards, or a multi-day selection would silently show only
- * the first day's totals while the sales table below correctly lists
- * every sale in the range.
- */
-function sumDailySalesRows(rows: readonly DailySalesReportRowDto[]): DailySalesTotals {
-  return rows.reduce<DailySalesTotals>(
-    (acc, row) => ({
-      invoiceCount: acc.invoiceCount + row.invoiceCount,
-      totalSalesPaisa: Money.add(Money.of(acc.totalSalesPaisa), Money.of(row.totalSalesPaisa)),
-      cashCollectedPaisa: Money.add(
-        Money.of(acc.cashCollectedPaisa),
-        Money.of(row.cashCollectedPaisa),
-      ),
-      creditGivenPaisa: Money.add(Money.of(acc.creditGivenPaisa), Money.of(row.creditGivenPaisa)),
-    }),
-    { invoiceCount: 0, totalSalesPaisa: 0, cashCollectedPaisa: 0, creditGivenPaisa: 0 },
-  );
-}
-
-/**
- * R1 — a DateRangeSelector (default: today) drives two independent IPC
- * calls: report:dailySales (the four KPI numbers, summed across every
- * returned row) and the already-wired-but-previously-untyped
- * sale:listByDate (the per-sale table) — the repository has no single
- * function returning both, see the P4.5-6 kickoff discussion.
+ * P11-5 — one useEffect, one Promise.all, three parallel IPC calls:
+ * sale.listByDate (Transactions table + CSV — report:dailySales can't
+ * supply per-invoice rows), report.periodComparison (Sections 2 & 3 —
+ * supersedes the old standalone report:dailySales call, since
+ * comparison.current is the same day-bucket data), report.itemSoldSummary
+ * (Section 5). Single loading/error state covers all three.
  */
 export function DailySalesReport(): React.JSX.Element {
   const [range, setRange] = useState<DateRange>(() => getToday(new Date()));
-  const [summary, setSummary] = useState<readonly DailySalesReportRowDto[] | null>(null);
   const [sales, setSales] = useState<readonly SaleSummaryDto[] | null>(null);
+  const [comparison, setComparison] = useState<PeriodComparisonDto | null>(null);
+  const [itemSummary, setItemSummary] = useState<readonly ItemSoldSummaryRowDto[] | null>(null);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  const previousRange = getPreviousPeriod(range);
 
   useEffect(() => {
-    setSummary(null);
     setSales(null);
+    setComparison(null);
+    setItemSummary(null);
     setError(null);
+    setPage(1);
 
-    ipc.report
-      .dailySales({ from: range.from, to: range.to })
-      .then(setSummary)
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load daily sales summary');
-      });
+    Promise.all([
+      ipc.sale.listByDate({
+        dateFrom: range.from,
+        dateTo: range.to,
+        customerId: null,
+        status: null,
+      }),
+      ipc.report.periodComparison({
+        current: { from: range.from, to: range.to },
+        previous: getPreviousPeriod(range),
+      }),
+      ipc.report.itemSoldSummary({ from: range.from, to: range.to }),
+    ])
+      .then(([salesRows, comparisonResult, itemRows]) => {
+        setSales(salesRows);
+        setComparison(comparisonResult);
+        setItemSummary(itemRows);
 
-    ipc.sale
-      .listByDate({ dateFrom: range.from, dateTo: range.to, customerId: null, status: null })
-      .then((rows) => {
-        setSales(rows);
-        const uniqueIds = [...new Set(rows.map((r) => r.customerId).filter((id) => id !== null))];
+        const uniqueIds = [
+          ...new Set(salesRows.map((r) => r.customerId).filter((id) => id !== null)),
+        ];
         uniqueIds.forEach((id) => {
           ipc.customer
             .get(id)
@@ -159,115 +112,100 @@ export function DailySalesReport(): React.JSX.Element {
         });
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load sales for this range');
+        setError(err instanceof Error ? err.message : 'Failed to load Sales summary');
       });
   }, [range]);
 
-  const totals = sumDailySalesRows(summary ?? []);
-  const chartData = toChartData(summary ?? []);
+  const visibleSales = (sales ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <DateRangeSelector value={range} onChange={setRange} />
         <ExportCsvButton
           disabled={!sales || sales.length === 0}
           onClick={() => {
             if (!sales) return;
-            downloadCsv(
-              `daily-sales-${range.from}-${range.to}.csv`,
-              toCsvRows(sales, customerNames),
-            );
+            downloadCsv(`sales-${range.from}-${range.to}.csv`, toCsvRows(sales, customerNames));
           }}
         />
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
 
-      {!summary || !sales ? (
-        <LoadingState message="Loading daily sales…" />
+      {!sales || !comparison || !itemSummary ? (
+        <LoadingState message="Loading Sales…" />
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-4">
-            <KpiCard
-              label="Total Sales"
-              value={<MoneyDisplay paisaValue={totals.totalSalesPaisa} size="xl" />}
+          <Card title="Summary">
+            <SalesSummaryCards
+              current={comparison.current}
+              previous={comparison.previous}
+              from={range.from}
             />
-            <KpiCard
-              label="Cash"
-              value={<MoneyDisplay paisaValue={totals.cashCollectedPaisa} size="xl" tone="in" />}
-            />
-            <KpiCard
-              label="Credit"
-              value={<MoneyDisplay paisaValue={totals.creditGivenPaisa} size="xl" tone="due" />}
-            />
-            <KpiCard
-              label="Transactions"
-              value={
-                <span className="font-mono text-xl tabular-nums text-ink">
-                  {totals.invoiceCount}
-                </span>
-              }
-            />
-          </div>
+          </Card>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">Sales by day</p>
-            {chartData.length === 0 ? (
-              <EmptyState message="No data for this period." />
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={chartData}>
-                  <CartesianGrid stroke={colors.line.default} vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: colors.ink.muted }} />
-                  <YAxis tick={{ fontSize: 12, fill: colors.ink.muted }} />
-                  <Tooltip formatter={formatMoneyTooltip} />
-                  <Bar
-                    dataKey="totalSalesRupees"
-                    name="Total Sales"
-                    fill={colors.money.in}
-                    isAnimationActive={false}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+          <Card title="Sales Trend">
+            <SalesTrendChart
+              current={comparison.current}
+              previous={comparison.previous}
+              currentRange={range}
+              previousRange={previousRange}
+            />
+          </Card>
 
-          <div className="border-t border-line pt-4">
-            <p className="mb-2 text-sm font-medium text-ink-muted">Sales in this range</p>
+          <Card title="Cash vs Credit">
+            <CashCreditPie current={comparison.current} />
+          </Card>
+
+          <Card title="What Was Sold">
+            <ItemsSoldTable rows={itemSummary} />
+          </Card>
+
+          <Card title="Transactions">
             {sales.length === 0 ? (
               <EmptyState message="No sales recorded in this range." />
             ) : (
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Doc No</TableHeaderCell>
-                    <TableHeaderCell>Customer</TableHeaderCell>
-                    <TableHeaderCell>Payment</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Total</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {sales.map((sale) => (
-                    <TableRow key={sale.id}>
-                      <TableCell>{sale.docNo}</TableCell>
-                      <TableCell>
-                        {sale.customerId ? (customerNames[sale.customerId] ?? '…') : 'Walk-in'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge tone={sale.paymentMode === 'cash' ? 'success' : 'warning'}>
-                          {sale.paymentMode === 'cash' ? 'Cash' : 'Credit'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={sale.totalAmountPaisa} />
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Date</TableHeaderCell>
+                      <TableHeaderCell>Doc No</TableHeaderCell>
+                      <TableHeaderCell>Customer</TableHeaderCell>
+                      <TableHeaderCell>Payment</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Total (Rs)</TableHeaderCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {visibleSales.map((sale) => (
+                      <TableRow key={sale.id}>
+                        <TableCell>{sale.saleDate}</TableCell>
+                        <TableCell>{sale.docNo}</TableCell>
+                        <TableCell>
+                          {sale.customerId ? (customerNames[sale.customerId] ?? '…') : 'Walk-in'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge tone={sale.paymentMode === 'cash' ? 'success' : 'warning'}>
+                            {sale.paymentMode === 'cash' ? 'Cash' : 'Credit'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={sale.totalAmountPaisa} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pagination
+                  totalRows={sales.length}
+                  rowsPerPage={ROWS_PER_PAGE}
+                  currentPage={page}
+                  onPageChange={setPage}
+                />
+              </>
             )}
-          </div>
+          </Card>
         </>
       )}
     </div>

@@ -3,6 +3,8 @@ import {
   CashBookReportInput,
   DailySalesReportInput,
   ExpenseSummaryInput,
+  ItemSoldSummaryInput,
+  PeriodComparisonInput,
   ReceivablesReportInput,
   StockPerformanceInput,
   UnitPlReportInput,
@@ -10,6 +12,7 @@ import {
   type CashBookRowDto,
   type DailySalesReportRowDto,
   type ExpenseSummaryRowDto,
+  type ItemSoldSummaryRowDto,
   type ReceivablesAgingRowDto,
   type StockPerformanceRowDto,
   type WageMonthRowDto,
@@ -19,12 +22,15 @@ import {
   getCashBookReport,
   getDailySalesReport,
   getExpenseSummaryReport,
+  getItemSoldSummaryReport,
+  getPeriodComparisonReport,
   getReceivablesAgingReport,
   getStockPerformanceReport,
   getStockValuationReport,
   getUnitPlReport,
   getWageMonthReport,
   openDatabase,
+  type PeriodComparisonReport,
   type StockValuationReport,
   type UnitPlReport,
 } from '@shop/db';
@@ -157,6 +163,42 @@ export function registerReportHandlers(deps: ReportHandlerDeps): void {
       const db = openDatabase(deps.dbPath);
       try {
         return await getWageMonthReport(createKyselyDb(db), deps.tenantId, input.year, input.month);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.report.periodComparison,
+    withError(async (_event, raw: unknown): Promise<PeriodComparisonReport> => {
+      const input = PeriodComparisonInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getPeriodComparisonReport(
+          createKyselyDb(db),
+          deps.tenantId,
+          input.current,
+          input.previous,
+        );
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.report.itemSoldSummary,
+    withError(async (_event, raw: unknown): Promise<readonly ItemSoldSummaryRowDto[]> => {
+      const input = ItemSoldSummaryInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getItemSoldSummaryReport(
+          createKyselyDb(db),
+          deps.tenantId,
+          input.from,
+          input.to,
+        );
       } finally {
         db.close();
       }

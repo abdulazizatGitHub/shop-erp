@@ -14,11 +14,20 @@ import { SalePage } from '../pages/sales/SalePage.js';
 import { SettingsPage } from '../pages/settings/SettingsPage.js';
 import { StaffPage } from '../pages/staff/StaffPage.js';
 import { NAV_ITEMS } from './navigation.js';
-import type { Tab } from './navigation.js';
+import type { ReportsGroup, Tab } from './navigation.js';
 import { Sidebar } from './Sidebar.js';
 
 export function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('sales');
+  // P11-1 — which Reports sub-group ("Daily Reports"/"Accounts") is current.
+  // Kept independent of `tab` so it's remembered if the owner leaves Reports
+  // and comes back via Alt+5 or another nav item, not just via the sidebar.
+  const [reportsGroup, setReportsGroup] = useState<ReportsGroup>('daily');
+
+  function handleSelectReportsGroup(group: ReportsGroup): void {
+    setReportsGroup(group);
+    setTab('reports');
+  }
 
   // Alt+1..9 — direct tab switching, documented on each sidebar item.
   useEffect(() => {
@@ -38,7 +47,12 @@ export function App(): React.JSX.Element {
   return (
     <ToastProvider>
       <div className="flex h-screen bg-surface-sunken">
-        <Sidebar activeTab={tab} onSelectTab={setTab} />
+        <Sidebar
+          activeTab={tab}
+          onSelectTab={setTab}
+          activeReportsGroup={reportsGroup}
+          onSelectReportsGroup={handleSelectReportsGroup}
+        />
         <main className="flex-1 overflow-y-auto p-6">
           {tab === 'sales' && <SalePage />}
           {tab === 'items' && <ItemsPage />}
@@ -46,7 +60,9 @@ export function App(): React.JSX.Element {
           {tab === 'purchase-orders' && <PurchaseOrdersPage />}
           {tab === 'jobs' && <JobsPage />}
           {tab === 'technician-custody' && <TechnicianCustodyPage />}
-          {tab === 'reports' && <ReportsPage />}
+          {tab === 'reports' && (
+            <ReportsPage activeGroup={reportsGroup} onActiveGroupChange={setReportsGroup} />
+          )}
           {tab === 'customers' && <CustomersPage />}
           {tab === 'settings' && <SettingsPage />}
           {tab === 'staff' && <StaffPage />}

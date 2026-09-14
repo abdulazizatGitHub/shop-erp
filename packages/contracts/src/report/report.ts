@@ -154,6 +154,52 @@ export const ExpenseSummaryRowDto = z.object({
 });
 export type ExpenseSummaryRowDto = z.infer<typeof ExpenseSummaryRowDto>;
 
+// P11-4a: current vs. previous period comparison, powering the Sales tab's
+// sparklines/trend indicators. Both ranges are computed client-side
+// (DateRangeSelector + dateRanges.ts's getPreviousPeriod) and passed
+// explicitly — the handler never derives previous from current.
+export const PeriodComparisonInput = z.object({
+  current: z.object({ from: z.string().min(1), to: z.string().min(1) }),
+  previous: z.object({ from: z.string().min(1), to: z.string().min(1) }),
+});
+export type PeriodComparisonInput = z.infer<typeof PeriodComparisonInput>;
+
+/** Mirrors DayBucket exactly (report.repository.ts). */
+export const DayBucketDto = z.object({
+  date: z.string(),
+  totalPaisa: z.number().int(),
+  cashPaisa: z.number().int(),
+  creditPaisa: z.number().int(),
+  transactionCount: z.number().int(),
+});
+export type DayBucketDto = z.infer<typeof DayBucketDto>;
+
+/** Mirrors PeriodComparisonReport exactly. */
+export const PeriodComparisonDto = z.object({
+  current: z.array(DayBucketDto),
+  previous: z.array(DayBucketDto),
+});
+export type PeriodComparisonDto = z.infer<typeof PeriodComparisonDto>;
+
+// P11-4b: per-item sold summary, powering the Sales tab's "What Was Sold"
+// table. Labour lines (sale_line.item_id IS NULL) never appear — enforced
+// server-side by the query's inner JOIN item, not filtered client-side.
+export const ItemSoldSummaryInput = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type ItemSoldSummaryInput = z.infer<typeof ItemSoldSummaryInput>;
+
+/** Mirrors ItemSoldSummaryRow exactly. Sorted by revenuePaisa DESC. */
+export const ItemSoldSummaryRowDto = z.object({
+  itemId: z.string().uuid(),
+  itemName: z.string(),
+  unitName: z.string(),
+  totalSoldMilli: z.number().int(),
+  revenuePaisa: z.number().int(),
+});
+export type ItemSoldSummaryRowDto = z.infer<typeof ItemSoldSummaryRowDto>;
+
 export const WageMonthInput = z.object({
   year: z.number().int().min(2024).max(2099),
   month: z.number().int().min(1).max(12),

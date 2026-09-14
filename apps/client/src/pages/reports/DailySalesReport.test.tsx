@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../lib/ipc.js', () => ({
   ipc: {
     report: {
-      dailySales: vi.fn(),
+      periodComparison: vi.fn(),
+      itemSoldSummary: vi.fn(),
     },
     sale: {
       listByDate: vi.fn(),
@@ -19,7 +20,8 @@ vi.mock('../../lib/ipc.js', () => ({
 import { ipc } from '../../lib/ipc.js';
 import { DailySalesReport } from './DailySalesReport.js';
 
-const dailySales = vi.mocked(ipc.report.dailySales);
+const periodComparison = vi.mocked(ipc.report.periodComparison);
+const itemSoldSummary = vi.mocked(ipc.report.itemSoldSummary);
 const listByDate = vi.mocked(ipc.sale.listByDate);
 
 afterEach(() => {
@@ -28,10 +30,11 @@ afterEach(() => {
 });
 
 describe('DailySalesReport — Export CSV button (P10-5)', () => {
-  it('is disabled while data is loading, before either IPC call resolves', () => {
-    // Promises that never resolve during this test — sales/summary stay null.
-    dailySales.mockReturnValue(new Promise(() => {}));
+  it('is disabled while data is loading, before any IPC call resolves', () => {
+    // Promises that never resolve during this test — sales/comparison/itemSummary stay null.
     listByDate.mockReturnValue(new Promise(() => {}));
+    periodComparison.mockReturnValue(new Promise(() => {}));
+    itemSoldSummary.mockReturnValue(new Promise(() => {}));
 
     render(<DailySalesReport />);
 
@@ -40,8 +43,9 @@ describe('DailySalesReport — Export CSV button (P10-5)', () => {
   });
 
   it('is disabled when the sales array is empty', async () => {
-    dailySales.mockResolvedValue([]);
     listByDate.mockResolvedValue([]);
+    periodComparison.mockResolvedValue({ current: [], previous: [] });
+    itemSoldSummary.mockResolvedValue([]);
 
     render(<DailySalesReport />);
 
@@ -52,15 +56,6 @@ describe('DailySalesReport — Export CSV button (P10-5)', () => {
   });
 
   it('is enabled when the sales array has at least one row', async () => {
-    dailySales.mockResolvedValue([
-      {
-        date: '2026-09-13',
-        invoiceCount: 1,
-        totalSalesPaisa: 100000,
-        cashCollectedPaisa: 100000,
-        creditGivenPaisa: 0,
-      },
-    ]);
     listByDate.mockResolvedValue([
       {
         id: 'sale-1',
@@ -73,6 +68,19 @@ describe('DailySalesReport — Export CSV button (P10-5)', () => {
         status: 'confirmed',
       },
     ]);
+    periodComparison.mockResolvedValue({
+      current: [
+        {
+          date: '2026-09-13',
+          totalPaisa: 100000,
+          cashPaisa: 100000,
+          creditPaisa: 0,
+          transactionCount: 1,
+        },
+      ],
+      previous: [],
+    });
+    itemSoldSummary.mockResolvedValue([]);
 
     render(<DailySalesReport />);
 

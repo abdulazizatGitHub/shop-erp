@@ -50,6 +50,10 @@ import type {
   PartySearchAnyInput,
   ExpenseSummaryInput,
   ExpenseSummaryRowDto,
+  ItemSoldSummaryInput,
+  ItemSoldSummaryRowDto,
+  PeriodComparisonInput,
+  PeriodComparisonDto,
   ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
@@ -528,6 +532,10 @@ export interface ElectronApi {
       input: ExpenseSummaryInput,
     ) => Promise<readonly ExpenseSummaryRowDto[]>;
     readonly wageMonth: (input: WageMonthInput) => Promise<readonly WageMonthRowDto[]>;
+    readonly periodComparison: (input: PeriodComparisonInput) => Promise<PeriodComparisonDto>;
+    readonly itemSoldSummary: (
+      input: ItemSoldSummaryInput,
+    ) => Promise<readonly ItemSoldSummaryRowDto[]>;
   };
 }
 

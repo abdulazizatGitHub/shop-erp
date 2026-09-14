@@ -1,3 +1,12 @@
+/**
+ * P11-1 — which of the two Reports sub-groups is current. Reports is the
+ * only nav item with sub-items today; this is deliberately a special-cased
+ * pair of props (see Sidebar.tsx/App.tsx), not a generic "sub-items" field
+ * on NavItem, per CLAUDE.md's "don't build for hypothetical future
+ * requirements."
+ */
+export type ReportsGroup = 'daily' | 'accounts';
+
 export type Tab =
   | 'sales'
   | 'items'

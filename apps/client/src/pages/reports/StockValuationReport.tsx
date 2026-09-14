@@ -16,9 +16,13 @@ import {
 } from '@shop/ui';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+import { BestPerformersTable } from './BestPerformersTable.js';
+
+const ROWS_PER_PAGE = 10;
 
 function toCsvRows(lines: StockValuationReportDto['lines']): Record<string, string | number>[] {
   return lines.map((line) => ({
@@ -47,45 +51,26 @@ function KpiCard({ label, value }: KpiCardProps): React.JSX.Element {
   );
 }
 
-function BestPerformersTable({
-  rows,
+/**
+ * P11-6 — display guard only, no data/query change. Dev database has test
+ * data with negative stock (owner-confirmed, pre-go-live cleanup pending);
+ * this hides the confusing large negative number rather than fixing the
+ * underlying data here.
+ */
+function InventoryValue({
+  totalValuationPaisa,
 }: {
-  readonly rows: readonly StockPerformanceRowDto[];
+  readonly totalValuationPaisa: number;
 }): React.JSX.Element {
-  const top10 = rows.slice(0, 10);
-  if (top10.length === 0) {
-    return <EmptyState message="No data for this period." />;
+  if (totalValuationPaisa < 0) {
+    return (
+      <div>
+        <span className="text-xl font-semibold text-ink">—</span>
+        <p className="mt-1 text-xs text-danger">Contains invalid stock data.</p>
+      </div>
+    );
   }
-  return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell>Item Name</TableHeaderCell>
-          <TableHeaderCell>Unit</TableHeaderCell>
-          <TableHeaderCell className="text-right">Stock on Hand</TableHeaderCell>
-          <TableHeaderCell className="text-right">Units Sold</TableHeaderCell>
-          <TableHeaderCell className="text-right">Revenue</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {top10.map((row) => (
-          <TableRow key={row.itemId}>
-            <TableCell>{row.itemName}</TableCell>
-            <TableCell>{row.unitName}</TableCell>
-            <TableCell className="text-right">
-              <QuantityDisplay quantityMilli={row.quantityMilli} />
-            </TableCell>
-            <TableCell className="text-right">
-              <QuantityDisplay quantityMilli={row.totalSoldMilli} />
-            </TableCell>
-            <TableCell className="text-right">
-              <MoneyDisplay paisaValue={row.revenuePaisa} />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+  return <MoneyDisplay paisaValue={totalValuationPaisa} size="xl" />;
 }
 
 /**
@@ -99,6 +84,8 @@ export function StockValuationReport(): React.JSX.Element {
   const [performance, setPerformance] = useState<readonly StockPerformanceRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [performancePage, setPerformancePage] = useState(1);
+  const [stockLevelPage, setStockLevelPage] = useState(1);
 
   useEffect(() => {
     ipc.report
@@ -110,6 +97,7 @@ export function StockValuationReport(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    setPerformancePage(1);
     ipc.report
       .stockPerformance({ from: range.from, to: range.to })
       .then(setPerformance)
@@ -124,6 +112,18 @@ export function StockValuationReport(): React.JSX.Element {
     if (q.length === 0) return report.lines;
     return report.lines.filter((line) => line.itemName.toLowerCase().includes(q));
   }, [report, query]);
+
+  // Stock Level's own filter (search) changing must reset its page — a
+  // narrower/wider result set at the same page number could otherwise show
+  // page 3 of a 2-page result.
+  useEffect(() => {
+    setStockLevelPage(1);
+  }, [query]);
+
+  const visibleLines = filteredLines.slice(
+    (stockLevelPage - 1) * ROWS_PER_PAGE,
+    stockLevelPage * ROWS_PER_PAGE,
+  );
 
   const itemsInStock = report?.lines.filter((l) => l.quantityOnHandMilli > 0).length ?? 0;
   const itemsOutOfStock = report?.lines.filter((l) => l.quantityOnHandMilli === 0).length ?? 0;
@@ -144,7 +144,7 @@ export function StockValuationReport(): React.JSX.Element {
         />
         <KpiCard
           label="Total Inventory Value"
-          value={<MoneyDisplay paisaValue={report.totalValuationPaisa} size="xl" />}
+          value={<InventoryValue totalValuationPaisa={report.totalValuationPaisa} />}
         />
       </div>
 
@@ -156,7 +156,7 @@ export function StockValuationReport(): React.JSX.Element {
             <ExportCsvButton
               disabled={report.lines.length === 0}
               onClick={() => {
-                downloadCsv(`stock-on-hand-${range.from}-${range.to}.csv`, toCsvRows(report.lines));
+                downloadCsv(`stock-${range.from}-${range.to}.csv`, toCsvRows(report.lines));
               }}
             />
           </div>
@@ -164,7 +164,11 @@ export function StockValuationReport(): React.JSX.Element {
         {performance === null ? (
           <LoadingState message="Loading best performers…" />
         ) : (
-          <BestPerformersTable rows={performance} />
+          <BestPerformersTable
+            rows={performance}
+            page={performancePage}
+            onPageChange={setPerformancePage}
+          />
         )}
       </div>
 
@@ -183,42 +187,50 @@ export function StockValuationReport(): React.JSX.Element {
         ) : filteredLines.length === 0 ? (
           <EmptyState message={`No items match "${query}".`} />
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Name</TableHeaderCell>
-                <TableHeaderCell>Stock UoM</TableHeaderCell>
-                <TableHeaderCell className="text-right">Qty on Hand</TableHeaderCell>
-                <TableHeaderCell className="text-right">{report.costColumnLabel}</TableHeaderCell>
-                <TableHeaderCell className="text-right">
-                  {report.valuationColumnLabel}
-                </TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredLines.map((line) => {
-                const outOfStock = line.quantityOnHandMilli === 0;
-                return (
-                  <TableRow key={line.itemId}>
-                    <TableCell className={outOfStock ? 'text-danger' : ''}>
-                      {line.itemName}
-                      {outOfStock && ' — Out of Stock'}
-                    </TableCell>
-                    <TableCell>{line.stockUomName}</TableCell>
-                    <TableCell className={`text-right ${outOfStock ? 'text-danger' : ''}`}>
-                      <QuantityDisplay quantityMilli={line.quantityOnHandMilli} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={line.lastPurchaseCostPaisa} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={line.valuationPaisa} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Name</TableHeaderCell>
+                  <TableHeaderCell>Stock UoM</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Qty on Hand</TableHeaderCell>
+                  <TableHeaderCell className="text-right">{report.costColumnLabel}</TableHeaderCell>
+                  <TableHeaderCell className="text-right">
+                    {report.valuationColumnLabel}
+                  </TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {visibleLines.map((line) => {
+                  const outOfStock = line.quantityOnHandMilli === 0;
+                  return (
+                    <TableRow key={line.itemId}>
+                      <TableCell className={outOfStock ? 'text-danger' : ''}>
+                        {line.itemName}
+                        {outOfStock && ' — Out of Stock'}
+                      </TableCell>
+                      <TableCell>{line.stockUomName}</TableCell>
+                      <TableCell className={`text-right ${outOfStock ? 'text-danger' : ''}`}>
+                        <QuantityDisplay quantityMilli={line.quantityOnHandMilli} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={line.lastPurchaseCostPaisa} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={line.valuationPaisa} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <Pagination
+              totalRows={filteredLines.length}
+              rowsPerPage={ROWS_PER_PAGE}
+              currentPage={stockLevelPage}
+              onPageChange={setStockLevelPage}
+            />
+          </>
         )}
       </div>
 

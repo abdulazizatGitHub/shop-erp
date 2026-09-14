@@ -76,3 +76,35 @@ export function getThisYear(reference: Date): DateRange {
     to: isoDate(year, 11, 31),
   };
 }
+
+function parseIso(dateStr: string): DateParts {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return { year: year ?? 0, month: (month ?? 1) - 1, day: day ?? 1 };
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  const from = parseIso(fromIso);
+  const to = parseIso(toIso);
+  return Math.round(
+    (Date.UTC(to.year, to.month, to.day) - Date.UTC(from.year, from.month, from.day)) / 86400000,
+  );
+}
+
+/**
+ * P11-4a — the period immediately preceding `current`, of the same length,
+ * ending the day before current.from. E.g. current Sep 1-13 (13 days) ->
+ * previous Aug 19-31 (the 13 days immediately before). Pure millisecond
+ * arithmetic in UTC — no re-parsing of a computed date, so no double
+ * normalization step to reason about.
+ */
+export function getPreviousPeriod(current: DateRange): DateRange {
+  const durationDays = daysBetween(current.from, current.to) + 1;
+  const { year, month, day } = parseIso(current.from);
+  const currentFromMs = Date.UTC(year, month, day);
+  const previousToMs = currentFromMs - 86400000;
+  const previousFromMs = previousToMs - (durationDays - 1) * 86400000;
+  return {
+    from: new Date(previousFromMs).toISOString().slice(0, 10),
+    to: new Date(previousToMs).toISOString().slice(0, 10),
+  };
+}

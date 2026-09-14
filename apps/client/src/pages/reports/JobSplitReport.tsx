@@ -13,13 +13,25 @@ import {
   TableRow,
   colors,
 } from '@shop/ui';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import type { JobSplitRecord } from '../../types/electron-api.js';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+
+const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly JobSplitRecord[]): Record<string, string | number>[] {
   return rows.map((r) => ({
@@ -90,10 +102,12 @@ export function JobSplitReport(): React.JSX.Element {
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly JobSplitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setRows(null);
     setError(null);
+    setPage(1);
     ipc.job
       .list({ status: null, assignedTo: null, customerId: null })
       .then(async (jobs) => {
@@ -112,6 +126,7 @@ export function JobSplitReport(): React.JSX.Element {
   const labourChargePaisa = rows ? rows.reduce((sum, r) => sum + r.labourChargePaisa, 0) : 0;
   const totalBillPaisa = rows ? rows.reduce((sum, r) => sum + r.totalBillPaisa, 0) : 0;
   const chartData = toChartData(rows ?? []);
+  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -160,17 +175,16 @@ export function JobSplitReport(): React.JSX.Element {
                   <XAxis dataKey="docNo" tick={{ fontSize: 12, fill: colors.ink.muted }} />
                   <YAxis tick={{ fontSize: 12, fill: colors.ink.muted }} />
                   <Tooltip formatter={formatJobTooltip} />
+                  <Legend />
                   <Bar
                     dataKey="partsMarginRupees"
                     name="Parts Margin"
-                    stackId="job"
                     fill={colors.brand.default}
                     isAnimationActive={false}
                   />
                   <Bar
                     dataKey="labourChargeRupees"
                     name="Labour Revenue"
-                    stackId="job"
                     fill={colors.posAccent.default}
                     isAnimationActive={false}
                   />
@@ -182,38 +196,46 @@ export function JobSplitReport(): React.JSX.Element {
           {rows.length === 0 ? (
             <EmptyState message="No jobs received in this date range." />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>Job No</TableHeaderCell>
-                  <TableHeaderCell>Date</TableHeaderCell>
-                  <TableHeaderCell>Customer</TableHeaderCell>
-                  <TableHeaderCell>Technician</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Parts Margin</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Labour</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Total</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.jobId}>
-                    <TableCell>{r.docNo}</TableCell>
-                    <TableCell>{r.receivedDate}</TableCell>
-                    <TableCell>{r.customerName ?? 'Walk-in'}</TableCell>
-                    <TableCell>{r.technicianName ?? 'Unassigned'}</TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={r.partsMarginPaisa} size="sm" />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={r.labourChargePaisa} size="sm" />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={r.totalBillPaisa} size="sm" />
-                    </TableCell>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Job No</TableHeaderCell>
+                    <TableHeaderCell>Date</TableHeaderCell>
+                    <TableHeaderCell>Customer</TableHeaderCell>
+                    <TableHeaderCell>Technician</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Parts Margin</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Labour</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Total</TableHeaderCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {visibleRows.map((r) => (
+                    <TableRow key={r.jobId}>
+                      <TableCell>{r.docNo}</TableCell>
+                      <TableCell>{r.receivedDate}</TableCell>
+                      <TableCell>{r.customerName ?? 'Walk-in'}</TableCell>
+                      <TableCell>{r.technicianName ?? 'Unassigned'}</TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={r.partsMarginPaisa} size="sm" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={r.labourChargePaisa} size="sm" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={r.totalBillPaisa} size="sm" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Pagination
+                totalRows={rows.length}
+                rowsPerPage={ROWS_PER_PAGE}
+                currentPage={page}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </>
       )}

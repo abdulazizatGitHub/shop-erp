@@ -63,6 +63,8 @@ export {
   getUnitPlReport,
   getStockPerformanceReport,
   getExpenseSummaryReport,
+  getPeriodComparisonReport,
+  getItemSoldSummaryReport,
 } from './repositories/report.repository.js';
 export type {
   StockValuationReport,
@@ -74,6 +76,9 @@ export type {
   UnitPlRow,
   StockPerformanceRow,
   ExpenseSummaryRow,
+  DayBucket,
+  PeriodComparisonReport,
+  ItemSoldSummaryRow,
 } from './repositories/report.repository.js';
 export { getPurchasePrintData } from './repositories/purchase-print.repository.js';
 export type {

@@ -17,9 +17,12 @@ import {
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+
+const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly ReceivablesAgingRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -104,10 +107,18 @@ function buildBuckets(rows: readonly ReceivablesAgingRowDto[]): readonly AgingBu
   const days61To90Paisa = Money.sum(rows.map((r) => Money.of(r.days61To90Paisa)));
   const over90Paisa = Money.sum(rows.map((r) => Money.of(r.over90Paisa)));
   return [
-    { bucket: 'Current ≤30d', amountRupees: currentPaisa / 100, amountPaisa: currentPaisa },
-    { bucket: '31-60d', amountRupees: days31To60Paisa / 100, amountPaisa: days31To60Paisa },
-    { bucket: '61-90d', amountRupees: days61To90Paisa / 100, amountPaisa: days61To90Paisa },
-    { bucket: '90d+', amountRupees: over90Paisa / 100, amountPaisa: over90Paisa },
+    { bucket: 'Within 30 days', amountRupees: currentPaisa / 100, amountPaisa: currentPaisa },
+    {
+      bucket: '30–60 days old',
+      amountRupees: days31To60Paisa / 100,
+      amountPaisa: days31To60Paisa,
+    },
+    {
+      bucket: '60–90 days old',
+      amountRupees: days61To90Paisa / 100,
+      amountPaisa: days61To90Paisa,
+    },
+    { bucket: 'Over 90 days', amountRupees: over90Paisa / 100, amountPaisa: over90Paisa },
   ];
 }
 
@@ -132,13 +143,15 @@ export function ReceivablesAgingReport(): React.JSX.Element {
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly ReceivablesAgingRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
+    setPage(1);
     ipc.report
       .receivables({ asOfDate: range.to })
       .then(setRows)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load receivables aging');
+        setError(err instanceof Error ? err.message : 'Failed to load Udhaar (Who Owes Me)');
       });
   }, [range]);
 
@@ -162,9 +175,10 @@ export function ReceivablesAgingReport(): React.JSX.Element {
     [owing],
   );
   const chartData = useMemo(() => buildBuckets(owing), [owing]);
+  const visibleOwing = owing.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   if (error) return <Alert variant="danger">{error}</Alert>;
-  if (!rows) return <LoadingState message="Loading receivables aging…" />;
+  if (!rows) return <LoadingState message="Loading Udhaar (Who Owes Me)…" />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,14 +187,14 @@ export function ReceivablesAgingReport(): React.JSX.Element {
         <ExportCsvButton
           disabled={owing.length === 0}
           onClick={() => {
-            downloadCsv(`receivables-${range.from}-${range.to}.csv`, toCsvRows(owing));
+            downloadCsv(`udhaar-${range.from}-${range.to}.csv`, toCsvRows(owing));
           }}
         />
       </div>
 
       <div className="grid grid-cols-3 gap-4">
         <KpiCard
-          label="Total Receivables"
+          label="Total Udhaar (Who Owes Me)"
           value={<MoneyDisplay paisaValue={totalPaisa} size="xl" />}
         />
         <KpiCard
@@ -220,45 +234,53 @@ export function ReceivablesAgingReport(): React.JSX.Element {
         {owing.length === 0 ? (
           <EmptyState message="No customers currently owe a balance." />
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Customer</TableHeaderCell>
-                <TableHeaderCell className="text-right">Total</TableHeaderCell>
-                <TableHeaderCell className="text-right">Current (≤30d)</TableHeaderCell>
-                <TableHeaderCell className="text-right">31–60d</TableHeaderCell>
-                <TableHeaderCell className="text-right">61–90d</TableHeaderCell>
-                <TableHeaderCell className="text-right">90d+</TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {owing.map((row) => (
-                <TableRow key={row.customerId}>
-                  <TableCell>{row.customerName}</TableCell>
-                  <TableCell className="text-right">
-                    <MoneyDisplay paisaValue={row.totalBalancePaisa} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AgingAmount paisaValue={row.currentPaisa} tone="plain" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AgingAmount paisaValue={row.days31To60Paisa} tone="light-warning" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AgingAmount paisaValue={row.days61To90Paisa} tone="warning" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AgingAmount paisaValue={row.over90Paisa} tone="danger" />
-                  </TableCell>
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Customer</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Total</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Current (≤30d)</TableHeaderCell>
+                  <TableHeaderCell className="text-right">31–60d</TableHeaderCell>
+                  <TableHeaderCell className="text-right">61–90d</TableHeaderCell>
+                  <TableHeaderCell className="text-right">90d+</TableHeaderCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {visibleOwing.map((row) => (
+                  <TableRow key={row.customerId}>
+                    <TableCell>{row.customerName}</TableCell>
+                    <TableCell className="text-right">
+                      <MoneyDisplay paisaValue={row.totalBalancePaisa} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <AgingAmount paisaValue={row.currentPaisa} tone="plain" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <AgingAmount paisaValue={row.days31To60Paisa} tone="light-warning" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <AgingAmount paisaValue={row.days61To90Paisa} tone="warning" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <AgingAmount paisaValue={row.over90Paisa} tone="danger" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              totalRows={owing.length}
+              rowsPerPage={ROWS_PER_PAGE}
+              currentPage={page}
+              onPageChange={setPage}
+            />
+          </>
         )}
       </div>
 
       <div className="flex items-center justify-end gap-3 border-t border-line pt-3">
-        <span className="text-lg font-semibold text-ink">Total Receivables</span>
+        <span className="text-lg font-semibold text-ink">Total Udhaar (Who Owes Me)</span>
         <MoneyDisplay paisaValue={totalPaisa} size="xl" />
       </div>
     </div>

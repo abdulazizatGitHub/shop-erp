@@ -41,6 +41,445 @@
 
 ---
 
+## [2026-09-14] Session 65 — Phase 11, P11-6: remaining 7 tabs' visual polish, COMPLETE — PHASE 11 CLOSED
+
+**Goal:** Finish Phase 11's final sub-phase — a visual polish pass on the 7
+report tabs P11-5 didn't touch (Stock, Udhaar, Jobs, Cash Record, Business
+Profit, Wages, Expenses), each tab build-verified before the next, per the
+owner's specified order.
+
+**Pre-code audit, all 7 files read in full before any edit:** line counts
+(283/281/237/245/200/269/278) and an extraction-need assessment for each —
+none looked to need extraction going in (all comfortably under 300 with
+the planned per-tab changes), a call that turned out wrong for one tab
+(see below).
+
+**Done, tab by tab, `npm run build --workspace=@shop/client` after each:**
+
+1. **Stock** (`StockValuationReport.tsx`) — new `InventoryValue` component:
+   when `report.totalValuationPaisa < 0`, the "Total Inventory Value" card
+   shows "—" and "Contains invalid stock data." instead of a large
+   negative number. Display guard only — no change to the query or
+   underlying data, per instruction. **Landed at 304 lines, 4 over the
+   cap** (the pre-code estimate undershot). Fixed by extracting
+   `BestPerformersTable.tsx` (79 lines) into its own file before starting
+   tab 2 — `StockValuationReport.tsx` back to 245 lines.
+2. **Udhaar** (`ReceivablesAgingReport.tsx`) — renamed the 4 aging-bucket
+   chart labels: "Current ≤30d"→"Within 30 days", "31-60d"→"30–60 days
+   old", "61-90d"→"60–90 days old", "90d+"→"Over 90 days". Confirmed
+   "Total Udhaar (Who Owes Me)" (P11-2's actual, already-approved wording
+   — kept as-is rather than shortened to match this sub-phase's own
+   summary text) and pagination/date-selector already correct — no other
+   changes.
+3. **Jobs** (`JobSplitReport.tsx`) — chart changed from stacked to grouped
+   `BarChart` (removed `stackId="job"` from both `Bar`s — recharts groups
+   bars side-by-side by default with no shared `stackId`). Added a
+   `Legend` (not explicitly requested, but matches the sibling grouped-bar
+   charts already in `UnitPlReport.tsx`/`WageMonthReport.tsx`, and directly
+   serves "the owner can compare per job which earned more"). Job list and
+   Technician Custody tables untouched.
+4. **Cash Record** (`CashBookReport.tsx`) — no changes; confirmed correct
+   from P10-4.
+5. **Business Profit** (`UnitPlReport.tsx`) — no changes; confirmed
+   correct from P10-4, "Business Profit" used everywhere.
+6. **Wages** (`WageMonthReport.tsx`) — the "Showing wages for [Month
+   Year]…" note is now always rendered below the date selector (previously
+   shown only when the custom range spanned multiple months), reusing the
+   existing `MONTH_NAMES` lookup already in the file. Kept amber coloring
+   only for the actual multi-month case rather than adding a second,
+   near-duplicate line.
+7. **Expenses** (`ExpensesReport.tsx`) — no changes; confirmed correct
+   from P10-4.
+
+**Shared confirmations (A/B/C), applied identically to all 7 tabs, no
+per-tab code required for A**: (A) active-preset highlighting — already
+fixed once in `DateRangeSelector.tsx` during P11-5, applies automatically
+since every tab shares that one component; (B) pagination — `ROWS_PER_PAGE`
+
+- `Pagination` already wired into every long table since P11-3, confirmed
+  by grep (Business Profit's table is always exactly 3 rows, correctly has
+  none); (C) terminology — zero old-term hits in any display string across
+  the whole `reports/` directory (one `//` comment in `UnitPlReport.tsx` is
+  the sole grep hit, correctly left untouched, unchanged since P11-2).
+
+**One bug found and fixed within the same step, not carried forward**: see
+Stock above — `StockValuationReport.tsx` over the line cap, fixed by
+extraction before moving on, exactly as the brief's own per-tab
+verification step was designed to catch.
+
+**Verified (final, all of P11-6 and all of Phase 11):**
+
+- `npm run verify`: 92 test files, **541/541**, typecheck/lint both exit 0
+  — unchanged since P11-4b (P11-5 and P11-6 are both visual).
+- `npm run build --workspace=@shop/client`: exit 0, checked after every one
+  of the 7 tabs plus the `BestPerformersTable.tsx` extraction fix.
+- `npm run build --workspace=@shop/server`: exit 0.
+- Line counts, all under 300: `StockValuationReport.tsx` 245,
+  `BestPerformersTable.tsx` 79, `ReceivablesAgingReport.tsx` 288,
+  `JobSplitReport.tsx` 244, `CashBookReport.tsx` 244, `UnitPlReport.tsx`
+  199, `WageMonthReport.tsx` 267, `ExpensesReport.tsx` 277.
+- `grep -rn "ROWS_PER_PAGE" apps/client/src/pages/reports/` — every
+  paginated table's file present.
+- `grep -rn "isAnimationActive" apps/client/src/pages/reports/` — every
+  `Bar`/`Line`/`Pie` across every report file has it, no gaps.
+- `grep -rn "Stock on Hand\|Unit P&L\|Cash Book\|Receivables Aging\|Daily
+Sales" apps/client/src/pages/reports/` — one hit, the same `//` comment
+  as every prior terminology check this phase; zero hits in display
+  strings.
+
+**Not done / deferred:** nothing — this was Phase 11's final sub-phase.
+`DEBT-4` (`report:dailySales` has zero client call sites, logged during
+P11-5) remains open; closing Phase 11 does not resolve it, and it needs
+its own dedicated backend-touching session per its PROJECT.md entry.
+
+**Bugs found:** none shipped — the one line-count overshoot (Stock tab)
+was caught and fixed within its own step, before any verification was
+ever reported green, same standard held throughout this entire phase.
+
+**Decisions taken:** none ADR-worthy — see `docs/phases/PHASE_11.md` §5
+for the four P11-6-specific decisions (the mid-tab `BestPerformersTable`
+extraction, the Jobs chart's added `Legend`, the always-visible Wages
+note's color handling, and the "Total Udhaar (Who Owes Me)" wording note).
+
+**Blocked on:** owner approval to close Phase 11 (this session's
+verification is complete and awaiting sign-off).
+
+**Next session should:** start whatever phase the owner defines next.
+Phase 11 leaves no work of its own outstanding except `DEBT-4` (a
+cleanup item, not a feature gap) — see `docs/phases/PHASE_11.md` §8 for
+context worth carrying forward if a future phase touches the reports UI
+or the sidebar's group-sync pattern again.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (including the Phase 10/11 rows
+      that were missing from §3's phase-status table — added while here)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (all of Phase 11 done and verified,
+      sub-phase by sub-phase, before this close-out)
+- [x] Any new bugs documented in PROJECT.md (none found this session;
+      `DEBT-4` from P11-5 remains open, unchanged)
+- [x] Test suite passing — 541/541
+
+---
+
+## [2026-09-14] Session 64 — Phase 11, P11-5: Sales tab visual redesign, COMPLETE
+
+**Goal:** Rebuild the Sales tab (`DailySalesReport.tsx`) into 6 clearly
+separated sections — date selector, 4 summary cards with trend/sparklines,
+a current-vs-previous trend chart, a Cash vs Credit pie, the new "What Was
+Sold" table (`report:itemSoldSummary`), and the existing Transactions
+table — extracting sub-components from the start since the file was
+already at 293 lines before adding anything.
+
+**Pre-code statement given and acknowledged before writing code**,
+covering: sub-component list + exact props, the two deviations from the
+brief's own snippets (below), the color-token choice, and the date
+enumeration approach — all approved before implementation began.
+
+**Built, in the specified order, `npm run build --workspace=@shop/client`
+after each:**
+
+1. `SalesSummaryCards.tsx` (157 lines) — 4 cards (Total Sales, Cash,
+   Credit, Transactions), each with a trend line vs.
+   `report:periodComparison`'s previous period (green/red/grey per
+   sign, "— vs prev period" when `previousTotal = 0`) and a `Line`
+   sparkline (40px `ResponsiveContainer`, no axes/grid/tooltip/legend).
+   0-data-point case: a single synthetic `{date: from, value: 0}` point;
+   1-point case: duplicated — recharts can't draw a line from one point.
+2. `SalesTrendChart.tsx` (132 lines) — two-line `LineChart` (current
+   solid, previous dashed), built by enumerating every UTC calendar day
+   in each period (own `eachDateInRange` helper, same midnight-arithmetic
+   pattern as `getPreviousPeriod`) and looking up each day's bucket by
+   date, 0 if none. Empty state only when both raw arrays are empty.
+3. `CashCreditPie.tsx` (72 lines) — two-slice `PieChart`, sums computed
+   from `current`.
+4. `ItemsSoldTable.tsx` (74 lines) — the new table, its own
+   `ROWS_PER_PAGE = 10` and page state (reset on `rows` changing).
+5. `DailySalesReport.tsx` rewritten as the orchestrator — 293 → **208
+   lines**. One `useEffect`/`Promise.all` (not three separate effects),
+   one loading state, one error state. Old `sumDailySalesRows`/
+   `toChartData`/`KpiCard`/the standalone BarChart all deleted, superseded
+   by the new sub-components. Each of the 6 sections wrapped in its own
+   `Card` (`packages/ui`'s title-optional bordered panel).
+6. `DateRangeSelector.tsx` — active-preset highlighting.
+
+**Two deviations from the brief's own pseudocode, both flagged and
+owner-confirmed before writing code:**
+
+- `DateRangeSelector`'s active preset is **derived**, not tracked via a
+  new `activePreset` prop: compares `value` against what each preset
+  would compute right now (`sameRange(preset.compute(reference), value)`)
+  — the exact computation each button's own `onClick` already performs.
+  Needs zero interface change, so zero of the other 7 report tabs needed
+  touching, and fixes the highlight on all 8 tabs at once (they share one
+  component) instead of only Sales. Verified after the change:
+  `grep -rn "DateRangeSelector" apps/client/src/` is byte-identical
+  before and after, and `DateRangeSelector.test.tsx`'s 4 existing tests
+  pass with zero modification.
+- The three parallel IPC calls are `sale.listByDate` + `report.periodComparison`
+  - `report.itemSoldSummary` — **not** `report.dailySales` +
+    `report.periodComparison` + `report.itemSoldSummary` as the brief's own
+    snippet showed. `report:dailySales` and `periodComparison.current`
+    return the same day-bucket data from the same underlying query (just
+    renamed fields) — calling both would fetch the same information twice.
+    The Transactions table needs per-invoice fields (`docNo`/`customerId`/
+    `paymentMode`) that only `sale.listByDate` provides and `report:dailySales`
+    never has.
+
+**One color-token decision, owner-confirmed:** Cash vs Credit pie uses
+`colors.money.in`/`colors.money.due` (green/amber), not `colors.success`/
+`colors.warning` — Cash/Credit are money concepts, and `colors.ts`'s own
+comment keeps the money vocabulary deliberately distinct from the
+UI-state vocabulary; matches the tone `MoneyDisplay tone="in"`/`tone="due"`
+already use for these same two concepts elsewhere in this file.
+
+**One data-shape decision, owner-confirmed:** `SalesTrendChart` enumerates
+every UTC calendar day in each period (not just the sparse dates
+`v_daily_sales` returns) rather than trying to infer the previous period's
+span from bucket contents — needed the actual `previousRange` (from
+`getPreviousPeriod`) as an explicit prop, not derived from `previous[]`,
+since that array can be empty or sparse and unreliable for reconstructing
+a date span.
+
+**One bug found and fixed within the same step, not carried forward:**
+after rewriting `DailySalesReport.tsx`, the pre-existing
+`DailySalesReport.test.tsx` failed — its mock still only stubbed the
+now-removed `ipc.report.dailySales` call. Updated the mock to stub
+`periodComparison`/`itemSoldSummary` instead (matching the orchestrator's
+actual new dependencies); all 3 tests pass, same assertions as before
+(Export CSV button disabled/enabled states).
+
+**Verified:**
+
+- `npm run verify`: 92 test files, **541/541** — unchanged from P11-4b
+  (P11-5 is visual, no new business-logic tests required).
+- `npm run build --workspace=@shop/client`: exit 0 after each of the 6
+  build steps.
+- Line counts, all under 300: `SalesSummaryCards.tsx` 157,
+  `SalesTrendChart.tsx` 132, `CashCreditPie.tsx` 72, `ItemsSoldTable.tsx`
+  74, `DailySalesReport.tsx` 208, `DateRangeSelector.tsx` 117.
+- `grep -rn "isAnimationActive" apps/client/src/pages/reports/
+apps/client/src/components/` — every `Line`/`Pie` across the 3 new
+  chart sub-components has it, alongside every pre-existing chart file.
+- Active vs. inactive className confirmed distinct: `ACTIVE_BUTTON_CLASS`
+  (filled `border-brand bg-brand text-white`) vs.
+  `INACTIVE_BUTTON_CLASS` (bordered `border-line bg-surface text-ink-muted`).
+
+**Not done / deferred:** P11-6 (remaining 7 tabs' visual polish — section
+separation, pagination confirmation, plain language, negative-valuation
+guard on Stock, Jobs chart grouped-not-stacked) — not started, owner
+approval required. Note: P11-6's own "active preset button is highlighted"
+item is already done everywhere, a side effect of P11-5's no-new-prop
+approach to `DateRangeSelector`.
+
+**Bugs found:** none carried forward. `DEBT-4` newly logged in PROJECT.md
+(LOW) — `report:dailySales` now has zero client call sites, same
+DEBT-2/DEBT-3 shape (channel superseded by `periodComparison`, not
+removed this session since that's a backend-touching change out of scope
+for a visual sub-phase).
+
+**Decisions taken:** none ADR-worthy — see `docs/phases/PHASE_11.md` §5
+for the five P11-5-specific decisions (derived active-preset, the
+listByDate-not-dailySales call swap, the money-token choice, the
+full-calendar-day trend enumeration, and — carried over — the P11-0
+Best-Performers-cap decision this phase's Stock tab section will
+reference again in P11-6).
+
+**Blocked on:** owner approval to start P11-6.
+
+**Next session should:** on approval, start P11-6 — work tab by tab
+(Stock, Udhaar, Jobs, Cash Record, Business Profit, Wages, Expenses) per
+the brief's own list: section separation into `Card`s, pagination
+confirmation (already wired in P11-3), plain-language labels (already
+renamed in P11-2), the negative-inventory-valuation "—" guard on Stock,
+and the Jobs chart's stacked→grouped `BarChart` change (currently
+`stackId="job"` on both bars in `JobSplitReport.tsx` — remove `stackId`
+from both).
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — P11-6 not started, by design
+      (owner approval required)
+- [x] Any new bugs documented in PROJECT.md (DEBT-4, LOW)
+- [x] Test suite passing — 541/541
+
+---
+
+## [2026-09-14] Session 63 — Phase 11, P11-0 through P11-4b: nav redesign, terminology, pagination, two new report channels
+
+**Goal:** Work through Phase 11 (Reports UI Polish & Navigation Redesign)
+one sub-phase at a time, owner approval between each: environment audit,
+sidebar expandable Reports group, terminology rename, shared pagination,
+and two new report IPC channels (`periodComparison`, `itemSoldSummary`)
+that P11-5 will consume.
+
+**Done — P11-0 (environment audit, no code):** Read every file the brief
+named, audited every report tab component in full, and found a real
+environment problem before writing anything: `npm run verify`'s test step
+failed 274/525 tests, entirely from a `better-sqlite3` native-module ABI
+mismatch (compiled for `NODE_MODULE_VERSION 130`, Node running tests needed
+`127`) — the same class of issue previously logged and resolved as BUG-7.
+Traced to 4 leftover `electron.exe` processes from prior sessions holding
+the compiled `.node` file locked; owner-confirmed to kill those processes,
+then `npm rebuild better-sqlite3` succeeded and the baseline came back
+clean (90 files, 525/525, typecheck/lint both exit 0). Also surfaced and
+resolved three real discrepancies before coding: no router exists anywhere
+in the app (`App.tsx` is a plain `useState<Tab>` switch); Stock on Hand's
+"Best Performers" table was already hard-capped to the top 10 rows
+client-side, so literally adding `Pagination` to it would never show a
+second page; and the live `sale_line` DDL has no `quantity_milli`/
+`total_paisa` columns (the brief's assumed names) — the real columns are
+`quantity` and `line_total`.
+
+**Done — P11-1 (sidebar expandable Reports nav group):** New
+`ReportsNavItem.tsx` (169 lines), a dedicated component for the one nav
+item with sub-items ("Daily Reports"/"Accounts") rather than a generic
+sub-items feature bolted onto `NavItem`. New `ReportsGroup` type in
+`navigation.ts`; `App.tsx` gained `reportsGroup` state and a
+`handleSelectReportsGroup` handler, threaded as props into `Sidebar`/
+`ReportsPage` — no router introduced, per owner-confirmed design. Two real
+wrinkles resolved before writing code: (1) keeping `ReportsPage`'s own tab
+state and the sidebar's group highlight in sync in both directions without
+one clobbering the other (a sidebar click should jump to the group's first
+tab; a direct tab click inside `ReportsPage` should update the sidebar's
+highlight without resetting the tab) — solved with a `lastKnownGroupRef`
+that distinguishes an externally-driven `activeGroup` change from one the
+component itself just reported up; (2) the Reports group's auto-expand
+must fire once on arrival at a Reports tab, not continuously (an
+`expanded || activeTab === 'reports'` OR would make a manual collapse
+click a no-op while still on Reports) — solved with a one-time transition
+effect keyed on `activeTab`. Collapsed-sidebar (56px) sub-item flyout is
+JS hover/focus-state-driven, not pure CSS `group-hover` — jsdom applies no
+real stylesheet, so a CSS-only hidden class isn't assertable by a render
+test; JS state is both correct UX and testable. New `Sidebar.test.tsx`
+(2 tests). `npm run verify` 525/525 → **527/527**.
+
+**Done — P11-2 (terminology rename, renderer-only):** Owner-approved plain
+strings applied everywhere the old developer terms appeared as display
+text — tab labels, `TAB_TITLES`, loading/error messages, KPI card labels,
+one column header, 5 CSV filename prefixes — across `ReportsPage.tsx`,
+`DailySalesReport.tsx`, `StockValuationReport.tsx`,
+`ReceivablesAgingReport.tsx`, `CashBookReport.tsx`, `UnitPlReport.tsx`.
+IPC channel names, DTO/type/component/file names, and one code comment
+were left untouched, per instruction. Verification grep: one hit left, a
+`//` comment — zero hits in any display string. `npm run verify` 527/527
+unchanged (display-only, no logic change).
+
+**Done — P11-3 (shared `Pagination` + wired into 9 tables):** New
+`apps/client/src/components/shared/Pagination.tsx` — renders nothing when
+`totalRows <= rowsPerPage`; all page buttons when ≤7 pages, otherwise
+first/last/current±1 with ellipsis gaps; "Showing X–Y of Z rows"; full
+`aria-label`/`aria-current` support. 6 required render tests plus 3 more
+(Previous/Next/page-click `onPageChange` assertions) — `Pagination.test.tsx`,
+6/6 passing. Wired into Sales (transactions), Stock (Stock Level + Best
+Performers), Udhaar (customers), Cash Record (transactions), Jobs (job
+list), Wages (staff — even at ≤10 rows today, for consistency and future
+growth), Expenses (expense detail) — 7 files, each with its own
+`const ROWS_PER_PAGE = 10;`, page resetting to 1 on date-range change
+(and additionally on the search-query change for Stock Level).
+**Owner-confirmed during P11-0**: Best Performers' `.slice(0, 10)` cap
+dropped — it now shows the full `report:stockPerformance` result (every
+`track_stock` item, zero-sale ones included, per P10-2c), paginated like
+every other table. `npm run verify` 527/527 → **533/533**.
+
+**Done — P11-4a (`report:periodComparison`):** New Zod contracts
+(`PeriodComparisonInput`/`DayBucketDto`/`PeriodComparisonDto`) and
+`getPeriodComparisonReport` (`report.repository.ts`), wired through
+`channels.ts`/`report.handler.ts`/`preload.ts`/`electron-api.d.ts`/
+`packages/db/src/index.ts`/`packages/contracts/src/index.ts` — 10 files.
+Reuses `getDailySalesReport` (called twice via `Promise.all`, current then
+previous) rather than a second hand-written query against `v_daily_sales`,
+which already has every column `DayBucket` needs. Confirmed in writing,
+before coding, that `Promise.all` on two calls sharing one better-sqlite3
+connection is safe: better-sqlite3 has no async I/O, so each call runs to
+completion synchronously before the next begins — no real concurrency, no
+shared-state race, whatever `Promise.all`'s shape suggests. New
+`getPreviousPeriod()` in `dateRanges.ts` (pure UTC millisecond arithmetic,
+no re-parsing round-trip) — 1 new test. 3 new repository tests (current/
+previous split summing to 500,000/150,000 paisa; empty period returns `[]`
+not null; single cash sale splits cashPaisa=400,000/creditPaisa=0).
+`npm run verify` 533/533 → **537/537**. `npm run build --workspace=@shop/server`
+exit 0.
+
+**Done — P11-4b (`report:itemSoldSummary`):** New Zod contracts
+(`ItemSoldSummaryInput`/`ItemSoldSummaryRowDto`) and
+`getItemSoldSummaryReport`, same 9-file wiring chain as P11-4a. Query
+(`sale_line ⋈ sale ⋈ item ⋈ uom`, `SUM(sl.quantity)`/`SUM(sl.line_total)`,
+`GROUP BY sl.item_id`, `ORDER BY revenuePaisa DESC`) follows the existing
+`getStockPerformanceReport` (P10-2c) join precedent. **Owner-confirmed
+addition beyond the original brief**: filters `s.status = 'confirmed'`,
+matching that same precedent, so a cancelled sale's `sale_line` rows never
+inflate these figures. `sl.item_id IS NOT NULL` kept in the query for
+documentation clarity even though the inner `JOIN item` already guarantees
+it. 4 new repository tests, including one the owner specifically asked to
+strengthen: a directly-inserted labour line (`item_id = NULL` — confirmed
+during P11-0 that `saleRepo.createSale` itself never produces one) is
+asserted to have **zero effect on any other item's totals**, not just to
+be absent from the results itself (`insertLabourLine` test helper,
+`rawDb` insert since there's no repository path for it).
+`npm run verify` 537/537 → **541/541**. `npm run build --workspace=@shop/server`
+exit 0.
+
+**Verified (final, all of P11-4):**
+
+- `npm run verify`: 92 test files, **541/541**, typecheck/lint both exit 0.
+- `npm run build --workspace=@shop/server`: exit 0.
+- Both channels confirmed present in `channels.ts`, `preload.ts`,
+  `electron-api.d.ts`, `packages/contracts/src/report/report.ts`,
+  `packages/contracts/src/index.ts` — grep output pasted to the owner in
+  full for each file.
+- `getPreviousPeriod` confirmed exported from `dateRanges.ts` and used in
+  `dateRanges.test.ts`.
+
+**Not done / deferred:** P11-5 (Sales tab visual redesign — sparklines,
+trend cards, item-sold-summary table, 6-section layout) and P11-6
+(remaining 7 tabs' visual polish, negative-valuation guard, Jobs chart
+grouped-not-stacked) — not started, owner approval required before each,
+per the phase's own sub-phase-by-sub-phase protocol.
+
+**Bugs found:** none introduced. One environment issue found and fixed
+before any code was written (see P11-0 above) — not a code bug, not
+logged under CLAUDE.md §8's Known Bugs format since it never affected
+shipped code.
+
+**Decisions taken:** none ADR-worthy — see `docs/phases/PHASE_11.md` §5
+for the eleven P11-0-through-P11-4b-specific decisions (no-router design,
+JS-driven collapsed flyout, one-time auto-expand transition, the
+ref-guarded bidirectional group sync, Best Performers' dropped cap, the
+`Promise.all`-is-safe-but-not-really-concurrent reasoning, and the
+`status = 'confirmed'` filter).
+
+**Blocked on:** owner approval to start P11-5.
+
+**Next session should:** on approval, start P11-5 — Sales tab visual
+redesign into 6 sections (date selector with a highlighted active preset,
+4 summary cards with sparklines/trend indicators via `report:periodComparison`,
+a current-vs-previous LineChart, a Cash vs Credit PieChart, the new
+Items Sold Summary table via `report:itemSoldSummary`, and the existing
+Transactions table) — extracting `DailySalesReport.tsx` into sub-components
+from the start, since it's already at 292 lines before any of this is added.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — P11-5/P11-6 not started, by design
+      (owner approval required before each sub-phase)
+- [x] Any new bugs documented in PROJECT.md (none found; environment issue
+      documented in `docs/phases/PHASE_11.md` §6)
+- [x] Test suite passing — 541/541
+
+---
+
 ## [2026-09-13] Session 62 — Phase 10, P10-5: CSV export on all 8 report tabs, COMPLETE — PHASE 10 CLOSED
 
 **Goal:** Build a pure `downloadCsv`/`buildCsvString` utility and add an

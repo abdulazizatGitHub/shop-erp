@@ -26,8 +26,15 @@ const PRESETS: readonly { key: string; label: string; compute: (reference: Date)
     { key: 'thisYear', label: 'This Year', compute: getThisYear },
   ];
 
-const BUTTON_CLASS =
+const INACTIVE_BUTTON_CLASS =
   'rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:border-brand hover:text-brand';
+
+const ACTIVE_BUTTON_CLASS =
+  'rounded-md border border-brand bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors';
+
+function sameRange(a: DateRange, b: DateRange): boolean {
+  return a.from === b.from && a.to === b.to;
+}
 
 /**
  * P10-3 — shared date-range picker: five presets (each backed by a pure
@@ -48,13 +55,24 @@ export function DateRangeSelector({
     onChange(compute(referenceDate ?? new Date()));
   }
 
+  // The active preset is derived from `value` itself (compared against what
+  // each preset would compute right now), not tracked as separate "last
+  // clicked" state — stays truthful even if `value` is ever set some other
+  // way, and needs zero prop/caller changes across the other 7 report tabs
+  // that also render this component.
+  const reference = referenceDate ?? new Date();
+  const activeKey = customMode
+    ? 'custom'
+    : (PRESETS.find((preset) => sameRange(preset.compute(reference), value))?.key ?? null);
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {PRESETS.map((preset) => (
         <button
           key={preset.key}
           type="button"
-          className={BUTTON_CLASS}
+          aria-current={activeKey === preset.key ? 'true' : undefined}
+          className={activeKey === preset.key ? ACTIVE_BUTTON_CLASS : INACTIVE_BUTTON_CLASS}
           onClick={() => {
             selectPreset(preset.compute);
           }}
@@ -64,7 +82,8 @@ export function DateRangeSelector({
       ))}
       <button
         type="button"
-        className={BUTTON_CLASS}
+        aria-current={activeKey === 'custom' ? 'true' : undefined}
+        className={activeKey === 'custom' ? ACTIVE_BUTTON_CLASS : INACTIVE_BUTTON_CLASS}
         onClick={() => {
           setCustomMode(true);
         }}

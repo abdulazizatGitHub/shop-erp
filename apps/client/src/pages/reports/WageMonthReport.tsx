@@ -26,9 +26,12 @@ import {
 } from 'recharts';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+
+const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly WageMonthRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -121,6 +124,7 @@ export function WageMonthReport(): React.JSX.Element {
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly WageMonthRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const year = Number.parseInt(range.from.slice(0, 4), 10);
   const month = Number.parseInt(range.from.slice(5, 7), 10);
@@ -129,6 +133,7 @@ export function WageMonthReport(): React.JSX.Element {
   useEffect(() => {
     setRows(null);
     setError(null);
+    setPage(1);
     ipc.report
       .wageMonth({ year, month })
       .then(setRows)
@@ -138,6 +143,7 @@ export function WageMonthReport(): React.JSX.Element {
   }, [year, month]);
 
   const chartData = toChartData(rows ?? []);
+  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -152,11 +158,10 @@ export function WageMonthReport(): React.JSX.Element {
         />
       </div>
 
-      {spansMultipleMonths && (
-        <p className="text-sm text-warning">
-          Showing wages for {MONTH_NAMES[month - 1]} {year} based on selected start date.
-        </p>
-      )}
+      {/* P11-6 — always visible, not just for a multi-month custom range; reuses the same month-name lookup, still amber when the range actually spans multiple months. */}
+      <p className={`text-sm ${spansMultipleMonths ? 'text-warning' : 'text-ink-muted'}`}>
+        Showing wages for {MONTH_NAMES[month - 1]} {year} based on start date.
+      </p>
 
       {error && <Alert variant="danger">{error}</Alert>}
 
@@ -204,48 +209,56 @@ export function WageMonthReport(): React.JSX.Element {
           {rows.length === 0 ? (
             <EmptyState message="No attendance records for this month." />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>Name</TableHeaderCell>
-                  <TableHeaderCell>Role</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Days</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Half-days</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Absent</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Leave</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Holiday</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Gross</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Advances</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Commission</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Net Due</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.staffId}>
-                    <TableCell>{row.staffName}</TableCell>
-                    <TableCell>{row.staffRole}</TableCell>
-                    <TableCell className="text-right">{row.fullDays}</TableCell>
-                    <TableCell className="text-right">{row.halfDays}</TableCell>
-                    <TableCell className="text-right">{row.absentDays}</TableCell>
-                    <TableCell className="text-right">{row.leaveDays}</TableCell>
-                    <TableCell className="text-right">{row.holidayDays}</TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={row.grossPaisa} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={row.advancesPaisa} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={row.commissionPaisa} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <MoneyDisplay paisaValue={row.netPaisa} size="lg" />
-                    </TableCell>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>Role</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Days</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Half-days</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Absent</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Leave</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Holiday</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Gross</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Advances</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Commission</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Net Due</TableHeaderCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {visibleRows.map((row) => (
+                    <TableRow key={row.staffId}>
+                      <TableCell>{row.staffName}</TableCell>
+                      <TableCell>{row.staffRole}</TableCell>
+                      <TableCell className="text-right">{row.fullDays}</TableCell>
+                      <TableCell className="text-right">{row.halfDays}</TableCell>
+                      <TableCell className="text-right">{row.absentDays}</TableCell>
+                      <TableCell className="text-right">{row.leaveDays}</TableCell>
+                      <TableCell className="text-right">{row.holidayDays}</TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={row.grossPaisa} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={row.advancesPaisa} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={row.commissionPaisa} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <MoneyDisplay paisaValue={row.netPaisa} size="lg" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Pagination
+                totalRows={rows.length}
+                rowsPerPage={ROWS_PER_PAGE}
+                currentPage={page}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </>
       )}

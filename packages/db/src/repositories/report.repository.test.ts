@@ -19,6 +19,8 @@ import {
   getCashBookReport,
   getDailySalesReport,
   getExpenseSummaryReport,
+  getItemSoldSummaryReport,
+  getPeriodComparisonReport,
   getReceivablesAgingReport,
   getStockPerformanceReport,
   getStockValuationReport,
@@ -93,6 +95,24 @@ function insertStockMovement(itemId: string, quantityMilli: number): void {
       quantityMilli,
       new Date().toISOString(),
     );
+}
+
+// P11-4b — saleRepo.createSale never produces a labour line itself (only
+// job.repository.ts's deliverJob does, via service_charge_id) — a direct
+// insert is the only way to seed one for a test.
+function insertLabourLine(
+  saleId: string,
+  lineNo: number,
+  quantityMilli: number,
+  unitPricePaisa: number,
+  lineTotalPaisa: number,
+): void {
+  rawDb
+    .prepare(
+      `INSERT INTO sale_line (id, tenant_id, sale_id, line_no, item_id, quantity, unit_price, line_total, line_kind)
+       VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'labour')`,
+    )
+    .run(newId(), TENANT_ID, saleId, lineNo, quantityMilli, unitPricePaisa, lineTotalPaisa);
 }
 
 beforeEach(() => {
@@ -413,6 +433,281 @@ describe('R1 — getDailySalesReport', () => {
 
     expect(rows).toHaveLength(0);
     expect(rows.find((r) => r.date === '2026-09-01')).toBeUndefined();
+  });
+});
+
+describe('P11-4a — getPeriodComparisonReport', () => {
+  it('returns current and previous period rows separately, summed correctly', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Comparison Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(item.id, 10000);
+
+    // Current period (Sep 1-7):
+    // Sale A — Sep 1, cash, Rs 3,000 = 300,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-01',
+      paymentMode: 'cash',
+      paidAmountPaisa: 300000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 3000, unitPricePaisa: 100000 }],
+    });
+    // Sale B — Sep 3, credit, Rs 2,000 = 200,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-03',
+      paymentMode: 'credit',
+      paidAmountPaisa: 0,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 2000, unitPricePaisa: 100000 }],
+    });
+
+    // Previous period (Aug 25-31):
+    // Sale C — Aug 28, cash, Rs 1,500 = 150,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-08-28',
+      paymentMode: 'cash',
+      paidAmountPaisa: 150000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1500, unitPricePaisa: 100000 }],
+    });
+
+    const report = await getPeriodComparisonReport(
+      kysely,
+      TENANT_ID,
+      { from: '2026-09-01', to: '2026-09-07' },
+      { from: '2026-08-25', to: '2026-08-31' },
+    );
+
+    // Sep 1 and Sep 3 are different dates -> 2 separate current-period rows.
+    expect(report.current).toHaveLength(2);
+    // 300,000 + 200,000 = 500,000 paisa
+    const currentTotal = report.current.reduce((sum, b) => sum + b.totalPaisa, 0);
+    expect(currentTotal).toBe(500000);
+
+    expect(report.previous).toHaveLength(1);
+    // Rs 1,500 = 150,000 paisa
+    expect(report.previous[0]?.totalPaisa).toBe(150000);
+  });
+
+  it('an empty period returns an empty array, not null and not an error', async () => {
+    const report = await getPeriodComparisonReport(
+      kysely,
+      TENANT_ID,
+      { from: '2026-01-01', to: '2026-01-31' },
+      { from: '2025-12-01', to: '2025-12-31' },
+    );
+
+    expect(report.current).toEqual([]);
+    expect(report.previous).toEqual([]);
+  });
+
+  it('splits cashPaisa/creditPaisa correctly for a single cash sale', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Cash Split Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 400000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Cash sale, Rs 4,000 -> 400,000 paisa, fully paid
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-05',
+      paymentMode: 'cash',
+      paidAmountPaisa: 400000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 4000, unitPricePaisa: 100000 }],
+    });
+
+    const report = await getPeriodComparisonReport(
+      kysely,
+      TENANT_ID,
+      { from: '2026-09-05', to: '2026-09-05' },
+      { from: '2026-08-05', to: '2026-08-05' },
+    );
+
+    expect(report.current).toHaveLength(1);
+    // Rs 4,000 x 100 = 400,000 paisa, fully cash
+    expect(report.current[0]?.cashPaisa).toBe(400000);
+    expect(report.current[0]?.creditPaisa).toBe(0);
+  });
+});
+
+describe('P11-4b — getItemSoldSummaryReport', () => {
+  it('sums quantity and revenue per item, sorted by revenuePaisa DESC', async () => {
+    const itemA = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Item A',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 50000,
+    });
+    insertStockMovement(itemA.id, 10000);
+    const itemB = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Item B',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 80000,
+    });
+    insertStockMovement(itemB.id, 10000);
+
+    // Item A: 2 pieces x Rs 500 = 50,000 x 2000/1000 = 100,000 paisa, totalSoldMilli = 2,000
+    // Item B: 1 piece x Rs 800 = 80,000 paisa, totalSoldMilli = 1,000
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-01',
+      paymentMode: 'cash',
+      paidAmountPaisa: 180000,
+      notes: null,
+      lines: [
+        { itemId: itemA.id, quantityMilli: 2000, unitPricePaisa: 50000 },
+        { itemId: itemB.id, quantityMilli: 1000, unitPricePaisa: 80000 },
+      ],
+    });
+
+    const rows = await getItemSoldSummaryReport(kysely, TENANT_ID, '2026-09-01', '2026-09-01');
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.itemId).toBe(itemA.id);
+    expect(rows[0]?.totalSoldMilli).toBe(2000);
+    expect(rows[0]?.revenuePaisa).toBe(100000);
+    expect(rows[1]?.itemId).toBe(itemB.id);
+    expect(rows[1]?.totalSoldMilli).toBe(1000);
+    expect(rows[1]?.revenuePaisa).toBe(80000);
+  });
+
+  it('a labour line (item_id = null) does not appear and has zero effect on any other item’s numbers', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Item C',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 60000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Item C: 1 piece x Rs 600 = 60,000 paisa, totalSoldMilli = 1,000
+    const sale = await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-02',
+      paymentMode: 'cash',
+      paidAmountPaisa: 60000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 60000 }],
+    });
+
+    const before = await getItemSoldSummaryReport(kysely, TENANT_ID, '2026-09-02', '2026-09-02');
+    expect(before).toHaveLength(1);
+    expect(before[0]?.totalSoldMilli).toBe(1000);
+    expect(before[0]?.revenuePaisa).toBe(60000);
+
+    // A labour line on the same sale, Rs 2,000 (200,000 paisa) — must not
+    // appear as a row, and must not change item C's own totals above.
+    insertLabourLine(sale.id, 99, 1000, 200000, 200000);
+
+    const after = await getItemSoldSummaryReport(kysely, TENANT_ID, '2026-09-02', '2026-09-02');
+
+    expect(after).toHaveLength(1);
+    expect(after[0]?.itemId).toBe(item.id);
+    // Identical to `before` — the labour line contributed nothing to any row.
+    expect(after).toEqual(before);
+  });
+
+  it('a sale outside the date range does not contribute', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Out Of Range Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(item.id, 5000);
+
+    // Outside the queried range
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-10',
+      paymentMode: 'cash',
+      paidAmountPaisa: 100000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+    });
+
+    const rows = await getItemSoldSummaryReport(kysely, TENANT_ID, '2026-09-01', '2026-09-07');
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it('an item sold in two separate sales in range is summed into one row, not doubled', async () => {
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Repeat Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(item.id, 10000);
+
+    // Sale 1: 1 piece x Rs 1,000 = 100,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-01',
+      paymentMode: 'cash',
+      paidAmountPaisa: 100000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+    });
+    // Sale 2: 1 piece x Rs 1,000 = 100,000 paisa
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-03',
+      paymentMode: 'cash',
+      paidAmountPaisa: 100000,
+      notes: null,
+      lines: [{ itemId: item.id, quantityMilli: 1000, unitPricePaisa: 100000 }],
+    });
+
+    const rows = await getItemSoldSummaryReport(kysely, TENANT_ID, '2026-09-01', '2026-09-07');
+
+    // One row, not two — quantities and revenue summed across both sales.
+    expect(rows).toHaveLength(1);
+    // 1,000 + 1,000 = 2,000 milli
+    expect(rows[0]?.totalSoldMilli).toBe(2000);
+    // 100,000 + 100,000 = 200,000 paisa
+    expect(rows[0]?.revenuePaisa).toBe(200000);
   });
 });
 

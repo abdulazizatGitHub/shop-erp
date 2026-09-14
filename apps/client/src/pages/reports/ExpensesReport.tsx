@@ -29,9 +29,12 @@ import {
 } from 'recharts';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+
+const ROWS_PER_PAGE = 10;
 
 // Cycled through for pie slices — no hardcoded hex, all from the shared
 // token file. More categories than colors just repeats the cycle.
@@ -124,11 +127,13 @@ export function ExpensesReport(): React.JSX.Element {
   const [summary, setSummary] = useState<readonly ExpenseSummaryRowDto[] | null>(null);
   const [expenses, setExpenses] = useState<readonly ExpenseDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setSummary(null);
     setExpenses(null);
     setError(null);
+    setPage(1);
 
     ipc.report
       .expenseSummary({ from: range.from, to: range.to })
@@ -147,6 +152,7 @@ export function ExpensesReport(): React.JSX.Element {
 
   const categorySlices = summary ? byCategory(summary) : [];
   const unitBars = summary ? byBusinessUnit(summary) : [];
+  const visibleExpenses = (expenses ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -228,32 +234,40 @@ export function ExpensesReport(): React.JSX.Element {
             {expenses.length === 0 ? (
               <EmptyState message="No expenses recorded in this range." />
             ) : (
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Date</TableHeaderCell>
-                    <TableHeaderCell>Category</TableHeaderCell>
-                    <TableHeaderCell>Business Unit</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Amount</TableHeaderCell>
-                    <TableHeaderCell>Description</TableHeaderCell>
-                    <TableHeaderCell>Payment Method</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {expenses.map((expense) => (
-                    <TableRow key={expense.id}>
-                      <TableCell>{expense.expenseDate}</TableCell>
-                      <TableCell>{expense.categoryName}</TableCell>
-                      <TableCell>{expense.businessUnitCode}</TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={expense.amountPaisa} />
-                      </TableCell>
-                      <TableCell>{expense.notes ?? '—'}</TableCell>
-                      <TableCell>{METHOD_LABELS[expense.method]}</TableCell>
+              <>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Date</TableHeaderCell>
+                      <TableHeaderCell>Category</TableHeaderCell>
+                      <TableHeaderCell>Business Unit</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Amount</TableHeaderCell>
+                      <TableHeaderCell>Description</TableHeaderCell>
+                      <TableHeaderCell>Payment Method</TableHeaderCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {visibleExpenses.map((expense) => (
+                      <TableRow key={expense.id}>
+                        <TableCell>{expense.expenseDate}</TableCell>
+                        <TableCell>{expense.categoryName}</TableCell>
+                        <TableCell>{expense.businessUnitCode}</TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={expense.amountPaisa} />
+                        </TableCell>
+                        <TableCell>{expense.notes ?? '—'}</TableCell>
+                        <TableCell>{METHOD_LABELS[expense.method]}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pagination
+                  totalRows={expenses.length}
+                  rowsPerPage={ROWS_PER_PAGE}
+                  currentPage={page}
+                  onPageChange={setPage}
+                />
+              </>
             )}
           </div>
         </>

@@ -25,9 +25,12 @@ import {
 } from 'recharts';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
+
+const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly CashBookRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -93,14 +96,16 @@ export function CashBookReport(): React.JSX.Element {
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly CashBookRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setRows(null);
+    setPage(1);
     ipc.report
       .cashBook({ dateFrom: range.from, dateTo: range.to })
       .then(setRows)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load cash book');
+        setError(err instanceof Error ? err.message : 'Failed to load Cash Record');
       });
   }, [range]);
 
@@ -116,6 +121,7 @@ export function CashBookReport(): React.JSX.Element {
     : 0;
   const closingBalancePaisa = lastRow ? lastRow.runningBalancePaisa : 0;
   const chartData = toChartData(rows ?? []);
+  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -125,13 +131,13 @@ export function CashBookReport(): React.JSX.Element {
           disabled={!rows || rows.length === 0}
           onClick={() => {
             if (!rows) return;
-            downloadCsv(`cash-book-${range.from}-${range.to}.csv`, toCsvRows(rows));
+            downloadCsv(`cash-record-${range.from}-${range.to}.csv`, toCsvRows(rows));
           }}
         />
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
-      {!rows && !error && <LoadingState message="Loading cash book…" />}
+      {!rows && !error && <LoadingState message="Loading Cash Record…" />}
 
       {rows && (
         <>
@@ -183,44 +189,52 @@ export function CashBookReport(): React.JSX.Element {
             {rows.length === 0 ? (
               <EmptyState message="No cash movements in this date range." />
             ) : (
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Date</TableHeaderCell>
-                    <TableHeaderCell>Description</TableHeaderCell>
-                    <TableHeaderCell>Doc No</TableHeaderCell>
-                    <TableHeaderCell className="text-right">In</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Out</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Running Balance</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row, index) => (
-                    <TableRow key={`${row.docNo}-${String(index)}`}>
-                      <TableCell>{row.date}</TableCell>
-                      <TableCell>{row.description}</TableCell>
-                      <TableCell>{row.docNo}</TableCell>
-                      <TableCell className="text-right">
-                        {row.inPaisa > 0 ? (
-                          <MoneyDisplay paisaValue={row.inPaisa} tone="in" />
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {row.outPaisa > 0 ? (
-                          <MoneyDisplay paisaValue={row.outPaisa} tone="out" />
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <MoneyDisplay paisaValue={row.runningBalancePaisa} />
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell>Date</TableHeaderCell>
+                      <TableHeaderCell>Description</TableHeaderCell>
+                      <TableHeaderCell>Doc No</TableHeaderCell>
+                      <TableHeaderCell className="text-right">In</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Out</TableHeaderCell>
+                      <TableHeaderCell className="text-right">Running Balance</TableHeaderCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {visibleRows.map((row, index) => (
+                      <TableRow key={`${row.docNo}-${String(index)}`}>
+                        <TableCell>{row.date}</TableCell>
+                        <TableCell>{row.description}</TableCell>
+                        <TableCell>{row.docNo}</TableCell>
+                        <TableCell className="text-right">
+                          {row.inPaisa > 0 ? (
+                            <MoneyDisplay paisaValue={row.inPaisa} tone="in" />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.outPaisa > 0 ? (
+                            <MoneyDisplay paisaValue={row.outPaisa} tone="out" />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <MoneyDisplay paisaValue={row.runningBalancePaisa} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pagination
+                  totalRows={rows.length}
+                  rowsPerPage={ROWS_PER_PAGE}
+                  currentPage={page}
+                  onPageChange={setPage}
+                />
+              </>
             )}
           </div>
         </>

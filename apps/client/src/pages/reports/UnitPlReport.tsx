@@ -95,7 +95,7 @@ export function UnitPlReport(): React.JSX.Element {
       .unitPl({ from: range.from, to: range.to })
       .then(setReport)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to load unit P&L');
+        setError(err instanceof Error ? err.message : 'Failed to load Business Profit');
       });
   }, [range]);
 
@@ -109,7 +109,7 @@ export function UnitPlReport(): React.JSX.Element {
           disabled={!report || report.rows.length === 0}
           onClick={() => {
             if (!report) return;
-            downloadCsv(`unit-pl-${range.from}-${range.to}.csv`, toCsvRows(report.rows));
+            downloadCsv(`business-profit-${range.from}-${range.to}.csv`, toCsvRows(report.rows));
           }}
         />
       </div>
@@ -117,7 +117,7 @@ export function UnitPlReport(): React.JSX.Element {
       {error && <Alert variant="danger">{error}</Alert>}
 
       {!report ? (
-        <LoadingState message="Loading unit P&L…" />
+        <LoadingState message="Loading Business Profit…" />
       ) : (
         <>
           <div className="border-t border-line pt-4">

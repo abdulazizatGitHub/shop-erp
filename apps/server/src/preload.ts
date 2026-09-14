@@ -51,6 +51,10 @@ import type {
   PurchaseOrderIdInput,
   ExpenseSummaryInput,
   ExpenseSummaryRowDto,
+  ItemSoldSummaryInput,
+  ItemSoldSummaryRowDto,
+  PeriodComparisonInput,
+  PeriodComparisonDto,
   ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
@@ -299,6 +303,12 @@ contextBridge.exposeInMainWorld('api', {
       >,
     wageMonth: (input: WageMonthInput): Promise<readonly WageMonthRowDto[]> =>
       ipcRenderer.invoke(channels.report.wageMonth, input) as Promise<readonly WageMonthRowDto[]>,
+    periodComparison: (input: PeriodComparisonInput): Promise<PeriodComparisonDto> =>
+      ipcRenderer.invoke(channels.report.periodComparison, input) as Promise<PeriodComparisonDto>,
+    itemSoldSummary: (input: ItemSoldSummaryInput): Promise<readonly ItemSoldSummaryRowDto[]> =>
+      ipcRenderer.invoke(channels.report.itemSoldSummary, input) as Promise<
+        readonly ItemSoldSummaryRowDto[]
+      >,
   },
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>

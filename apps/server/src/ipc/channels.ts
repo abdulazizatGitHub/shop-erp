@@ -97,6 +97,8 @@ export const channels = {
     cashBook: 'report:cashBook',
     unitPl: 'report:unitPl',
     wageMonth: 'report:wageMonth',
+    periodComparison: 'report:periodComparison',
+    itemSoldSummary: 'report:itemSoldSummary',
   },
   importData: {
     dryRun: 'import:dryRun',

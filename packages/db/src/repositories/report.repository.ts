@@ -124,6 +124,57 @@ export async function getDailySalesReport(
   return result.rows;
 }
 
+export interface DayBucket {
+  readonly date: string;
+  readonly totalPaisa: number;
+  readonly cashPaisa: number;
+  readonly creditPaisa: number;
+  readonly transactionCount: number;
+}
+
+export interface PeriodComparisonReport {
+  readonly current: readonly DayBucket[];
+  readonly previous: readonly DayBucket[];
+}
+
+function toDayBucket(row: DailySalesReportRow): DayBucket {
+  return {
+    date: row.date,
+    totalPaisa: row.totalSalesPaisa,
+    cashPaisa: row.cashCollectedPaisa,
+    creditPaisa: row.creditGivenPaisa,
+    transactionCount: row.invoiceCount,
+  };
+}
+
+/**
+ * P11-4a — current vs. previous period, both ranges supplied explicitly by
+ * the caller (the handler never derives previous from current — that's
+ * dateRanges.ts's getPreviousPeriod, client-side, keeping this thin).
+ * Reuses getDailySalesReport (same v_daily_sales query) rather than a
+ * second hand-written query against the same view — v_daily_sales already
+ * has every column DayBucket needs (cash_collected_paisa/credit_given_paisa
+ * map directly to cashPaisa/creditPaisa). Calling it twice via Promise.all
+ * is sequential in practice (better-sqlite3 has no async I/O — each call
+ * completes synchronously before the next begins), not true concurrency;
+ * safe here regardless since both are independent read-only queries.
+ */
+export async function getPeriodComparisonReport(
+  db: Kysely<Database>,
+  tenantId: string,
+  current: { readonly from: string; readonly to: string },
+  previous: { readonly from: string; readonly to: string },
+): Promise<PeriodComparisonReport> {
+  const [currentRows, previousRows] = await Promise.all([
+    getDailySalesReport(db, tenantId, current.from, current.to),
+    getDailySalesReport(db, tenantId, previous.from, previous.to),
+  ]);
+  return {
+    current: currentRows.map(toDayBucket),
+    previous: previousRows.map(toDayBucket),
+  };
+}
+
 interface CashBookSourceRow {
   date: string;
   docNo: string;
@@ -454,6 +505,54 @@ export async function getStockPerformanceReport(
     ...row,
     quantityMilli: row.quantityMilli ?? 0,
   }));
+}
+
+export interface ItemSoldSummaryRow {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly unitName: string;
+  readonly totalSoldMilli: number;
+  readonly revenuePaisa: number;
+}
+
+/**
+ * P11-4b — per-item sold summary for the Sales tab's "What Was Sold"
+ * table. sale_line's real columns are `quantity` (milli-units) and
+ * `line_total` (paisa) — not `quantity_milli`/`total_paisa`, confirmed by
+ * reading the live DDL (0011_sale_line_item_optional.sql) rather than
+ * assumed. `s.status = 'confirmed'` follows the existing
+ * getStockPerformanceReport revenue-subquery precedent (P10-2c) — a
+ * cancelled sale's sale_line rows still physically exist and must not
+ * inflate these figures. `sl.item_id IS NOT NULL` is redundant with the
+ * inner `JOIN item` (which can never match a NULL item_id) but kept for
+ * documentation clarity, per instruction. Sorted by revenuePaisa DESC.
+ */
+export async function getItemSoldSummaryReport(
+  db: Kysely<Database>,
+  tenantId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<readonly ItemSoldSummaryRow[]> {
+  const result = await sql<ItemSoldSummaryRow>`
+    SELECT
+      sl.item_id                    AS itemId,
+      i.name_en                     AS itemName,
+      u.name                        AS unitName,
+      SUM(sl.quantity)              AS totalSoldMilli,
+      SUM(sl.line_total)            AS revenuePaisa
+    FROM        sale_line sl
+    JOIN        sale s ON s.id = sl.sale_id
+    JOIN        item i ON i.id = sl.item_id
+    JOIN        uom u  ON u.id = i.stock_uom_id
+    WHERE       sl.tenant_id = ${tenantId}
+      AND       s.status = 'confirmed'
+      AND       sl.item_id IS NOT NULL
+      AND       s.sale_date BETWEEN ${dateFrom} AND ${dateTo}
+    GROUP BY    sl.item_id, i.name_en, u.name
+    ORDER BY    revenuePaisa DESC
+  `.execute(db);
+
+  return result.rows;
 }
 
 export interface ExpenseSummaryRow {

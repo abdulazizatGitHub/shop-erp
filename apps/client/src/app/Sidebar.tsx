@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ipc } from '../lib/ipc.js';
 import { NavIcon } from './NavIcon.js';
 import { NAV_ITEMS } from './navigation.js';
-import type { NavItem, Tab } from './navigation.js';
+import type { NavItem, ReportsGroup, Tab } from './navigation.js';
+import { ReportsNavItem } from './ReportsNavItem.js';
 
 export interface SidebarProps {
   readonly activeTab: Tab;
   readonly onSelectTab: (tab: Tab) => void;
+  /** P11-1 — which Reports sub-group is current, for the sidebar's own highlight. */
+  readonly activeReportsGroup: ReportsGroup;
+  readonly onSelectReportsGroup: (group: ReportsGroup) => void;
 }
 
 // Matches the `setting` table's own default (packages/db/src/repositories/setting.repository.ts)
@@ -15,9 +19,24 @@ const DEFAULT_SHOP_NAME = 'Shop ERP';
 
 const SIDEBAR_EXPANDED_KEY = 'sidebar-expanded';
 
+// P11-1 — the Reports group's own disclosure state. Deliberately a separate
+// key from SIDEBAR_EXPANDED_KEY above: that one is the whole sidebar's
+// 56px/200px width toggle, a different axis from "is the Reports item's
+// sub-item list open."
+const REPORTS_GROUP_EXPANDED_KEY = 'sidebar-reports-expanded';
+
 function readStoredExpanded(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true';
+  } catch {
+    // Private browsing / storage blocked — default to collapsed.
+    return false;
+  }
+}
+
+function readStoredReportsExpanded(): boolean {
+  try {
+    return localStorage.getItem(REPORTS_GROUP_EXPANDED_KEY) === 'true';
   } catch {
     // Private browsing / storage blocked — default to collapsed.
     return false;
@@ -90,9 +109,16 @@ function NavButton({
   );
 }
 
-export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Element {
+export function Sidebar({
+  activeTab,
+  onSelectTab,
+  activeReportsGroup,
+  onSelectReportsGroup,
+}: SidebarProps): React.JSX.Element {
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
   const [expanded, setExpanded] = useState(readStoredExpanded);
+  const [reportsGroupExpanded, setReportsGroupExpanded] = useState(readStoredReportsExpanded);
+  const prevActiveTabRef = useRef(activeTab);
 
   useEffect(() => {
     ipc.setting
@@ -102,6 +128,31 @@ export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Ele
         // Keep the placeholder — the sidebar must never block on this.
       });
   }, []);
+
+  // P11-1 — auto-expand the Reports disclosure once, on arriving at the
+  // Reports tab from elsewhere. Deliberately a one-time transition, not a
+  // continuous "expanded || activeTab === 'reports'" OR: that would make a
+  // manual collapse click a no-op for as long as the owner stays on a
+  // Reports tab, which defeats the whole point of a collapse button.
+  useEffect(() => {
+    const enteringReports = activeTab === 'reports' && prevActiveTabRef.current !== 'reports';
+    if (enteringReports) {
+      setReportsGroupExpanded(true);
+    }
+    prevActiveTabRef.current = activeTab;
+  }, [activeTab]);
+
+  function toggleReportsGroupExpanded(): void {
+    setReportsGroupExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(REPORTS_GROUP_EXPANDED_KEY, String(next));
+      } catch {
+        // Private browsing / storage blocked — the toggle still works for this session.
+      }
+      return next;
+    });
+  }
 
   function toggleExpanded(): void {
     setExpanded((prev) => {
@@ -157,15 +208,29 @@ export function Sidebar({ activeTab, onSelectTab }: SidebarProps): React.JSX.Ele
           expanded ? 'items-stretch px-2' : 'items-center'
         }`}
       >
-        {mainItems.map((item) => (
-          <NavButton
-            key={item.key}
-            item={item}
-            active={item.key === activeTab}
-            expanded={expanded}
-            onSelectTab={onSelectTab}
-          />
-        ))}
+        {mainItems.map((item) =>
+          item.key === 'reports' ? (
+            <ReportsNavItem
+              key={item.key}
+              item={item}
+              active={activeTab === 'reports'}
+              sidebarExpanded={expanded}
+              groupExpanded={reportsGroupExpanded}
+              onToggleGroupExpanded={toggleReportsGroupExpanded}
+              activeReportsGroup={activeReportsGroup}
+              onSelectTab={onSelectTab}
+              onSelectReportsGroup={onSelectReportsGroup}
+            />
+          ) : (
+            <NavButton
+              key={item.key}
+              item={item}
+              active={item.key === activeTab}
+              expanded={expanded}
+              onSelectTab={onSelectTab}
+            />
+          ),
+        )}
       </nav>
 
       <div
