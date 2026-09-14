@@ -214,3 +214,44 @@ the previous period plus a per-item sold summary.
 
 See `docs/phases/PHASE_11.md` for full sub-phase detail, design decisions,
 and verification output.
+
+---
+
+## Phase 12 — Reports Visual Structure & Chart Additions
+
+Every report tab has the same visual structure — each logical section is
+its own rounded white card on a light-grey page background, matching the
+app's other redesigned pages (Suppliers, Items, Purchase Orders). Seven of
+the eight tabs get one or two new charts presenting existing data in a
+second visual format. Two bugs found while closing the phase (sidebar
+auto-collapse, inactive report group tabs visible) were fixed before commit.
+
+- P12-0: Structural prerequisite — removed `ReportsPage.tsx`'s shared outer
+  Card, `bg-surface-page` on the outer wrapper, Sales tab converted to the
+  new local card pattern
+- P12-1: Stock tab — Stock Health donut + Best Performers horizontal bar
+- P12-2: Udhaar tab — per-customer stacked aging bar chart
+- P12-3: Jobs tab — Parts vs Labour donut
+- P12-4: Cash Record tab — Daily Cash Flow grouped bar chart
+- P12-5: Business Profit tab — Revenue vs Margin donut
+- P12-6: Wages tab — Wage cost by role donut
+- P12-7: Expenses tab — card structure only, no new chart
+- Bug fix: sidebar's Reports group no longer starts/stays expanded when
+  navigating away from Reports (`Sidebar.tsx`)
+- Bug fix: Reports page now shows only the active sidebar group's tabs
+  (Operational or Financial), not both at once (`ReportsPage.tsx`)
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 569/569
+- [x] `ReportsPage.tsx` outer wrapper uses `bg-surface-page`
+- [x] All 8 tabs use the same local card pattern, no tab uses the shared
+      `Card` primitive
+- [x] Every new chart element has `isAnimationActive={false}`
+- [x] Zero new IPC channels — `report.handler.ts` still has 10 handlers
+- [x] Sidebar's Reports group collapses when navigating to any non-Reports
+      tab, regardless of how it was expanded
+- [x] Reports page shows only the active group's 4 tabs at a time
+
+See `docs/phases/PHASE_12.md` for full sub-phase detail, design decisions,
+and verification output.
