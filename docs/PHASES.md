@@ -172,3 +172,45 @@ access from the UI, any styling beyond a blank window.
 
 Dedicated phase. Work through `PROJECT.md` Known Bugs by severity. **No new
 features.**
+
+---
+
+## Phase 11 — Reports UI Polish & Navigation Redesign
+
+The owner navigates to reports through an expandable sidebar group, every
+report uses plain language instead of developer terms, every long table is
+paginated, and the Sales tab shows trend indicators and sparklines against
+the previous period plus a per-item sold summary.
+
+- P11-0: Environment check — audit only, no code
+- P11-1: Sidebar "Reports" nav item becomes an expandable group with two
+  sub-items ("Daily Reports", "Accounts")
+- P11-2: Renderer-only terminology rename to plain-language strings across
+  all 8 report tabs
+- P11-3: Shared `Pagination` component wired into every table that can
+  exceed 10 rows
+- P11-4a: New `report:periodComparison` IPC channel — current vs. previous
+  period day-by-day figures
+- P11-4b: New `report:itemSoldSummary` IPC channel — per-item sold summary
+  for a date range
+- P11-5: Sales tab redesigned into 6 sections — date selector, summary
+  cards with trend/sparklines, a current-vs-previous trend chart, a Cash
+  vs Credit breakdown, the new "What Was Sold" table, and transactions
+- P11-6: Visual polish pass on the remaining 7 tabs — negative-inventory-
+  valuation guard on Stock, Jobs chart changed from stacked to grouped
+  bars, an always-visible month note on Wages
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 541/541
+- [x] Sidebar shows "Daily Reports"/"Accounts" sub-items, correctly
+      highlighted, hidden when the sidebar is collapsed
+- [x] No old report terminology visible anywhere in the reports UI
+- [x] Every long table in the reports UI is paginated
+- [x] Sales tab's summary cards each show a trend indicator and sparkline
+      against the previous period
+- [x] Stock tab shows "—" instead of a negative inventory valuation
+- [x] Jobs tab chart is grouped (not stacked) bars
+
+See `docs/phases/PHASE_11.md` for full sub-phase detail, design decisions,
+and verification output.
