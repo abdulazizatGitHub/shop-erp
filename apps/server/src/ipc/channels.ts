@@ -8,6 +8,7 @@ export const channels = {
     cancel: 'sale:cancel',
     getById: 'sale:getById',
     listByDate: 'sale:listByDate',
+    getWithLines: 'sale:getWithLines',
   },
   item: {
     create: 'item:create',
@@ -26,12 +27,15 @@ export const channels = {
     get: 'party:get',
     ledger: 'party:ledger',
     balance: 'party:balance',
+    listPriceLevels: 'party:listPriceLevels',
   },
   customer: {
     create: 'customer:create',
     search: 'customer:search',
     get: 'customer:get',
     balance: 'customer:balance',
+    ledger: 'customer:ledger',
+    statement: 'customer:statement',
   },
   staff: {
     create: 'staff:create',
@@ -71,7 +75,7 @@ export const channels = {
     cancel: 'grn:cancel',
     csvDryRun: 'grn:csvDryRun',
   },
-  payment: { receive: 'payment:receive', pay: 'payment:pay' },
+  payment: { receive: 'payment:receive', pay: 'payment:pay', getReceipt: 'payment:getReceipt' },
   job: {
     create: 'job:create',
     assignTechnician: 'job:assignTechnician',
@@ -129,8 +133,14 @@ export const channels = {
     getDiscountPctPresets: 'setting:getDiscountPctPresets',
     setDiscountPctPresets: 'setting:setDiscountPctPresets',
     getDiscountConfig: 'setting:getDiscountConfig',
+    getShopIdentity: 'setting:getShopIdentity',
+    setShopIdentity: 'setting:setShopIdentity',
   },
-  print: { reprintReceipt: 'print:reprintReceipt' },
+  print: {
+    reprintReceipt: 'print:reprintReceipt',
+    printPaymentReceipt: 'print:printPaymentReceipt',
+    printCustomerStatement: 'print:printCustomerStatement',
+  },
   invoice: { printSaleInvoice: 'invoice:printSaleInvoice' },
   system: { ping: 'system:ping' },
 } as const;

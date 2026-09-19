@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dialog, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
+import { ImportCustomerBalanceInput } from '@shop/contracts';
 import {
   CUSTOMER_BALANCE_COLUMNS,
   formatCustomerBalanceImportReport,
@@ -8,7 +8,6 @@ import {
 } from '@shop/core';
 import { createKyselyDb, KyselyImportRepository, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
-import { withError } from '../middleware/with-error.js';
 import { writeReportDual } from './report-writer.js';
 
 export interface CustomerBalanceImportHandlerDeps {
@@ -26,21 +25,26 @@ export interface CustomerBalanceImportResult {
   readonly skipped: number;
 }
 
-async function runCustomerBalanceImport(
+/**
+ * CL-10. Option B conversion (Suppliers redesign session precedent): the
+ * renderer reads the CSV file via the browser File API and sends content
+ * directly — no native file-picker dialog or main-process file read.
+ * Matches runSupplierBalanceImport exactly.
+ */
+export async function runCustomerBalanceImport(
   deps: CustomerBalanceImportHandlerDeps,
-  filePath: string,
+  balancesCsv: string,
   commit: boolean,
 ): Promise<CustomerBalanceImportResult> {
   const db = openDatabase(deps.dbPath);
   try {
     const repo = new KyselyImportRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
 
-    const csvText = readFileSync(filePath, 'utf8');
-    const { rows } = parseCsv(csvText, CUSTOMER_BALANCE_COLUMNS);
+    const { rows } = parseCsv(balancesCsv, CUSTOMER_BALANCE_COLUMNS);
     const lookups = await repo.getCustomerBalanceLookups();
     const results = validateCustomerBalanceRows(rows, lookups);
     const reportPaths = writeReportDual(
-      filePath,
+      null,
       deps.logDir,
       formatCustomerBalanceImportReport(results),
       'customer-balances',
@@ -63,35 +67,15 @@ async function runCustomerBalanceImport(
   }
 }
 
-async function pickFileAndRun(
-  deps: CustomerBalanceImportHandlerDeps,
-  commit: boolean,
-): Promise<CustomerBalanceImportResult | null> {
-  const picked = await dialog.showOpenDialog({
-    title: 'Select the Customer Opening Balance CSV',
-    properties: ['openFile'],
-    filters: [{ name: 'CSV', extensions: ['csv'] }],
-  });
-  if (picked.canceled || picked.filePaths.length === 0) return null;
-
-  const [filePath] = picked.filePaths;
-  if (!filePath) return null;
-  return runCustomerBalanceImport(deps, filePath, commit);
-}
-
 export function registerCustomerBalanceImportHandlers(
   deps: CustomerBalanceImportHandlerDeps,
 ): void {
-  // No Zod validation here — these channels take no renderer-supplied
-  // argument at all; the file path comes from a native OS dialog, same
-  // as item.handler.ts's and supplier-balance-import.handler.ts's
-  // pre-existing dryRun/commit channels.
-  ipcMain.handle(
-    channels.importData.customerBalanceDryRun,
-    withError(() => pickFileAndRun(deps, false)),
-  );
-  ipcMain.handle(
-    channels.importData.customerBalanceCommit,
-    withError(() => pickFileAndRun(deps, true)),
-  );
+  ipcMain.handle(channels.importData.customerBalanceDryRun, (_event, raw: unknown) => {
+    const input = ImportCustomerBalanceInput.parse(raw);
+    return runCustomerBalanceImport(deps, input.balancesCsv, false);
+  });
+  ipcMain.handle(channels.importData.customerBalanceCommit, (_event, raw: unknown) => {
+    const input = ImportCustomerBalanceInput.parse(raw);
+    return runCustomerBalanceImport(deps, input.balancesCsv, true);
+  });
 }

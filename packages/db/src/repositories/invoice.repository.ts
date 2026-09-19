@@ -140,3 +140,17 @@ export async function getSaleInvoiceData(
     technicianName,
   };
 }
+
+/**
+ * CL-4. SaleSummaryDto (sale:listByDate) carries no line items, so
+ * SaleInvoiceModal needs its own read — composes getSaleInvoiceData
+ * rather than re-querying, same InvoiceData shape returned to the IPC
+ * layer under a name that reflects its read-only, non-printing use.
+ */
+export async function getSaleWithLinesData(
+  db: Kysely<Database>,
+  tenantId: string,
+  saleId: string,
+): Promise<InvoiceData | null> {
+  return getSaleInvoiceData(db, tenantId, saleId);
+}

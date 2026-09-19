@@ -81,3 +81,36 @@ export const SaleSummaryDto = z.object({
   status: z.string(),
 });
 export type SaleSummaryDto = z.infer<typeof SaleSummaryDto>;
+
+/** CL-4. SaleInvoiceModal's read — SaleSummaryDto carries no line items. */
+export const SaleWithLinesInput = z.object({
+  id: z.string().uuid(),
+});
+export type SaleWithLinesInput = z.infer<typeof SaleWithLinesInput>;
+
+export const SaleWithLinesLineDto = z.object({
+  itemName: z.string(),
+  quantityMilli: z.number().int(),
+  unitName: z.string(),
+  unitPricePaisa: z.number().int(),
+  lineTotalPaisa: z.number().int(),
+  lineKind: z.string(),
+  businessUnitName: z.string().nullable(),
+});
+export type SaleWithLinesLineDto = z.infer<typeof SaleWithLinesLineDto>;
+
+export const SaleWithLinesDto = z.object({
+  docNo: z.string(),
+  saleDate: z.string(),
+  customerName: z.string().nullable(),
+  customerPhone: z.string().nullable(),
+  customerAddress: z.string().nullable(),
+  lines: z.array(SaleWithLinesLineDto),
+  totalAmountPaisa: z.number().int(),
+  paidAmountPaisa: z.number().int(),
+  balanceDuePaisa: z.number().int(),
+  jobDocNo: z.string().nullable(),
+  reportedFault: z.string().nullable(),
+  technicianName: z.string().nullable(),
+});
+export type SaleWithLinesDto = z.infer<typeof SaleWithLinesDto>;

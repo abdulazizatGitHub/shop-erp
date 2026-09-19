@@ -79,6 +79,7 @@ beforeEach(async () => {
     name: 'Ahmad',
     shopName: null,
     phone: null,
+    address: null,
     customerType: 'retail',
     priceLevelId: null,
     creditLimitPaisa: null,

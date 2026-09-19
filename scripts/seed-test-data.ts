@@ -278,6 +278,7 @@ async function main(): Promise<void> {
       name: 'Ahmad Electronics',
       shopName: null,
       phone: '0333-5556789',
+      address: null,
       customerType: 'retail',
       priceLevelId: null,
       creditLimitPaisa: null,

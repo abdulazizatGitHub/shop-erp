@@ -39,6 +39,25 @@ export interface ServiceChargeOption {
   readonly retailChargePaisa: number;
 }
 
+export interface PriceLevelOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** CL-9. AddCustomerModal's price-level dropdown. Plain reference read — no port/service. */
+export async function listPriceLevels(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<readonly PriceLevelOption[]> {
+  const rows = await db
+    .selectFrom('priceLevel')
+    .select(['id', 'name'])
+    .where('tenantId', '=', tenantId)
+    .orderBy('sortOrder')
+    .execute();
+  return rows;
+}
+
 /**
  * Plain reference-data reads — no business logic, so these skip the
  * core port/service pattern used for item writes. Not a precedent for

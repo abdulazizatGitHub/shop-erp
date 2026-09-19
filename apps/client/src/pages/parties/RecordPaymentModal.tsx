@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
 import type { CreatePaymentInput, PaymentDto } from '@shop/contracts';
 import { Money } from '@shop/shared';
-import { Alert, Button, Modal, MoneyDisplay, Select, TextInput } from '@shop/ui';
+import { Alert, Button, Modal, MoneyDisplay, TextInput, useToast } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { PaymentMethodToggle } from './PaymentMethodToggle.js';
+import { PaymentRecordedView } from './PaymentRecordedView.js';
 
 type PaymentMethod = CreatePaymentInput['method'];
-
-const PAYMENT_METHODS: ReadonlyArray<{ readonly value: PaymentMethod; readonly label: string }> = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'bank', label: 'Bank Transfer' },
-  { value: 'easypaisa', label: 'Easypaisa' },
-  { value: 'jazzcash', label: 'JazzCash' },
-  { value: 'cheque', label: 'Cheque' },
-];
 
 interface FormState {
   readonly amount: string;
@@ -51,9 +46,14 @@ export interface RecordPaymentModalProps {
  * (handler, preload, contract) but had zero call sites in the client.
  * This is the first one. Structural pattern copied from AddSupplierModal.tsx
  * (open/onClose/onX props, reset-on-open, blankToNull, try/catch submit).
- * No customer search here — the caller (CustomerListView) already knows
- * which row triggered this, so partyId/customerName/currentBalancePaisa
+ * No customer search here — the caller (CustomerDetailPage) already knows
+ * which customer triggered this, so partyId/customerName/currentBalancePaisa
  * arrive as props instead of being re-looked-up.
+ *
+ * CL-7F: on success, shows a success state with the doc number and a
+ * "Print receipt" button rather than closing immediately — the caller's
+ * onPaid is still called (to refresh balance/ledger) but does not close
+ * the modal; only the "Done" button (via onClose) does.
  */
 export function RecordPaymentModal({
   open,
@@ -63,15 +63,18 @@ export function RecordPaymentModal({
   currentBalancePaisa,
   onPaid,
 }: RecordPaymentModalProps): React.JSX.Element | null {
+  const { showToast } = useToast();
   const [form, setForm] = useState<FormState>(emptyForm());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [successResult, setSuccessResult] = useState<PaymentDto | null>(null);
 
   useEffect(() => {
     if (open) {
       setForm(emptyForm());
       setError(null);
       setBusy(false);
+      setSuccessResult(null);
     }
   }, [open]);
 
@@ -111,6 +114,7 @@ export function RecordPaymentModal({
     try {
       const result = await ipc.payment.receive(input);
       setBusy(false);
+      setSuccessResult(result);
       onPaid(result);
     } catch (err) {
       setBusy(false);
@@ -118,84 +122,144 @@ export function RecordPaymentModal({
     }
   }
 
+  if (successResult) {
+    return (
+      <PaymentRecordedView
+        open={open}
+        onClose={onClose}
+        successResult={successResult}
+        onPrintError={(message) => {
+          showToast({ variant: 'error', message });
+        }}
+      />
+    );
+  }
+
   return (
-    <Modal open={open} title="Record payment" onClose={onClose}>
+    <Modal open={open} title="Record payment" onClose={onClose} size="wide">
       <div className="flex flex-col gap-4">
         {error && <Alert variant="danger">{error}</Alert>}
 
-        <div className="rounded-md border border-line bg-surface-sunken px-3 py-2">
-          <p className="text-sm text-ink-muted">Customer</p>
-          <p className="text-base font-medium text-ink">{customerName}</p>
-          <p className="mt-2 text-sm text-ink-muted">Current balance</p>
-          <MoneyDisplay paisaValue={currentBalancePaisa} tone="due" />
+        {/* 5A — customer context, visually separated from the form fields below. */}
+        <div className="rounded-lg border border-line bg-surface-sunken px-4 py-3">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="mb-1 text-caption font-medium uppercase tracking-wide text-ink-muted">
+                Recording payment for
+              </p>
+              <p className="text-base font-medium text-ink">{customerName}</p>
+            </div>
+            <div className="text-right">
+              <p className="mb-1 text-caption font-medium uppercase tracking-wide text-ink-muted">
+                Current balance
+              </p>
+              <MoneyDisplay paisaValue={currentBalancePaisa} tone="due" size="xl" />
+              <p className="mt-0.5 text-caption text-ink-muted">Outstanding udhaar</p>
+            </div>
+          </div>
         </div>
 
-        <TextInput
-          label="Amount (Rs)"
-          variant="number"
-          autoFocus
-          required
-          value={form.amount}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, amount: e.target.value }));
-          }}
-        />
+        <div className="border-t border-line" />
 
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="Payment Method"
+        <div className="grid grid-cols-2 gap-6 mt-4">
+          <PaymentMethodToggle
             value={form.method}
-            onChange={(e) => {
-              setForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }));
+            onChange={(method) => {
+              setForm((prev) => ({ ...prev, method }));
             }}
-          >
-            {PAYMENT_METHODS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
+          />
 
-          <label className="flex flex-col gap-1 text-sm text-ink-muted">
-            Payment date
-            <input
-              type="date"
-              value={form.paymentDate}
+          <div className="space-y-4">
+            {/* 5B — amount with an Rs prefix, plus a pay-full-balance quick-fill. */}
+            <div>
+              <label
+                className="mb-1.5 block text-sm font-medium text-ink-muted"
+                htmlFor="payment-amount"
+              >
+                Amount received *
+              </label>
+              <div className="flex items-center overflow-hidden rounded-md border border-line focus-within:border-brand focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-focus">
+                <span className="select-none border-r border-line bg-surface-sunken px-3 py-2 text-sm font-medium text-ink-muted">
+                  Rs
+                </span>
+                <input
+                  id="payment-amount"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="0"
+                  autoFocus
+                  value={form.amount}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, amount: e.target.value }));
+                  }}
+                  className="flex-1 bg-transparent px-3 py-2 text-base font-medium text-ink outline-none"
+                />
+              </div>
+              {currentBalancePaisa > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm((prev) => ({
+                      ...prev,
+                      amount: String(Math.round(currentBalancePaisa / 100)),
+                    }));
+                  }}
+                  className="mt-1.5 text-xs text-brand hover:underline"
+                >
+                  Pay full balance (Rs {Math.round(currentBalancePaisa / 100).toLocaleString()})
+                </button>
+              )}
+            </div>
+
+            <label className="flex flex-col gap-1 text-sm text-ink-muted">
+              Payment date
+              <input
+                type="date"
+                value={form.paymentDate}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, paymentDate: e.target.value }));
+                }}
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
+              />
+            </label>
+
+            <TextInput
+              label="Reference No. (optional)"
+              value={form.referenceNo}
               onChange={(e) => {
-                setForm((prev) => ({ ...prev, paymentDate: e.target.value }));
+                setForm((prev) => ({ ...prev, referenceNo: e.target.value }));
               }}
-              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-ink focus:border-brand focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-focus"
             />
-          </label>
+            <TextInput
+              label="Notes (optional)"
+              value={form.notes}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, notes: e.target.value }));
+              }}
+            />
+          </div>
         </div>
-
-        <TextInput
-          label="Reference No. (optional)"
-          value={form.referenceNo}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, referenceNo: e.target.value }));
-          }}
-        />
-        <TextInput
-          label="Notes (optional)"
-          value={form.notes}
-          onChange={(e) => {
-            setForm((prev) => ({ ...prev, notes: e.target.value }));
-          }}
-        />
 
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md px-4 py-2 text-sm font-medium text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+          >
             Cancel
-          </Button>
+          </button>
           <Button
             variant="primary"
+            size="large"
             disabled={busy}
             onClick={() => {
               void handleSubmit();
             }}
           >
-            {busy ? 'Saving…' : 'Save'}
+            <Check size={16} aria-hidden="true" />
+            {busy ? 'Saving…' : 'Save payment'}
           </Button>
         </div>
       </div>

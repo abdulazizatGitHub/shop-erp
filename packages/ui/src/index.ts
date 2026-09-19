@@ -54,3 +54,12 @@ export { PageHeader } from './patterns/PageHeader.js';
 export type { PageHeaderProps } from './patterns/PageHeader.js';
 export { ImportModal } from './patterns/ImportModal.js';
 export type { ImportModalProps } from './patterns/ImportModal.js';
+
+export { DocumentHeader } from './patterns/DocumentHeader.js';
+export type { DocumentHeaderProps, DocumentLayout } from './patterns/DocumentHeader.js';
+export { DocumentFooter } from './patterns/DocumentFooter.js';
+export type { DocumentFooterProps } from './patterns/DocumentFooter.js';
+export { DocumentSection } from './patterns/DocumentSection.js';
+export type { DocumentSectionProps, DocumentSectionLayout } from './patterns/DocumentSection.js';
+export { ShopIdentityContext, useShopIdentity } from './patterns/ShopIdentityContext.js';
+export type { ShopIdentityValue } from './patterns/ShopIdentityContext.js';

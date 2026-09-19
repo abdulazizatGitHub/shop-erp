@@ -9,7 +9,7 @@ import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
 import { KyselyItemRepository } from './item.repository.js';
-import { getItemPrices } from './lookup.repository.js';
+import { getItemPrices, listPriceLevels } from './lookup.repository.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../migrations');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -62,6 +62,26 @@ beforeEach(async () => {
 afterEach(() => {
   rawDb.close();
   rmSync(workDir, { recursive: true, force: true });
+});
+
+describe('listPriceLevels (CL-9)', () => {
+  it('returns the seeded Retail level plus a manually-added Wholesale level', async () => {
+    const wholesaleLevelId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO price_level (id, tenant_id, name, is_default, margin_bp, sort_order)
+         VALUES (?, ?, 'Wholesale', 0, NULL, 1)`,
+      )
+      .run(wholesaleLevelId, TENANT_ID);
+
+    const kysely = createKyselyDb(rawDb);
+    const result = await listPriceLevels(kysely, TENANT_ID);
+
+    expect(result).toEqual([
+      { id: retailLevelId, name: 'Retail' },
+      { id: wholesaleLevelId, name: 'Wholesale' },
+    ]);
+  });
 });
 
 describe('getItemPrices', () => {

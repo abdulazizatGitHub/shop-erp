@@ -41,6 +41,453 @@
 
 ---
 
+## [2026-09-20] Session 70 — Phase 13 CLOSE-OUT: verified, tested, marked COMPLETE
+
+**Goal:** Close out Phase 13 for real — full suite green, fill the test
+gaps found in the Session 68/69 work, and mark the phase COMPLETE now that
+the owner has visually confirmed everything on the shop machine.
+
+**Done:**
+
+- **Fixed a red baseline before doing anything else** (same root cause as
+  Session 68): `npm run verify` failed 307/598 tests, every repository
+  test's `afterEach` throwing `TypeError: Cannot read properties of
+undefined (reading 'close')` — the `better-sqlite3` native binary was
+  stale for the current Node ABI again. `npm rebuild better-sqlite3`
+  itself failed first with `EBUSY`/`EPERM` — four leftover `electron.exe`
+  processes (from the shop-machine visual-verification session) held the
+  `.node` file open. Owner approved killing them
+  (`taskkill /F /IM electron.exe`); rebuild then succeeded with no source
+  changes. Re-ran: 598/598, exit 0.
+- **Fixed 4 pre-existing lint errors** in `LedgerExportMenu.tsx` (added
+  Session 69, never run through `npm run verify` before this session):
+  three `@typescript-eslint/restrict-template-expressions` errors from
+  interpolating `Date` getters directly into template literals (wrapped
+  in `String(...)`), and one `no-restricted-syntax` hit — a local variable
+  named exactly `balance` (ADR-0003's naming rule matches on
+  `price|amount|total|cost|balance|subtotal` regardless of whether the
+  value is actually paisa; this one was an already-converted rupee
+  string, so renamed to `runningBalanceRupees` rather than adding a fake
+  `Paisa` suffix to a non-paisa value).
+- **Wrote 4 new repository tests**, after first auditing existing
+  coverage to avoid duplicating what already exists (see
+  `docs/phases/PHASE_13.md` §9 for the full audit trail):
+  - `party.repository.test.ts` — 11-digit phone saves + is searchable;
+    10-digit phone also saves (confirms the UI's 11-digit rule is not
+    enforced at the repository level); `address` round-trips through
+    `createCustomer`/`getCustomerById` with both a real value and `null`.
+  - `customer-ledger.repository.test.ts` — one sale row + one payment row
+    both return from `getCustomerLedger`, and `sourceType` correctly
+    separates them (the data shape the UI's filter chips depend on).
+  - Did **not** duplicate: `customer-statement.repository.test.ts`
+    already covers opening/closing balance arithmetic with hand-calculated
+    comments; the import handler's "mismatched customer name rejected,
+    not silently skipped" behavior is already covered at both the core
+    (`customer-balance-import.test.ts`) and handler
+    (`customer-balance-import.handler.test.ts`) layers — both re-confirmed
+    passing.
+  - Final count: **602/602**, `npm run verify` exit 0.
+- **Marked Phase 13 COMPLETE**, now that the owner has visually confirmed
+  the app on the shop machine: `docs/phases/PHASE_13.md`'s status line,
+  all seven §7 exit-criteria checkboxes (the original six plus a new one
+  for the polish series), and §9 all updated with the 2026-09-20
+  confirmation date. `PROJECT.md`'s Phase 13 row updated to ✅ COMPLETE,
+  last-updated date bumped, and a new `DEBT-5` entry added to §4 Known
+  Bugs as a line-count watch list for `RecordPaymentModal.tsx` (268
+  lines, one extraction already done) and `LedgerExportMenu.tsx` (194
+  lines, new and single-purpose).
+
+**All files changed across the entire phase (Session 68 build + Session 69
+polish series + this close-out session):**
+
+_New files:_
+`packages/core/src/shop/shop-identity.ts`,
+`packages/db/src/repositories/shop-identity.repository.ts` (+`.test.ts`),
+`packages/db/src/repositories/customer-ledger.repository.ts` (+`.test.ts`),
+`packages/db/src/repositories/customer-statement.repository.test.ts`,
+`packages/core/src/printing/payment-receipt-layout.ts` (+`.test.ts`),
+`packages/core/src/printing/customer-statement-layout.ts`,
+`packages/ui/src/patterns/DocumentHeader.tsx`,
+`packages/ui/src/patterns/DocumentFooter.tsx`,
+`packages/ui/src/patterns/DocumentSection.tsx`,
+`packages/ui/src/patterns/ShopIdentityContext.ts`,
+`apps/client/src/context/ShopIdentityContext.tsx`,
+`apps/client/src/pages/parties/CustomerDetailPage.tsx`,
+`apps/client/src/pages/parties/CustomerStatCards.tsx`,
+`apps/client/src/pages/parties/CustomerLedgerTable.tsx`,
+`apps/client/src/pages/parties/SaleInvoiceModal.tsx`,
+`apps/client/src/pages/parties/PaymentReceiptModal.tsx`,
+`apps/client/src/pages/parties/CustomerStatementModal.tsx`,
+`apps/client/src/pages/parties/AddCustomerModal.tsx`,
+`apps/client/src/pages/parties/ImportCustomerBalanceInstructions.tsx`,
+`apps/client/src/pages/parties/useImportCustomerBalanceFlow.ts`,
+`apps/server/src/printing/payment-receipt-pdf.ts` (+`-file.ts`,
+`print-payment-receipt.ts`, `print-payment-receipt-safely.ts`),
+`apps/server/src/printing/customer-statement-pdf.ts` (+`-file.ts`,
+`print-customer-statement.ts`, `print-customer-statement-safely.ts`),
+`apps/server/src/ipc/handlers/customer-balance-import.handler.test.ts`,
+`apps/client/src/pages/parties/BalanceSparkline.tsx` (Session 69: content
+replaced, `BalanceSummary`), `apps/client/src/pages/parties/
+PaymentMethodToggle.tsx`, `apps/client/src/pages/parties/
+LedgerExportMenu.tsx`, `apps/client/src/pages/parties/
+ledger-entry-descriptions.ts` (all three Session 69).
+
+_Modified files:_ `packages/core/src/index.ts`,
+`packages/contracts/src/{party/customer,payment/payment,sale/sale,
+setting/setting,index}.ts`, `packages/ui/src/index.ts`,
+`packages/ui/src/primitives/Table.tsx`, `packages/db/src/index.ts`,
+`packages/db/src/repositories/{receipt,invoice,lookup}.repository.ts`
+(+`.test.ts` each), `apps/server/src/ipc/channels.ts`,
+`apps/server/src/ipc/handlers/{customer,print,setting,payment,sale,
+customer-balance-import}.handler.ts`, `apps/server/src/preload.ts`,
+`apps/client/src/types/electron-api.d.ts`, `apps/client/src/app/App.tsx`,
+`apps/client/src/pages/parties/{CustomersPage,CustomerListView,
+RecordPaymentModal,ImportCustomersModal}.tsx`,
+`apps/client/src/pages/settings/ShopIdentityCard.tsx`,
+`packages/db/src/repositories/party.repository.test.ts` (this session:
++3 tests), `packages/db/src/repositories/customer-ledger.repository.test.ts`
+(this session: +1 test), `PROJECT.md`, `PROGRESS.md`,
+`docs/phases/PHASE_13.md`.
+
+**Verified:**
+
+```
+npm run verify
+```
+
+602/602 tests passing, 104/104 test files, exit 0. `npm run typecheck`
+and `npm run lint` (part of `verify`) both clean. Line counts re-checked:
+`RecordPaymentModal.tsx` 268, `CustomerLedgerTable.tsx` 209,
+`CustomerDetailPage.tsx` 192, `LedgerExportMenu.tsx` 194 — all ≤ 300.
+
+**Not done / deferred:** none new — the customer-list balance-tone
+divergence from Suppliers (flagged in Session 69) remains an open owner
+decision, not a defect; it did not block visual sign-off.
+
+**Bugs found:** none new. `DEBT-5` added (LOW, watch-list only — see
+PROJECT.md §4) — not a bug, a proactive flag for a future session.
+
+**Decisions taken:** none new.
+
+**Blocked on:** nothing — Phase 13 is closed.
+
+**Next session should:** Start whatever phase comes after 13. If it
+touches `RecordPaymentModal.tsx` or `LedgerExportMenu.tsx`, check
+`wc -l` first per `DEBT-5`.
+
+**Checklist:**
+
+- [x] All verification checks passed — `npm run verify` 602/602, exit 0
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (Phase 13 → COMPLETE)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — Phase 13 fully closed
+- [x] Any new bugs documented in PROJECT.md — DEBT-5 (watch-list, LOW)
+- [x] Test suite passing — 602/602, exit 0
+
+---
+
+## [2026-09-19] Session 69 — Phase 13 polish series: customer screens (renderer-only)
+
+**Goal:** A multi-turn, same-day follow-on to Session 68's Phase 13 build —
+targeted visual/UX polish across the customer screens (`AddCustomerModal`,
+`RecordPaymentModal`, `CustomerDetailPage`, `CustomerStatCards`,
+`CustomersPage`, `CustomerListView`, `CustomerLedgerTable`), plus a new
+client-side CSV ledger export. No new IPC, no schema migration, no new npm
+dependency, per every turn's own stated constraints.
+
+**Done:**
+
+- `AddCustomerModal.tsx` — phone field digit-only input constraint (11-digit
+  cap, `inputMode="numeric"`), submit-time length validation using the
+  file's existing single-`Alert` error pattern; Save/Cancel buttons rebuilt
+  to match `RecordPaymentModal.tsx` (`Check` icon + `size="large"` primary
+  Save; raw `text-danger` Cancel — `Button` has no ghost/`className` option).
+- `RecordPaymentModal.tsx` — payment-method buttons gained icons; modal
+  widened to `size="wide"` (`Modal`'s largest option — it has no
+  `className`/`maxWidth` prop); body iterated through several two-column
+  layouts across the session, settling on a full-width context block →
+  `grid grid-cols-2 gap-6 mt-4` (left: payment-method toggle only, right:
+  `space-y-4` amount/date/reference/notes) → full-width footer. Payment
+  method toggle extracted to new `PaymentMethodToggle.tsx` when the file
+  briefly hit 302 lines.
+- `BalanceSparkline.tsx` — inline-SVG trend chart replaced with a
+  `BalanceSummary` (30-day credit-given/received totals) component.
+- `CustomerStatCards.tsx` — swapped in `BalanceSummary`; later its `<Card>`
+  wrapper was swapped for a plain `<div>` with the same shadow-card classes
+  used by the Customers list/ledger table (`Card` has no `className`).
+- `CustomerDetailPage.tsx` — customer-info card added (gated on ≥2 non-null
+  optional fields), then removed entirely per a later instruction in favour
+  of a muted-text fields row under the header name/code chip; header gained
+  the shared shadow-card treatment; card-to-card spacing tightened twice
+  (`gap-6`→`gap-3`→`gap-2`); now passes a new `customerCode` prop through to
+  `CustomerLedgerTable` for the CSV export filename.
+- `CustomersPage.tsx` / `CustomerListView.tsx` — wrapped in the same
+  shadow-card `<div>` as `SuppliersPage.tsx`; header-cell style, row
+  `zebra`/`hover`, and code-chip badge copied verbatim from
+  `SupplierListView.tsx`. **Balance-tone colour logic was deliberately not
+  copied from Suppliers** — flagged to the owner in-session: Suppliers'
+  positive-is-green mapping would invert what a customer's outstanding
+  balance means everywhere else in this phase. Left as owner-decision.
+- `CustomerLedgerTable.tsx` — same shadow-card/header/row treatment; new
+  CSV export feature (see below); `DESCRIPTIONS` map extracted to new
+  `ledger-entry-descriptions.ts` to avoid a circular import.
+- **New `LedgerExportMenu.tsx`** — "Export CSV" button + a simple
+  state-toggle dropdown (no dropdown/popover primitive exists anywhere in
+  this codebase — confirmed by grep first), four options (all / this month
+  / last month / custom range), closes on outside click. Builds CSV
+  client-side from the already-fetched `rows` prop — money columns as
+  plain `(paisa / 100).toFixed(2)` rupee values (the one place outside
+  `MoneyDisplay` where dividing paisa by 100 is correct, since the target
+  is a file for external spreadsheet software, not the UI) — and triggers
+  download via `Blob`/`createObjectURL`/anchor-click.
+- **New `ledger-entry-descriptions.ts`** and **new `PaymentMethodToggle.tsx`**
+  — extractions described above.
+- `docs/phases/PHASE_13.md` — new §9 documenting this entire polish series
+  in detail; status line updated to note it, but **not** flipped to
+  COMPLETE (see below).
+
+**Verified:** `npm run typecheck` and `npm run build --workspace=@shop/client`
+both exit 0 after every one of this session's turns. Final line counts:
+`RecordPaymentModal.tsx` 268, `CustomerLedgerTable.tsx` 209,
+`CustomerDetailPage.tsx` 192, `CustomerStatCards.tsx` 75,
+`CustomerListView.tsx` 166, `CustomersPage.tsx` 94, `AddCustomerModal.tsx`
+211, `PaymentMethodToggle.tsx` 55, `LedgerExportMenu.tsx` 194,
+`ledger-entry-descriptions.ts` 7 — all ≤ 300. Full `npm run verify` was not
+re-run (no `packages/core`/`packages/db` file changed this session).
+
+**Not done / deferred:**
+
+- No visual confirmation of any change in a running window — this
+  environment has no display and no Playwright install. The CSV download,
+  the wider two-column payment modal, and the tightened card spacing all
+  still need a real click-through on the shop machine.
+- Phase 13 was **not** marked COMPLETE despite an explicit instruction to
+  do so this session — its own §7 exit criteria still list six unchecked
+  "Owner visual confirmation: PENDING" boxes (SaleInvoiceModal,
+  PaymentReceiptModal, CustomerStatementModal, AddCustomerModal, etc.) that
+  neither Session 68 nor this polish session could satisfy. Flipping the
+  status without that verification would be an unverified claim per
+  CLAUDE.md §6/§7 — flagged to the owner rather than done silently.
+- Customer-list balance-tone colours left unchanged from Suppliers'
+  mapping (see above) — owner decision needed if the literal copy is
+  still wanted despite the semantic conflict.
+
+**Bugs found:** none new. No pre-existing bug from PROJECT.md §4 was
+touched or fixed this session (out of scope — this was a polish-only
+session, per CLAUDE.md §8: bugs are documented, not fixed, outside a
+bug-fix phase).
+
+**Decisions taken:** none new — all deviations from literal turn
+instructions (Modal's fixed size enum, Button's fixed variant set, the
+balance-tone divergence) were engineering calls grounded in the existing
+component APIs and prior phase conventions, not new ADRs.
+
+**Blocked on:** owner visual sign-off on the running app (blocks marking
+Phase 13 COMPLETE); owner decision on whether to force the Suppliers-style
+balance-tone mapping onto the customer list despite the semantic conflict.
+
+**Next session should:** Before touching `RecordPaymentModal.tsx` again,
+check its line count first (268, one extraction already done this
+session) and extract another subcomponent proactively (e.g. the
+customer-context block or the amount-input group) rather than waiting to
+hit 300. Otherwise: get the owner to actually run the app and work through
+PHASE_13.md §7's six pending visual-confirmation boxes plus this session's
+five polish-series checks (CSV download opens correctly, modal is wider
+and two-column, cards are tighter) before either phase can close.
+
+**Checklist:**
+
+- [x] All verification checks passed (typecheck + build, every turn)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — visual sign-off still outstanding
+- [x] Any new bugs documented in PROJECT.md — none new to document
+- [ ] Test suite passing — `npm run verify` not re-run this session (no
+      `packages/core`/`packages/db` change); typecheck/build both green
+
+---
+
+## [2026-09-19] Session 68 — Phase 13: Customer Ledger, Invoice Modal, Payment Receipt, Customer Statement, Add Customer, Import Balances (CL-0a–CL-10, code-complete)
+
+**Goal:** Build all eleven Phase 13 tasks in the spec's mandated order
+(CL-0a → CL-10), verifying green after each, per `docs/phases/PHASE_13.md`.
+
+**Done:**
+
+- **Baseline fix (blocking, not part of Phase 13's own scope):**
+  `npm run verify` initially failed 281/569 tests, every repository
+  test's `afterEach` throwing `TypeError: Cannot read properties of
+undefined (reading 'close')`. Root cause: `better-sqlite3`'s native
+  binary was compiled for `NODE_MODULE_VERSION 130` but the running
+  Node needs `127` — a stale native build, not a code regression. Fixed
+  with `npm rebuild better-sqlite3` (no source files touched);
+  re-confirmed 569/569, exactly matching Phase 12's recorded close-out.
+- **CL-0a** — `ShopIdentity` type (`packages/core`), `getShopIdentity`/
+  `setShopIdentity` (`packages/db`, new `shop-identity.repository.ts`),
+  `setting:getShopIdentity`/`setting:setShopIdentity` IPC channels,
+  7-field `ShopIdentityCard.tsx` on the Settings page. Grepped
+  `receipt.repository.ts`/`invoice.repository.ts` for `shopName` reads
+  per the spec's own instruction — zero hits in either, so the
+  "refactor existing PDF generators" step was a no-op for the two files
+  named; `purchase-print.repository.ts` still reads `getShopName`
+  directly but is outside this phase's file list.
+- **CL-0b** — `DocumentHeader`/`DocumentFooter`/`DocumentSection` in
+  `packages/ui/src/patterns/`, exported straight from
+  `packages/ui/src/index.ts` (no `patterns/index.ts` barrel exists
+  anywhere in the real codebase — followed the established pattern
+  instead of the spec's assumption). `ShopIdentityContext`/
+  `useShopIdentity` live in `packages/ui` (data-only, no IPC);
+  `apps/client/src/context/ShopIdentityContext.tsx` is the one place
+  that calls IPC and feeds it — `packages/ui` may never import
+  app-layer code, which the spec's own design-decisions table (§6)
+  states but its file-location instruction contradicted.
+- **CL-1** — `getCustomerLedger` (new `customer-ledger.repository.ts` —
+  `party.repository.ts` was already 568 lines), a `sql` window-function
+  query (`SUM(...) OVER (PARTITION BY party_id ORDER BY entry_date,
+id)`), 5 tests including the running-balance case (50,000 +
+  (−20,000) = 30,000 paisa).
+- **CL-2** — `CustomerLedgerInput`/`CustomerLedgerRowDto`/
+  `CustomerStatementInput`/`PriceLevelDto`/`PriceLevelsDto` contracts.
+- **CL-3** — `customer:ledger` channel, handler in `customer.handler.ts`
+  (80 lines, under the 260-line extend-in-place threshold).
+- **CL-4** — confirmed REQUIRED (`SaleSummaryDto` has no lines array).
+  `getSaleWithLinesData` composes `getSaleInvoiceData` (no query
+  duplication); `sale:getWithLines` channel; 1 test, hand-calculated
+  total (400,000 + 100,000 = 500,000 paisa).
+- **CL-5** — `CustomerDetailPage.tsx` (stat cards + ledger table + back
+  nav), `CustomerStatCards.tsx`, `CustomerLedgerTable.tsx`.
+  `CustomerListView.tsx`'s per-row "Record Payment" button removed
+  (moved to the detail page header, per spec); row click now drills
+  into the detail page. `TableRow` (packages/ui) gained an optional
+  `onClick` prop — no table row was clickable anywhere in the app
+  before this phase.
+- **CL-6** — `SaleInvoiceModal.tsx`. Omits the discount line the spec
+  describes — `InvoiceData`/`getSaleInvoiceData` never carried
+  `discountPaisa` through from `sale.discount_amount`, and threading it
+  through would touch the shared print-layout types shared with the
+  existing PDF invoice. Logged as a gap, not built, to keep this
+  phase's blast radius proportionate.
+- **CL-7** — `getPaymentReceiptData` (extends `receipt.repository.ts`,
+  92→~170 lines, reuses `getCustomerLedger` so the receipt and the
+  ledger can never disagree on a balance), 3 tests (previous/remaining
+  balance hand-calculated: 30,000 − (−20,000) = 50,000 previous,
+  30,000 remaining). `buildPaymentReceiptLayout` (`packages/core`),
+  3 tests. `renderPaymentReceiptPdf`/`printPaymentReceiptSafely`
+  (reuse `renderReceiptPdf`'s pdfkit drawing, never duplicated).
+  `payment:getReceipt`/`print:printPaymentReceipt` channels.
+  `PaymentReceiptModal.tsx`. **`RecordPaymentModal` had no "success
+  state"** for CL-7F's Print-receipt button to attach to — it closed
+  immediately on success. Built one (doc number + Print receipt +
+  Done); `CustomerDetailPage`'s `onPaid` no longer auto-closes the
+  modal, only the new Done button does. Confirmed `PaymentDto` already
+  has `id` — no contract change needed there.
+- **CL-8** — `getCustomerStatementData` (extends
+  `customer-ledger.repository.ts`; extracted a private
+  `queryCustomerLedger` helper shared with `getCustomerLedger` so the
+  date-range filter doesn't duplicate the window-function query),
+  4 tests (opening/rows/closing/not-found; opening balance hand-calc
+  20,000+10,000=30,000, closing 30,000+5,000=35,000).
+  `buildCustomerStatementLayout` (`packages/core`, no tests per spec —
+  trivial mapping). `renderCustomerStatementPdf`/
+  `printCustomerStatementSafely`. `customer:statement`/
+  `print:printCustomerStatement` channels. `CustomerStatementModal.tsx`
+  (from/to date inputs only, no presets, per the spec's owner decision).
+- **CL-9** — `AddCustomerModal.tsx`. **`ItemLookups` has no
+  `priceLevels` field** and no channel anywhere exposed `price_level`
+  rows — the spec's own pseudocode (`lookups.priceLevels.find(...)`)
+  couldn't work as written. Flagged to the owner mid-session; owner
+  chose to add a real lookup rather than leave `priceLevelId` always
+  null: `listPriceLevels()` in `lookup.repository.ts` (plain reference
+  read, matches `listBusinessUnits`/`listUoms`'s existing pattern — no
+  port/service), `PriceLevelDto`/`PriceLevelsDto` contracts,
+  `party:listPriceLevels` channel (registered in `customer.handler.ts`
+  per the owner's explicit instruction), 1 test (seeded Retail +
+  manually-inserted Wholesale rows). `AddCustomerModal` has no "City /
+  area" field — `CreateCustomerInput` has no such field (only
+  `party.address`, with no write path yet at all, same pre-existing gap
+  `invoice.repository.test.ts` already notes) — omitted rather than
+  show a field that silently does nothing.
+- **CL-10** — Option B conversion:
+  `customer-balance-import.handler.ts` rewritten to accept
+  `{ balancesCsv }` from the renderer (no more
+  `dialog.showOpenDialog`/`readFileSync`), `ImportCustomerBalanceInput`
+  contract, new `useImportCustomerBalanceFlow.ts` hook and
+  `ImportCustomerBalanceInstructions.tsx` (both mirror the Suppliers
+  redesign session's exact pattern), `ImportCustomersModal.tsx`
+  rewritten to the same six-state file-picker shell as
+  `ImportSuppliersModal.tsx`. 7 new handler tests (accept/dry-run/
+  bad-header/unmatched-name + 3 Zod schema tests).
+
+**Verified:**
+
+- `npm run typecheck` — exit 0 (checked after CL-2, CL-4, and the full
+  build)
+- `npm run lint` — exit 0 (4 real errors found and fixed along the way:
+  a forbidden non-null assertion, a template-literal type restriction
+  hit twice, an unknown eslint rule name in a disable comment, and a
+  money-variable-naming violation on a formatted-string variable named
+  `balance`)
+- `npm run verify` — 598/598 tests, 104/104 files, exit 0 (baseline was
+  569; this session added 29 tests, target was a minimum of 22)
+- `npm run build --workspace=@shop/client` — exit 0
+- `npm run build --workspace=@shop/server` — exit 0 (dist/main,
+  dist/preload, dist/renderer all built)
+- `grep -n "showOpenDialog\|readFileSync"
+apps/server/src/ipc/handlers/customer-balance-import.handler.ts` —
+  empty (grep exit code 1)
+- `wc -l` on all 35 new/heavily-modified files — largest is
+  `lookup.repository.ts` at 251 lines and `RecordPaymentModal.tsx` at
+  242 lines, both under the 300-line cap
+
+**Not done / deferred:**
+
+- Owner visual confirmation of the six new/changed screens
+  (CustomerDetailPage, SaleInvoiceModal, PaymentReceiptModal,
+  RecordPaymentModal's new success state, CustomerStatementModal,
+  AddCustomerModal) in a running window — deliberately not attempted
+  this session. This project's own history (Sessions 47/48) shows
+  Electron GUI launches failing in sandboxed environments, and this
+  session's environment is Windows, not the Linux/xvfb target the
+  available run-skill's Electron example covers. Automated verification
+  (types, lint, 598 tests, both builds) is complete; the owner should
+  click through the six screens listed in `docs/phases/PHASE_13.md` §7
+  before treating this phase as fully closed.
+- `SaleInvoiceModal`'s discount line (spec describes it; not built —
+  see Done above).
+- `AddCustomerModal`'s "City / area" field (not built — see Done above).
+
+**Bugs found:** none new. (BUG-26 from Phase 12 remains open,
+unrelated.)
+
+**Decisions taken:** Owner approved adding `party:listPriceLevels` (a
+small, real lookup channel) instead of leaving `AddCustomerModal`'s
+price level always null, with an exact scope given (repository method,
+contracts, channel, one test, all proportionate) — see CL-9 above.
+
+**Blocked on:** nothing for the code itself. Owner visual sign-off is
+the only remaining exit-criteria item (see Not done / deferred).
+
+**Next session should:** Have the owner click through the six new/
+changed screens in a running window against `docs/phases/PHASE_13.md`
+§7's checklist, then mark Phase 13 fully CLOSED in `PROJECT.md`. If any
+visual issue is found, log it as a bug per CLAUDE.md §8 rather than
+fixing it in the same pass unless it blocks daily billing.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session's own changes
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — owner visual sign-off still
+      pending, so Phase 13 is not yet fully CLOSED
+- [x] Any new bugs documented in PROJECT.md — none new
+- [x] Test suite passing (`npm run verify` exit 0, 598/598)
+
+---
+
 ## [2026-09-14] Session 67 — Phase 12 close-out: 2 bug fixes before commit (sidebar auto-collapse, inactive report group tabs)
 
 **Goal:** Fix two bugs found during Phase 12 close-out testing, before

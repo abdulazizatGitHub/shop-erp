@@ -16,6 +16,11 @@ export const CreatePaymentInput = z.object({
 });
 export type CreatePaymentInput = z.infer<typeof CreatePaymentInput>;
 
+export const PaymentIdInput = z.object({
+  paymentId: z.string().uuid(),
+});
+export type PaymentIdInput = z.infer<typeof PaymentIdInput>;
+
 export const PaymentDto = z.object({
   id: z.string().uuid(),
   docNo: z.string(),
@@ -26,3 +31,28 @@ export const PaymentDto = z.object({
   paymentDate: z.string(),
 });
 export type PaymentDto = z.infer<typeof PaymentDto>;
+
+/** CL-7. payment:getReceipt / print:printPaymentReceipt. */
+export const PaymentReceiptDataDto = z.object({
+  docNo: z.string(),
+  paymentDate: z.string(),
+  amountPaisa: z.number().int(),
+  method: z.string(),
+  referenceNo: z.string().nullable(),
+  notes: z.string().nullable(),
+  customerName: z.string(),
+  customerCode: z.string(),
+  customerPhone: z.string().nullable(),
+  shopIdentity: z.object({
+    shopName: z.string(),
+    shopPhone: z.string().nullable(),
+    shopAddress: z.string().nullable(),
+    shopEmail: z.string().nullable(),
+    invoiceHeaderText: z.string().nullable(),
+    invoiceFooterText: z.string().nullable(),
+    statementFooterText: z.string().nullable(),
+  }),
+  previousBalancePaisa: z.number().int(),
+  remainingBalancePaisa: z.number().int(),
+});
+export type PaymentReceiptDataDto = z.infer<typeof PaymentReceiptDataDto>;

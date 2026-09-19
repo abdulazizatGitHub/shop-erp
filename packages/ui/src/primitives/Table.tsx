@@ -30,16 +30,24 @@ export interface TableRowProps {
   /** Row hover tint. 'accent' (default) matches every existing caller; 'neutral' is for
    *  screens that don't want a brand-colored hover (e.g. a plain management table). */
   readonly hover?: 'accent' | 'neutral';
+  /** Row click — e.g. drilling into a detail page. Adds a pointer cursor when present. */
+  readonly onClick?: (() => void) | undefined;
 }
 
 export function TableRow({
   children,
   zebra = true,
   hover = 'accent',
+  onClick,
 }: TableRowProps): React.JSX.Element {
   const zebraClass = zebra ? 'even:bg-surface-sunken' : '';
   const hoverClass = hover === 'accent' ? 'hover:bg-brand-subtle' : 'hover:bg-surface-page';
-  return <tr className={`${zebraClass} ${hoverClass}`}>{children}</tr>;
+  const clickableClass = onClick ? 'cursor-pointer' : '';
+  return (
+    <tr className={`${zebraClass} ${hoverClass} ${clickableClass}`} onClick={onClick}>
+      {children}
+    </tr>
+  );
 }
 
 export function TableHeaderCell({

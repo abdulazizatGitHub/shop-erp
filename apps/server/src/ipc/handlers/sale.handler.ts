@@ -4,13 +4,16 @@ import {
   CreateSaleInput,
   SaleIdInput,
   SaleSearchInput,
+  SaleWithLinesInput,
   type SaleSummaryDto,
+  type SaleWithLinesDto,
 } from '@shop/contracts';
 import type { SaleRecord } from '@shop/core';
 import {
   createKyselyDb,
   getReceiptPaperSize,
   getSaleReceiptData,
+  getSaleWithLinesData,
   getShopName,
   KyselySaleRepository,
   openDatabase,
@@ -101,6 +104,20 @@ export function registerSaleHandlers(deps: SaleHandlerDeps): void {
       try {
         const repo = new KyselySaleRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
         return await repo.listSalesByDate(input);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.sale.getWithLines,
+    withError(async (_event, raw: unknown): Promise<SaleWithLinesDto | null> => {
+      const input = SaleWithLinesInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const data = await getSaleWithLinesData(createKyselyDb(db), deps.tenantId, input.id);
+        return data === null ? null : { ...data, lines: [...data.lines] };
       } finally {
         db.close();
       }

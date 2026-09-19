@@ -55,3 +55,26 @@ export const DiscountConfigDto = z.object({
   pctPresets: z.array(z.number().nonnegative().max(100)),
 });
 export type DiscountConfigDto = z.infer<typeof DiscountConfigDto>;
+
+/** CL-0a. Single source of truth for every printed document's shop header/footer. */
+export const ShopIdentityDto = z.object({
+  shopName: z.string(),
+  shopPhone: z.string().nullable(),
+  shopAddress: z.string().nullable(),
+  shopEmail: z.string().nullable(),
+  invoiceHeaderText: z.string().nullable(),
+  invoiceFooterText: z.string().nullable(),
+  statementFooterText: z.string().nullable(),
+});
+export type ShopIdentityDto = z.infer<typeof ShopIdentityDto>;
+
+export const SetShopIdentityInput = z.object({
+  shopName: z.string().trim().min(1),
+  shopPhone: z.string().trim().min(1).nullable(),
+  shopAddress: z.string().trim().min(1).nullable(),
+  shopEmail: z.string().trim().min(1).nullable(),
+  invoiceHeaderText: z.string().trim().min(1).nullable(),
+  invoiceFooterText: z.string().trim().min(1).nullable(),
+  statementFooterText: z.string().trim().min(1).nullable(),
+});
+export type SetShopIdentityInput = z.infer<typeof SetShopIdentityInput>;

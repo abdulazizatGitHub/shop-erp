@@ -8,7 +8,9 @@ import {
   SetDiscountPkrEnabledInput,
   SetDiscountPkrPresetsInput,
   SetReceiptPaperSizeInput,
+  SetShopIdentityInput,
   SetShopNameInput,
+  type ShopIdentityDto,
 } from '@shop/contracts';
 import {
   createKyselyDb,
@@ -19,6 +21,7 @@ import {
   getDiscountPkrEnabled,
   getDiscountPkrPresets,
   getReceiptPaperSize,
+  getShopIdentity,
   getShopName,
   openDatabase,
   setDiscountApplyWalkin,
@@ -28,6 +31,7 @@ import {
   setDiscountPkrEnabled,
   setDiscountPkrPresets,
   setReceiptPaperSize,
+  setShopIdentity,
   setShopName,
   type ReceiptPaperSize,
 } from '@shop/db';
@@ -257,6 +261,31 @@ export function registerSettingHandlers(deps: SettingHandlerDeps): void {
           pctEnabled,
           pctPresets,
         });
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.setting.getShopIdentity,
+    withError(async (): Promise<ShopIdentityDto> => {
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getShopIdentity(createKyselyDb(db), deps.tenantId);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.setting.setShopIdentity,
+    withError(async (_event, raw: unknown): Promise<void> => {
+      const input = SetShopIdentityInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        await setShopIdentity(createKyselyDb(db), deps.tenantId, input);
       } finally {
         db.close();
       }

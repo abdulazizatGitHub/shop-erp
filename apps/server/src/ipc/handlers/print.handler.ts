@@ -1,7 +1,9 @@
 import { ipcMain } from 'electron';
-import { SaleIdInput } from '@shop/contracts';
+import { CustomerStatementInput, PaymentIdInput, SaleIdInput } from '@shop/contracts';
 import {
   createKyselyDb,
+  getCustomerStatementData,
+  getPaymentReceiptData,
   getReceiptPaperSize,
   getSaleReceiptData,
   getShopName,
@@ -13,6 +15,18 @@ import { printReceiptForSale, type PrintReceiptResult } from '../../printing/pri
 import { printFile } from '../../printing/print-file.js';
 import { renderReceiptPdf } from '../../printing/receipt-pdf.js';
 import { saveReceiptToTempFile } from '../../printing/receipt-file.js';
+import { renderPaymentReceiptPdf } from '../../printing/payment-receipt-pdf.js';
+import { savePaymentReceiptToTempFile } from '../../printing/payment-receipt-file.js';
+import {
+  printPaymentReceiptSafely,
+  type PaymentReceiptPrintOutcome,
+} from '../../printing/print-payment-receipt-safely.js';
+import { renderCustomerStatementPdf } from '../../printing/customer-statement-pdf.js';
+import { saveCustomerStatementToTempFile } from '../../printing/customer-statement-file.js';
+import {
+  printCustomerStatementSafely,
+  type CustomerStatementPrintOutcome,
+} from '../../printing/print-customer-statement-safely.js';
 
 export interface PrintHandlerDeps {
   readonly dbPath: string;
@@ -42,6 +56,45 @@ export function registerPrintHandlers(deps: PrintHandlerDeps): void {
           getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId),
           renderPdf: renderReceiptPdf,
           saveFile: saveReceiptToTempFile,
+          print: printFile,
+        });
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.print.printPaymentReceipt,
+    withError(async (_event, raw: unknown): Promise<PaymentReceiptPrintOutcome> => {
+      const input = PaymentIdInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const kysely = createKyselyDb(db);
+        return await printPaymentReceiptSafely(input.paymentId, {
+          getReceiptData: (id) => getPaymentReceiptData(kysely, deps.tenantId, id),
+          renderPdf: renderPaymentReceiptPdf,
+          saveFile: savePaymentReceiptToTempFile,
+          print: printFile,
+        });
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.print.printCustomerStatement,
+    withError(async (_event, raw: unknown): Promise<CustomerStatementPrintOutcome> => {
+      const input = CustomerStatementInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const kysely = createKyselyDb(db);
+        return await printCustomerStatementSafely(input.customerId, input.fromDate, input.toDate, {
+          getStatementData: (customerId, fromDate, toDate) =>
+            getCustomerStatementData(kysely, deps.tenantId, customerId, fromDate, toDate),
+          renderPdf: renderCustomerStatementPdf,
+          saveFile: saveCustomerStatementToTempFile,
           print: printFile,
         });
       } finally {

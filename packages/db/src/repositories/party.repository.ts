@@ -62,6 +62,7 @@ const CUSTOMER_COLUMNS = [
   'party.name',
   'party.shopName',
   'party.phone',
+  'party.address',
   'party.customerType',
   'party.priceLevelId',
   'party.creditLimit',
@@ -257,6 +258,7 @@ export class KyselyPartyRepository implements PartyRepositoryPort {
             name: input.name,
             shopName: input.shopName,
             phone: input.phone,
+            address: input.address,
             cityArea: null,
             paymentTerms: null,
             customerType: input.customerType,
@@ -487,6 +489,7 @@ function toCustomerRecord(row: {
   name: string;
   shopName: string | null;
   phone: string | null;
+  address: string | null;
   customerType: string | null;
   priceLevelId: string | null;
   creditLimit: number | null;
@@ -498,6 +501,7 @@ function toCustomerRecord(row: {
     name: row.name,
     shopName: row.shopName,
     phone: row.phone,
+    address: row.address,
     customerType: row.customerType as CustomerRecord['customerType'],
     priceLevelId: row.priceLevelId,
     creditLimitPaisa: row.creditLimit,

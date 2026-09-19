@@ -234,6 +234,7 @@ describe('customer opening balance import against the real DB', () => {
       name: 'Ali Traders',
       shopName: null,
       phone: '0300-1234567',
+      address: null,
       customerType: 'retail',
       priceLevelId: null,
       creditLimitPaisa: null,

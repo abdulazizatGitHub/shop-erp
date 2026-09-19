@@ -19,6 +19,13 @@ export {
   CustomerIdInput,
   CustomerDto,
   CustomerBalanceDto,
+  CustomerLedgerInput,
+  CustomerLedgerRowDto,
+  CustomerStatementInput,
+  CustomerStatementDto,
+  PriceLevelDto,
+  PriceLevelsDto,
+  ImportCustomerBalanceInput,
 } from './party/customer.js';
 
 export {
@@ -66,9 +73,17 @@ export {
   SaleIdInput,
   SaleSearchInput,
   SaleSummaryDto,
+  SaleWithLinesInput,
+  SaleWithLinesDto,
+  SaleWithLinesLineDto,
 } from './sale/sale.js';
 
-export { CreatePaymentInput, PaymentDto } from './payment/payment.js';
+export {
+  CreatePaymentInput,
+  PaymentDto,
+  PaymentIdInput,
+  PaymentReceiptDataDto,
+} from './payment/payment.js';
 
 export {
   JobStatus,
@@ -141,6 +156,8 @@ export {
   SetDiscountPkrPresetsInput,
   SetDiscountPctPresetsInput,
   DiscountConfigDto,
+  ShopIdentityDto,
+  SetShopIdentityInput,
 } from './setting/setting.js';
 
 export {

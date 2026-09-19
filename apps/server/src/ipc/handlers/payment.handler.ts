@@ -1,6 +1,16 @@
 import { ipcMain } from 'electron';
-import { CreatePaymentInput, type PaymentDto } from '@shop/contracts';
-import { createKyselyDb, KyselyPaymentRepository, openDatabase } from '@shop/db';
+import {
+  CreatePaymentInput,
+  PaymentIdInput,
+  type PaymentDto,
+  type PaymentReceiptDataDto,
+} from '@shop/contracts';
+import {
+  createKyselyDb,
+  getPaymentReceiptData,
+  KyselyPaymentRepository,
+  openDatabase,
+} from '@shop/db';
 import { channels } from '../channels.js';
 import { withError } from '../middleware/with-error.js';
 
@@ -24,6 +34,19 @@ export function registerPaymentHandlers(deps: PaymentHandlerDeps): void {
           deps.deviceCode,
         );
         return await repo.createPayment(input);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.payment.getReceipt,
+    withError(async (_event, raw: unknown): Promise<PaymentReceiptDataDto | null> => {
+      const input = PaymentIdInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        return await getPaymentReceiptData(createKyselyDb(db), deps.tenantId, input.paymentId);
       } finally {
         db.close();
       }

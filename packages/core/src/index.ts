@@ -252,3 +252,19 @@ export { buildReceiptLayout } from './printing/receipt-layout.js';
 export type { ReceiptData, ReceiptLineData } from './printing/receipt-layout.js';
 export { buildInvoiceLayout } from './printing/invoice-layout.js';
 export type { InvoiceLayoutData } from './printing/invoice-layout.js';
+
+export type { ShopIdentity } from './shop/shop-identity.js';
+
+export { buildPaymentReceiptLayout } from './printing/payment-receipt-layout.js';
+export type {
+  PaymentReceiptData,
+  PaymentReceiptLayoutData,
+} from './printing/payment-receipt-layout.js';
+
+export { buildCustomerStatementLayout } from './printing/customer-statement-layout.js';
+export type {
+  CustomerStatementLayoutInput,
+  CustomerStatementLayoutData,
+  CustomerStatementLayoutRow,
+  CustomerStatementRowInput,
+} from './printing/customer-statement-layout.js';

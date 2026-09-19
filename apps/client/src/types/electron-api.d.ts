@@ -15,7 +15,12 @@ import type {
   CustodyReconciliationResult,
   CustomerBalanceDto,
   CustomerDto,
+  CustomerLedgerInput,
+  CustomerLedgerRowDto,
   CustomerSearchInput,
+  CustomerStatementInput,
+  CustomerStatementDto,
+  PriceLevelsDto,
   DailySalesReportInput,
   DailySalesReportRowDto,
   DeliverJobInput,
@@ -25,6 +30,7 @@ import type {
   GrnListForPurchaseOrderInput,
   ImportItemsInput,
   ImportOpeningStockInput,
+  ImportCustomerBalanceInput,
   ImportSupplierBalanceInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
@@ -42,6 +48,7 @@ import type {
   JobSummaryDto,
   TechnicianCustodyInput,
   PaymentDto,
+  PaymentReceiptDataDto,
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
@@ -62,6 +69,8 @@ import type {
   SaleResult,
   SaleSearchInput,
   SaleSummaryDto,
+  SaleWithLinesInput,
+  SaleWithLinesDto,
   AdvanceDto,
   AttendanceRecordDto,
   CashSessionDto,
@@ -85,6 +94,8 @@ import type {
   UnitPlReportInput,
   WageMonthInput,
   WageMonthRowDto,
+  ShopIdentityDto,
+  SetShopIdentityInput,
 } from '@shop/contracts';
 
 export interface ImportResult {
@@ -363,6 +374,18 @@ export interface InvoicePrintOutcome {
   readonly printError: string | null;
 }
 
+/** CL-7. Mirrors InvoicePrintOutcome. */
+export interface PaymentReceiptPrintOutcome {
+  readonly filePath: string | null;
+  readonly printError: string | null;
+}
+
+/** CL-8. Mirrors PaymentReceiptPrintOutcome. */
+export interface CustomerStatementPrintOutcome {
+  readonly filePath: string | null;
+  readonly printError: string | null;
+}
+
 export interface PurchasePrintOutcome {
   readonly filePath: string | null;
   readonly printError: string | null;
@@ -385,6 +408,8 @@ export interface ElectronApi {
     readonly search: (input: CustomerSearchInput) => Promise<readonly CustomerDto[]>;
     readonly get: (id: string) => Promise<CustomerDto | null>;
     readonly balance: (id: string) => Promise<CustomerBalanceDto>;
+    readonly ledger: (input: CustomerLedgerInput) => Promise<readonly CustomerLedgerRowDto[]>;
+    readonly statement: (input: CustomerStatementInput) => Promise<CustomerStatementDto | null>;
   };
   readonly party: {
     readonly create: (input: CreateSupplierInput) => Promise<{ id: string; partyCode: string }>;
@@ -392,6 +417,7 @@ export interface ElectronApi {
     readonly searchAny: (input: PartySearchAnyInput) => Promise<readonly PartyAnyDto[]>;
     readonly get: (id: string) => Promise<SupplierDto | null>;
     readonly balance: (id: string) => Promise<SupplierBalanceDto>;
+    readonly listPriceLevels: () => Promise<PriceLevelsDto>;
   };
   readonly staff: {
     readonly create: (input: StaffCreateInput) => Promise<{ id: string; partyCode: string }>;
@@ -444,15 +470,21 @@ export interface ElectronApi {
     // missing from this type — the Daily Sales report's per-sale table
     // is the first client caller.
     readonly listByDate: (input: SaleSearchInput) => Promise<readonly SaleSummaryDto[]>;
+    readonly getWithLines: (input: SaleWithLinesInput) => Promise<SaleWithLinesDto | null>;
   };
   readonly print: {
     readonly reprintReceipt: (saleId: string) => Promise<PrintReceiptResult>;
+    readonly printPaymentReceipt: (paymentId: string) => Promise<PaymentReceiptPrintOutcome>;
+    readonly printCustomerStatement: (
+      input: CustomerStatementInput,
+    ) => Promise<CustomerStatementPrintOutcome>;
   };
   readonly invoice: {
     readonly printSaleInvoice: (saleId: string) => Promise<InvoicePrintOutcome>;
   };
   readonly payment: {
     readonly receive: (input: CreatePaymentInput) => Promise<PaymentDto>;
+    readonly getReceipt: (paymentId: string) => Promise<PaymentReceiptDataDto | null>;
   };
   readonly job: {
     readonly create: (input: CreateJobInput) => Promise<JobDto>;
@@ -489,8 +521,8 @@ export interface ElectronApi {
     readonly commit: (input: ImportSupplierBalanceInput) => Promise<SupplierBalanceImportResult>;
   };
   readonly importCustomerBalance: {
-    readonly dryRun: () => Promise<CustomerBalanceImportResult | null>;
-    readonly commit: () => Promise<CustomerBalanceImportResult | null>;
+    readonly dryRun: (input: ImportCustomerBalanceInput) => Promise<CustomerBalanceImportResult>;
+    readonly commit: (input: ImportCustomerBalanceInput) => Promise<CustomerBalanceImportResult>;
   };
   readonly backup: {
     readonly now: () => Promise<BackupNowResult | null>;
@@ -514,6 +546,8 @@ export interface ElectronApi {
     readonly getDiscountPctPresets: () => Promise<readonly string[]>;
     readonly setDiscountPctPresets: (input: SetDiscountPctPresetsInput) => Promise<void>;
     readonly getDiscountConfig: () => Promise<DiscountConfigDto>;
+    readonly getShopIdentity: () => Promise<ShopIdentityDto>;
+    readonly setShopIdentity: (input: SetShopIdentityInput) => Promise<void>;
   };
   readonly report: {
     readonly stockValuation: () => Promise<StockValuationReportDto>;

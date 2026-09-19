@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CustomerDto, PaymentDto } from '@shop/contracts';
+import { ChevronRight, MousePointerClick } from 'lucide-react';
+import type { CustomerDto } from '@shop/contracts';
+import type { MoneyDisplayProps } from '@shop/ui';
 import {
   Alert,
-  Button,
   EmptyState,
   MoneyDisplay,
   Spinner,
@@ -15,26 +16,33 @@ import {
   TextInput,
 } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
-import { RecordPaymentModal } from './RecordPaymentModal.js';
+
+/** Matches CustomerStatCards.tsx's own balance-tone convention — 'due' (amber)
+ * for money owed, 'positive' (green) for zero/settled. Never a raw className
+ * on a money value — MoneyDisplay is this project's only formatting point. */
+function balanceTone(balancePaisa: number): NonNullable<MoneyDisplayProps['tone']> {
+  if (balancePaisa === 0) return 'muted';
+  return balancePaisa > 0 ? 'due' : 'positive';
+}
 
 /** A customer's balance is 'error' once its own fetch has failed — never retried silently. */
 type BalanceState = number | 'error';
 
+export interface CustomerListViewProps {
+  /** Row click drills into CustomerDetailPage — see CustomersPage.tsx (CL-5). */
+  readonly onSelectCustomer: (customerId: string) => void;
+}
+
 /**
  * P4.5-8 — same eager-parallel-balance-load pattern as SupplierListView.
- * BUG-NEW3 fix (CRITICAL, Phase 5): added the "Record Payment" action,
- * self-contained here per explicit decision — CustomersPage.tsx is not
- * touched. loadBalance() is the same fetch the mount effect always did,
- * pulled into a named function so a successful payment can re-run it for
- * just the one affected customer instead of reloading the whole list.
+ * CL-5: "Record Payment" moved off this list onto CustomerDetailPage's
+ * header — a row click now opens the detail page instead.
  */
-export function CustomerListView(): React.JSX.Element {
+export function CustomerListView({ onSelectCustomer }: CustomerListViewProps): React.JSX.Element {
   const [customers, setCustomers] = useState<readonly CustomerDto[]>([]);
   const [balances, setBalances] = useState<Record<string, BalanceState>>({});
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [paymentTarget, setPaymentTarget] = useState<CustomerDto | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   function loadBalance(customerId: string): void {
     ipc.customer
@@ -73,19 +81,9 @@ export function CustomerListView(): React.JSX.Element {
     );
   }, [customers, query]);
 
-  function handlePaid(result: PaymentDto): void {
-    setPaymentTarget(null);
-    setSuccessMessage(`Payment recorded — ${result.docNo}`);
-    loadBalance(result.partyId);
-  }
-
-  const targetBalance = paymentTarget && balances[paymentTarget.id];
-  const targetBalancePaisa = typeof targetBalance === 'number' ? targetBalance : 0;
-
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
-      {successMessage && <Alert variant="success">{successMessage}</Alert>}
       <TextInput
         variant="search"
         placeholder="Search customers by name, code, or phone"
@@ -102,67 +100,64 @@ export function CustomerListView(): React.JSX.Element {
       ) : filtered.length === 0 ? (
         <EmptyState message={`No customers match "${query}".`} />
       ) : (
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>Code</TableHeaderCell>
-              <TableHeaderCell>Name</TableHeaderCell>
-              <TableHeaderCell>Phone</TableHeaderCell>
-              <TableHeaderCell className="text-right">Balance</TableHeaderCell>
-              <TableHeaderCell className="text-right">Actions</TableHeaderCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filtered.map((customer) => {
-              const customerBalance = balances[customer.id];
-              const balanceReady = typeof customerBalance === 'number';
-              return (
-                <TableRow key={customer.id}>
-                  <TableCell>{customer.partyCode}</TableCell>
-                  <TableCell>{customer.name}</TableCell>
-                  <TableCell>{customer.phone ?? '—'}</TableCell>
-                  <TableCell className="text-right">
-                    {customerBalance === undefined ? (
-                      <Spinner size="sm" />
-                    ) : customerBalance === 'error' ? (
-                      '—'
-                    ) : (
-                      <MoneyDisplay
-                        paisaValue={customerBalance}
-                        tone={customerBalance === 0 ? 'muted' : 'auto'}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="secondary"
-                      disabled={!balanceReady}
-                      onClick={() => {
-                        setSuccessMessage(null);
-                        setPaymentTarget(customer);
-                      }}
-                    >
-                      Record Payment
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
-
-      {paymentTarget && (
-        <RecordPaymentModal
-          open
-          onClose={() => {
-            setPaymentTarget(null);
-          }}
-          partyId={paymentTarget.id}
-          customerName={paymentTarget.name}
-          currentBalancePaisa={targetBalancePaisa}
-          onPaid={handlePaid}
-        />
+        <>
+          <Table>
+            <TableHead>
+              <TableRow zebra={false} hover="neutral">
+                <TableHeaderCell className="tracking-wide text-ink-faint">Code</TableHeaderCell>
+                <TableHeaderCell className="tracking-wide text-ink-faint">Name</TableHeaderCell>
+                <TableHeaderCell className="tracking-wide text-ink-faint">Phone</TableHeaderCell>
+                <TableHeaderCell className="text-right tracking-wide text-ink-faint">
+                  Balance
+                </TableHeaderCell>
+                <TableHeaderCell aria-hidden="true" />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filtered.map((customer) => {
+                const customerBalance = balances[customer.id];
+                return (
+                  <TableRow
+                    key={customer.id}
+                    zebra={false}
+                    hover="neutral"
+                    onClick={() => {
+                      onSelectCustomer(customer.id);
+                    }}
+                  >
+                    <TableCell className="py-3">
+                      <span className="inline-flex items-center rounded border border-line bg-surface-page px-2 py-0.5 font-mono text-xs text-ink-faint">
+                        {customer.partyCode}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-3">{customer.name}</TableCell>
+                    <TableCell className="py-3">{customer.phone ?? '—'}</TableCell>
+                    <TableCell className="py-3 text-right">
+                      {customerBalance === undefined ? (
+                        <Spinner size="sm" />
+                      ) : customerBalance === 'error' ? (
+                        '—'
+                      ) : (
+                        <MoneyDisplay
+                          paisaValue={customerBalance}
+                          tone={balanceTone(customerBalance)}
+                          size="sm"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="w-6 pl-0">
+                      <ChevronRight size={14} className="text-ink-faint" aria-hidden="true" />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          <p className="flex items-center gap-1 border-t border-line px-4 py-2 text-xs text-ink-faint">
+            <MousePointerClick size={13} aria-hidden="true" />
+            Click any row to open that customer&apos;s ledger
+          </p>
+        </>
       )}
     </div>
   );

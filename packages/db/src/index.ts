@@ -42,6 +42,7 @@ export {
   listUomConversions,
   listTechnicians,
   listServiceCharges,
+  listPriceLevels,
   getItemPrices,
 } from './repositories/lookup.repository.js';
 export type {
@@ -51,6 +52,7 @@ export type {
   UomConversionOption,
   TechnicianOption,
   ServiceChargeOption,
+  PriceLevelOption,
   ItemPricePreview,
 } from './repositories/lookup.repository.js';
 export { KyselyImportRepository } from './repositories/import.repository.js';
@@ -104,7 +106,21 @@ export {
   setDiscountPctPresets,
 } from './repositories/setting.repository.js';
 export type { ReceiptPaperSize } from './repositories/setting.repository.js';
-export { getSaleReceiptData } from './repositories/receipt.repository.js';
-export type { ReceiptSaleData, ReceiptSaleLine } from './repositories/receipt.repository.js';
-export { getSaleInvoiceData } from './repositories/invoice.repository.js';
+export { getShopIdentity, setShopIdentity } from './repositories/shop-identity.repository.js';
+export {
+  getCustomerLedger,
+  getCustomerStatementData,
+} from './repositories/customer-ledger.repository.js';
+export type {
+  CustomerLedgerRowRecord,
+  CustomerStatementRecord,
+  CustomerStatementCustomer,
+} from './repositories/customer-ledger.repository.js';
+export { getSaleReceiptData, getPaymentReceiptData } from './repositories/receipt.repository.js';
+export type {
+  ReceiptSaleData,
+  ReceiptSaleLine,
+  PaymentReceiptData,
+} from './repositories/receipt.repository.js';
+export { getSaleInvoiceData, getSaleWithLinesData } from './repositories/invoice.repository.js';
 export type { InvoiceData } from './repositories/invoice.repository.js';

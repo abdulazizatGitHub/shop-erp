@@ -51,6 +51,7 @@ export interface NewCustomerInput {
   readonly name: string;
   readonly shopName: string | null;
   readonly phone: string | null;
+  readonly address: string | null;
   readonly customerType: CustomerType | null;
   readonly priceLevelId: string | null;
   readonly creditLimitPaisa: number | null;
@@ -68,6 +69,7 @@ export interface CustomerRecord {
   readonly name: string;
   readonly shopName: string | null;
   readonly phone: string | null;
+  readonly address: string | null;
   readonly customerType: CustomerType | null;
   readonly priceLevelId: string | null;
   readonly creditLimitPaisa: number | null;

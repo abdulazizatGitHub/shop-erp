@@ -1,24 +1,12 @@
-import { useState } from 'react';
-import { Alert, Button, ImportModal } from '@shop/ui';
-import { downloadCsv } from '../../lib/downloadCsv.js';
-import { ipc } from '../../lib/ipc.js';
-import type { CustomerBalanceImportResult } from '../../types/electron-api.js';
+import { FileText } from 'lucide-react';
+import { Button, ImportModal } from '@shop/ui';
+import { ImportFileState } from '../items/ImportFileState.js';
+import { ImportCustomerBalanceInstructions } from './ImportCustomerBalanceInstructions.js';
+import {
+  CUSTOMER_BALANCE_COLUMNS,
+  useImportCustomerBalanceFlow,
+} from './useImportCustomerBalanceFlow.js';
 
-// Mirrors packages/core/src/import/customer-columns.ts's
-// CUSTOMER_BALANCE_COLUMNS exactly — apps/client may never import
-// @shop/core (architecture boundary), so this is a manually synced local
-// copy. Verified against the real file before hardcoding: 7 columns, no
-// Due Date (unlike the 8-column supplier sheet — customers don't carry
-// payment terms this phase).
-const CUSTOMER_BALANCE_SAMPLE_HEADERS = [
-  'Customer Name',
-  'Phone',
-  'Bill Reference',
-  'Bill Date',
-  'Original Amount (PKR)',
-  'Amount Paid So Far (PKR)',
-  'Notes',
-];
 const CUSTOMER_BALANCE_SAMPLE_ROW = [
   'Ahmad Retail',
   '03001234567',
@@ -37,96 +25,67 @@ export interface ImportCustomersModalProps {
 }
 
 /**
- * Replaces the old inline CustomersImportPage card with the same
- * two-page ImportModal shell as Items/Suppliers, for consistency.
+ * CL-10. Option B conversion: same six-state file-picker shell as
+ * ImportSuppliersModal, driven by useImportCustomerBalanceFlow. Replaces
+ * the old dialog.showOpenDialog/readFileSync-backed version.
  */
 export function ImportCustomersModal({
   open,
   onClose,
   onImported,
 }: ImportCustomersModalProps): React.JSX.Element | null {
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CustomerBalanceImportResult | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const runImport = (commit: boolean): void => {
-    setError(null);
-    setResult(null);
-    setBusy(true);
-    const call = commit ? ipc.importCustomerBalance.commit() : ipc.importCustomerBalance.dryRun();
-    call
-      .then((res) => {
-        setBusy(false);
-        if (res) {
-          setResult(res);
-          if (commit) onImported();
-        }
-      })
-      .catch((err: unknown) => {
-        setBusy(false);
-        setError(err instanceof Error ? err.message : 'Import failed');
-      });
-  };
+  const {
+    state,
+    fileInputRef,
+    importDisabled,
+    handleSelectClick,
+    handleSelectDifferent,
+    handleFileChange,
+    handleImportClick,
+    handleModalClose,
+  } = useImportCustomerBalanceFlow(open, onClose, onImported);
 
   return (
     <ImportModal
       open={open}
-      title="Import customer balances"
-      onClose={onClose}
+      title="Import Customer Balances"
+      onClose={handleModalClose}
+      navDisabled={state.status === 'importing'}
       instructions={
-        <>
-          <p className="text-sm text-ink">
-            Columns: Customer Name, Phone, Bill Reference, Bill Date, Original Amount (PKR), Amount
-            Paid So Far (PKR), Notes. Customer must already exist (matched by name). A bill already
-            settled (Paid ≥ Original) is skipped, not rejected.
-          </p>
-          <div>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                downloadCsv(
-                  'customer-balances-sample.csv',
-                  CUSTOMER_BALANCE_SAMPLE_HEADERS,
-                  CUSTOMER_BALANCE_SAMPLE_ROW,
-                );
-              }}
-            >
-              Download sample CSV
-            </Button>
-          </div>
-        </>
+        <ImportCustomerBalanceInstructions
+          columns={CUSTOMER_BALANCE_COLUMNS}
+          sampleRow={CUSTOMER_BALANCE_SAMPLE_ROW}
+        />
       }
     >
-      {error && <Alert variant="danger">{error}</Alert>}
-      <p className="text-sm text-ink">Dry run or Commit will open a file picker.</p>
-      <div className="flex gap-3">
-        <Button
-          variant="secondary"
-          disabled={busy}
-          onClick={() => {
-            runImport(false);
-          }}
-        >
-          Dry run (no changes saved)
-        </Button>
-        <Button
-          variant="primary"
-          disabled={busy}
-          onClick={() => {
-            runImport(true);
-          }}
-        >
-          Commit import
+      <div className="flex flex-col gap-4">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {state.status === 'idle' ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-brand/30 bg-surface-page px-6 py-10 text-center">
+            <FileText size={40} strokeWidth={1.5} className="mb-3 text-brand/50" />
+            <p className="mb-1 text-sm font-medium text-ink">Select your Customer Balances CSV</p>
+            <p className="mb-4 text-xs text-ink-faint">
+              Column headers are checked as soon as you pick a file.
+            </p>
+            <Button variant="primary" onClick={handleSelectClick}>
+              Select file
+            </Button>
+          </div>
+        ) : (
+          <ImportFileState state={state} onDismiss={handleSelectDifferent} />
+        )}
+
+        <Button variant="primary" disabled={importDisabled} onClick={handleImportClick}>
+          {state.status === 'importing' ? 'Importing…' : 'Import'}
         </Button>
       </div>
-      {result && (
-        <div role="status" className="text-sm text-ink">
-          <p>
-            {result.accepted} accepted, {result.rejected} rejected, {result.skipped} skipped.
-            Report: {result.reportPath}
-          </p>
-        </div>
-      )}
     </ImportModal>
   );
 }

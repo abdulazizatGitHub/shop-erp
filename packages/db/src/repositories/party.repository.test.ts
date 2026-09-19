@@ -401,6 +401,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Naeem Fridge Repairs',
       shopName: 'Naeem Electronics',
       phone: '03007654321',
+      address: null,
       customerType: 'retail',
       priceLevelId,
       creditLimitPaisa: 500000,
@@ -431,6 +432,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Customer One',
       shopName: null,
       phone: '0300',
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -441,6 +443,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Customer Two',
       shopName: null,
       phone: '0301',
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -458,6 +461,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Format Check Customer',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -473,6 +477,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Hand Coded Customer',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -495,6 +500,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Auto After Manual',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -509,6 +515,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'First',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -521,6 +528,7 @@ describe('KyselyPartyRepository — customer', () => {
         name: 'Second',
         shopName: null,
         phone: null,
+        address: null,
         customerType: null,
         priceLevelId: null,
         creditLimitPaisa: null,
@@ -535,6 +543,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Matching Customer',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -572,6 +581,7 @@ describe('KyselyPartyRepository — customer', () => {
       name: 'Balance Test Customer',
       shopName: null,
       phone: null,
+      address: null,
       customerType: null,
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -596,6 +606,81 @@ describe('KyselyPartyRepository — customer', () => {
     const customerBalance = await repo.getCustomerBalance(customer.id);
     expect(customerBalance.customerId).toBe(customer.id);
     expect(customerBalance.balancePaisa).toBe(250000);
+  });
+
+  // Phase 13 polish series: AddCustomerModal.tsx enforces an 11-digit
+  // phone number client-side (submit-time validation), but that rule
+  // does not exist anywhere in this repository or the party table
+  // schema (phone is a bare TEXT column, no CHECK constraint, no
+  // length validation in createCustomer's own logic above). These two
+  // tests confirm that boundary explicitly, so a future repository
+  // change doesn't silently start rejecting what the UI already lets
+  // through before the length check (an unsaved draft, or a caller
+  // that bypasses the modal, e.g. the CSV import path).
+  it('an 11-digit numeric phone saves correctly and is returned by searchCustomers', async () => {
+    const result = await repo.createCustomer({
+      partyCode: null,
+      name: 'Eleven Digit Phone Customer',
+      shopName: null,
+      phone: '03001234567',
+      address: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    const found = await repo.searchCustomers({ query: 'Eleven Digit Phone Customer' });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.id).toBe(result.id);
+    expect(found[0]?.phone).toBe('03001234567');
+  });
+
+  it('a 10-digit phone also saves — the 11-digit rule is UI-only, not enforced at the repository level', async () => {
+    const result = await repo.createCustomer({
+      partyCode: null,
+      name: 'Ten Digit Phone Customer',
+      shopName: null,
+      phone: '0300123456',
+      address: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+
+    const found = await repo.getCustomerById(result.id);
+    expect(found?.phone).toBe('0300123456');
+  });
+
+  it('address round-trips through create then getCustomerById, including null', async () => {
+    const withAddress = await repo.createCustomer({
+      partyCode: null,
+      name: 'Address Customer',
+      shopName: null,
+      phone: null,
+      address: 'Malakand Bazaar',
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    const foundWithAddress = await repo.getCustomerById(withAddress.id);
+    expect(foundWithAddress?.address).toBe('Malakand Bazaar');
+
+    const withoutAddress = await repo.createCustomer({
+      partyCode: null,
+      name: 'No Address Customer',
+      shopName: null,
+      phone: null,
+      address: null,
+      customerType: null,
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    const foundWithoutAddress = await repo.getCustomerById(withoutAddress.id);
+    expect(foundWithoutAddress?.address).toBeNull();
   });
 });
 
@@ -748,6 +833,7 @@ describe('KyselyPartyRepository.searchAnyParty (P8-2, BUG-18)', () => {
       name: 'Anywhere Customer',
       shopName: null,
       phone: null,
+      address: null,
       customerType: 'retail',
       priceLevelId: null,
       creditLimitPaisa: null,

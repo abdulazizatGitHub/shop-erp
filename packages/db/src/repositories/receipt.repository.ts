@@ -1,5 +1,8 @@
 import { sql, type Kysely } from 'kysely';
+import type { ShopIdentity } from '@shop/core';
 import type { Database } from '../kysely-schema.js';
+import { getShopIdentity } from './shop-identity.repository.js';
+import { getCustomerLedger } from './customer-ledger.repository.js';
 
 // P4-1c. Read model for printing — sits alongside report.repository.ts
 // but is not one of the P4-3 reports. sl.description is the item-name
@@ -88,5 +91,89 @@ export async function getSaleReceiptData(
       lineKind: row.lineKind,
       businessUnitName: row.businessUnitName,
     })),
+  };
+}
+
+export interface PaymentReceiptData {
+  readonly docNo: string;
+  readonly paymentDate: string;
+  readonly amountPaisa: number;
+  readonly method: string;
+  readonly referenceNo: string | null;
+  readonly notes: string | null;
+  readonly customerName: string;
+  readonly customerCode: string;
+  readonly customerPhone: string | null;
+  readonly shopIdentity: ShopIdentity;
+  readonly previousBalancePaisa: number;
+  readonly remainingBalancePaisa: number;
+}
+
+interface PaymentHeaderRow {
+  docNo: string;
+  paymentDate: string;
+  amount: number;
+  method: string;
+  referenceNo: string | null;
+  notes: string | null;
+  partyId: string;
+}
+
+interface PaymentCustomerRow {
+  name: string;
+  partyCode: string;
+  phone: string | null;
+}
+
+/**
+ * CL-7A. previousBalancePaisa/remainingBalancePaisa come from the same
+ * window-function ledger query getCustomerLedger already runs — composed,
+ * not re-derived, so the two documents can never disagree on a balance.
+ */
+export async function getPaymentReceiptData(
+  db: Kysely<Database>,
+  tenantId: string,
+  paymentId: string,
+): Promise<PaymentReceiptData | null> {
+  const paymentHeader = (await db
+    .selectFrom('payment')
+    .select(['docNo', 'paymentDate', 'amount', 'method', 'referenceNo', 'notes', 'partyId'])
+    .where('id', '=', paymentId)
+    .where('tenantId', '=', tenantId)
+    .executeTakeFirst()) as PaymentHeaderRow | undefined;
+
+  if (!paymentHeader) return null;
+
+  const customerRow = (await db
+    .selectFrom('party')
+    .select(['name', 'partyCode', 'phone'])
+    .where('id', '=', paymentHeader.partyId)
+    .where('tenantId', '=', tenantId)
+    .executeTakeFirst()) as PaymentCustomerRow | undefined;
+
+  const shopIdentity = await getShopIdentity(db, tenantId);
+  const ledger = await getCustomerLedger(db, tenantId, paymentHeader.partyId);
+  const ledgerRow = ledger.find(
+    (row) => row.sourceType === 'payment' && row.sourceId === paymentId,
+  );
+
+  const remainingBalancePaisa = ledgerRow?.runningBalancePaisa ?? 0;
+  // amountPaisa on the ledger row is negative for a payment, so this adds
+  // the payment amount back to reach the balance BEFORE it was applied.
+  const previousBalancePaisa = remainingBalancePaisa - (ledgerRow?.amountPaisa ?? 0);
+
+  return {
+    docNo: paymentHeader.docNo,
+    paymentDate: paymentHeader.paymentDate,
+    amountPaisa: paymentHeader.amount,
+    method: paymentHeader.method,
+    referenceNo: paymentHeader.referenceNo,
+    notes: paymentHeader.notes,
+    customerName: customerRow?.name ?? '(unknown customer)',
+    customerCode: customerRow?.partyCode ?? '',
+    customerPhone: customerRow?.phone ?? null,
+    shopIdentity,
+    previousBalancePaisa,
+    remainingBalancePaisa,
   };
 }

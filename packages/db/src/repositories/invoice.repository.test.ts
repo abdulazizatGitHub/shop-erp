@@ -13,7 +13,7 @@ import type { Database as Schema } from '../kysely-schema.js';
 import { KyselyItemRepository } from './item.repository.js';
 import { KyselyPartyRepository } from './party.repository.js';
 import { KyselySaleRepository } from './sale.repository.js';
-import { getSaleInvoiceData } from './invoice.repository.js';
+import { getSaleInvoiceData, getSaleWithLinesData } from './invoice.repository.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../migrations');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -111,6 +111,7 @@ describe('getSaleInvoiceData (P4-2)', () => {
       name: 'Malik Traders',
       shopName: 'Malik Electronics',
       phone: '0300-1234567',
+      address: null,
       customerType: 'wholesale',
       priceLevelId: null,
       creditLimitPaisa: null,
@@ -227,5 +228,53 @@ describe('getSaleInvoiceData (P4-2)', () => {
     expect(data?.customerAddress).toBeNull();
     // fully paid, no balance
     expect(data?.balanceDuePaisa).toBe(0);
+  });
+});
+
+describe('getSaleWithLinesData (CL-4)', () => {
+  it('returns both lines and a correctly computed total for a two-line sale', async () => {
+    const compressor = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Compressor 1 Ton',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: pieceUomId,
+      trackStock: true,
+      retailPricePaisa: 400000,
+    });
+    insertStockMovement(compressor.id, 5000);
+
+    const gas = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'R22 Gas',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: kgUomId,
+      trackStock: true,
+      retailPricePaisa: 50000,
+    });
+    insertStockMovement(gas.id, 20000);
+
+    // Hand calculation:
+    //   Line 1: 400,000 paisa x 1000 milli / 1000 = 400,000 paisa
+    //   Line 2:  50,000 paisa x 2000 milli / 1000 = 100,000 paisa
+    //   totalAmountPaisa = 400,000 + 100,000 = 500,000 paisa
+    const result = await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: '2026-09-01',
+      paymentMode: 'cash',
+      paidAmountPaisa: 500000,
+      notes: null,
+      lines: [
+        { itemId: compressor.id, quantityMilli: 1000, unitPricePaisa: null },
+        { itemId: gas.id, quantityMilli: 2000, unitPricePaisa: null },
+      ],
+    });
+
+    const data = await getSaleWithLinesData(kysely, TENANT_ID, result.id);
+    expect(data).not.toBeNull();
+    expect(data?.lines).toHaveLength(2);
+    expect(data?.totalAmountPaisa).toBe(500000);
   });
 });

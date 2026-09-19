@@ -45,6 +45,7 @@ beforeEach(async () => {
     name: 'Naeem Fridge Repairs',
     shopName: null,
     phone: null,
+    address: null,
     customerType: 'retail',
     priceLevelId: null,
     creditLimitPaisa: null,

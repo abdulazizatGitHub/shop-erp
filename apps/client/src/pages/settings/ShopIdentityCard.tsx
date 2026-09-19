@@ -1,72 +1,163 @@
 import { useEffect, useState } from 'react';
+import type { ShopIdentityDto } from '@shop/contracts';
 import { Alert, Button, Card, TextInput } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
 
-/** Extracted out of SettingsPage.tsx to keep it under the 300-line file cap. */
+interface FormState {
+  readonly shopName: string;
+  readonly shopPhone: string;
+  readonly shopAddress: string;
+  readonly shopEmail: string;
+  readonly invoiceHeaderText: string;
+  readonly invoiceFooterText: string;
+  readonly statementFooterText: string;
+}
+
+function toForm(identity: ShopIdentityDto): FormState {
+  return {
+    shopName: identity.shopName,
+    shopPhone: identity.shopPhone ?? '',
+    shopAddress: identity.shopAddress ?? '',
+    shopEmail: identity.shopEmail ?? '',
+    invoiceHeaderText: identity.invoiceHeaderText ?? '',
+    invoiceFooterText: identity.invoiceFooterText ?? '',
+    statementFooterText: identity.statementFooterText ?? '',
+  };
+}
+
+/** '' on a text input means "not entered" — same blankToNull pattern as AddSupplierModal.tsx. */
+function blankToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** CL-0a. Extracted out of SettingsPage.tsx to keep it under the 300-line file cap. */
 export function ShopIdentityCard(): React.JSX.Element {
-  const [shopName, setShopNameValue] = useState<string | null>(null);
-  const [shopNameDraft, setShopNameDraft] = useState('');
-  const [shopNameError, setShopNameError] = useState<string | null>(null);
-  const [shopNameMessage, setShopNameMessage] = useState<string | null>(null);
-  const [savingShopName, setSavingShopName] = useState(false);
+  const [saved, setSaved] = useState<FormState | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     ipc.setting
-      .getShopName()
-      .then((value) => {
-        setShopNameValue(value);
-        setShopNameDraft(value);
+      .getShopIdentity()
+      .then((identity) => {
+        const loaded = toForm(identity);
+        setSaved(loaded);
+        setForm(loaded);
       })
       .catch((err: unknown) => {
-        setShopNameError(err instanceof Error ? err.message : 'Failed to load settings');
+        setError(err instanceof Error ? err.message : 'Failed to load settings');
       });
   }, []);
 
-  function saveShopName(): void {
-    const trimmed = shopNameDraft.trim();
-    if (trimmed.length === 0) {
-      setShopNameError('Shop name cannot be blank');
+  function update(field: keyof FormState, value: string): void {
+    setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  function save(): void {
+    if (!form) return;
+    const trimmedName = form.shopName.trim();
+    if (trimmedName.length === 0) {
+      setError('Shop name cannot be blank');
       return;
     }
-    setSavingShopName(true);
-    setShopNameMessage(null);
+    setSaving(true);
+    setMessage(null);
+    setError(null);
     ipc.setting
-      .setShopName({ value: trimmed })
+      .setShopIdentity({
+        shopName: trimmedName,
+        shopPhone: blankToNull(form.shopPhone),
+        shopAddress: blankToNull(form.shopAddress),
+        shopEmail: blankToNull(form.shopEmail),
+        invoiceHeaderText: blankToNull(form.invoiceHeaderText),
+        invoiceFooterText: blankToNull(form.invoiceFooterText),
+        statementFooterText: blankToNull(form.statementFooterText),
+      })
       .then(() => {
-        setShopNameValue(trimmed);
-        setShopNameDraft(trimmed);
-        setShopNameError(null);
-        setShopNameMessage('Shop name saved.');
+        const next = { ...form, shopName: trimmedName };
+        setSaved(next);
+        setForm(next);
+        setMessage('Shop identity saved.');
       })
       .catch((err: unknown) => {
-        setShopNameError(err instanceof Error ? err.message : 'Failed to save setting');
+        setError(err instanceof Error ? err.message : 'Failed to save setting');
       })
       .finally(() => {
-        setSavingShopName(false);
+        setSaving(false);
       });
   }
 
+  const loading = form === null;
+  const dirty = form !== null && saved !== null && JSON.stringify(form) !== JSON.stringify(saved);
+
   return (
     <Card title="Shop identity">
-      {shopNameError && <Alert variant="danger">{shopNameError}</Alert>}
-      {shopNameMessage && <Alert variant="success">{shopNameMessage}</Alert>}
-      <div className="flex items-end gap-3">
-        <div className="flex-1">
-          <TextInput
-            label="Shop name (printed on every receipt)"
-            value={shopNameDraft}
-            disabled={shopName === null || savingShopName}
-            onChange={(e) => {
-              setShopNameDraft(e.target.value);
-            }}
-          />
-        </div>
-        <Button
-          variant="primary"
-          disabled={shopNameDraft.trim() === shopName || savingShopName}
-          onClick={saveShopName}
-        >
-          Save
+      {error && <Alert variant="danger">{error}</Alert>}
+      {message && <Alert variant="success">{message}</Alert>}
+      <div className="grid grid-cols-2 gap-4">
+        <TextInput
+          label="Shop name (printed on every document)"
+          value={form?.shopName ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('shopName', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Phone"
+          value={form?.shopPhone ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('shopPhone', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Address"
+          value={form?.shopAddress ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('shopAddress', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Email"
+          value={form?.shopEmail ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('shopEmail', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Invoice header text"
+          value={form?.invoiceHeaderText ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('invoiceHeaderText', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Invoice footer text"
+          value={form?.invoiceFooterText ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('invoiceFooterText', e.target.value);
+          }}
+        />
+        <TextInput
+          label="Statement footer text"
+          value={form?.statementFooterText ?? ''}
+          disabled={loading || saving}
+          onChange={(e) => {
+            update('statementFooterText', e.target.value);
+          }}
+        />
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button variant="primary" disabled={loading || saving || !dirty} onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
         </Button>
       </div>
     </Card>

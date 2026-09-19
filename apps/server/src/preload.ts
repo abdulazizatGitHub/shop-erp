@@ -16,7 +16,11 @@ import type {
   CustodyReconciliationResult,
   CustomerBalanceDto,
   CustomerDto,
+  CustomerLedgerInput,
+  CustomerLedgerRowDto,
   CustomerSearchInput,
+  CustomerStatementInput,
+  CustomerStatementDto,
   DailySalesReportInput,
   DailySalesReportRowDto,
   DeliverJobInput,
@@ -26,6 +30,7 @@ import type {
   GrnListForPurchaseOrderInput,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
+  ImportCustomerBalanceInput,
   ImportItemsInput,
   ImportOpeningStockInput,
   ImportSupplierBalanceInput,
@@ -45,6 +50,7 @@ import type {
   PartyAnyDto,
   PartySearchAnyInput,
   PaymentDto,
+  PaymentReceiptDataDto,
   PurchaseIdInput,
   PurchaseListInput,
   PurchaseListRowDto,
@@ -55,6 +61,7 @@ import type {
   ItemSoldSummaryRowDto,
   PeriodComparisonInput,
   PeriodComparisonDto,
+  PriceLevelsDto,
   ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
@@ -62,6 +69,8 @@ import type {
   StockPerformanceRowDto,
   SaleSearchInput,
   SaleSummaryDto,
+  SaleWithLinesInput,
+  SaleWithLinesDto,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
   DiscountConfigDto,
@@ -71,6 +80,8 @@ import type {
   SetDiscountPctPresetsInput,
   SetDiscountPkrEnabledInput,
   SetDiscountPkrPresetsInput,
+  SetShopIdentityInput,
+  ShopIdentityDto,
   AdvanceDto,
   AttendanceRecordDto,
   CashSessionDto,
@@ -129,6 +140,8 @@ import type { BackupNowResult, RestoreResult } from './ipc/handlers/backup.handl
 import type { CreateSaleAndPrintResult } from './printing/create-sale-and-print.js';
 import type { PrintReceiptResult } from './printing/print-receipt.js';
 import type { InvoicePrintOutcome } from './printing/print-invoice-safely.js';
+import type { PaymentReceiptPrintOutcome } from './printing/print-payment-receipt-safely.js';
+import type { CustomerStatementPrintOutcome } from './printing/print-customer-statement-safely.js';
 import type { PurchasePrintOutcome } from './printing/print-purchase-safely.js';
 
 interface CreateItemResult {
@@ -170,6 +183,15 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.customer.get, { id }) as Promise<CustomerDto | null>,
     balance: (id: string): Promise<CustomerBalanceDto> =>
       ipcRenderer.invoke(channels.customer.balance, { id }) as Promise<CustomerBalanceDto>,
+    ledger: (input: CustomerLedgerInput): Promise<readonly CustomerLedgerRowDto[]> =>
+      ipcRenderer.invoke(channels.customer.ledger, input) as Promise<
+        readonly CustomerLedgerRowDto[]
+      >,
+    statement: (input: CustomerStatementInput): Promise<CustomerStatementDto | null> =>
+      ipcRenderer.invoke(
+        channels.customer.statement,
+        input,
+      ) as Promise<CustomerStatementDto | null>,
   },
   party: {
     create: (input: CreateSupplierInput): Promise<CreateSupplierResult> =>
@@ -182,6 +204,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.party.get, { id }) as Promise<SupplierDto | null>,
     balance: (id: string): Promise<SupplierBalanceDto> =>
       ipcRenderer.invoke(channels.party.balance, { id }) as Promise<SupplierBalanceDto>,
+    listPriceLevels: (): Promise<PriceLevelsDto> =>
+      ipcRenderer.invoke(channels.party.listPriceLevels) as Promise<PriceLevelsDto>,
   },
   staff: {
     create: (input: StaffCreateInput): Promise<CreateStaffResult> =>
@@ -265,12 +289,25 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.sale.getById, { id }) as Promise<SaleRecord | null>,
     listByDate: (input: SaleSearchInput): Promise<readonly SaleSummaryDto[]> =>
       ipcRenderer.invoke(channels.sale.listByDate, input) as Promise<readonly SaleSummaryDto[]>,
+    getWithLines: (input: SaleWithLinesInput): Promise<SaleWithLinesDto | null> =>
+      ipcRenderer.invoke(channels.sale.getWithLines, input) as Promise<SaleWithLinesDto | null>,
   },
   print: {
     reprintReceipt: (saleId: string): Promise<PrintReceiptResult> =>
       ipcRenderer.invoke(channels.print.reprintReceipt, {
         id: saleId,
       }) as Promise<PrintReceiptResult>,
+    printPaymentReceipt: (paymentId: string): Promise<PaymentReceiptPrintOutcome> =>
+      ipcRenderer.invoke(channels.print.printPaymentReceipt, {
+        paymentId,
+      }) as Promise<PaymentReceiptPrintOutcome>,
+    printCustomerStatement: (
+      input: CustomerStatementInput,
+    ): Promise<CustomerStatementPrintOutcome> =>
+      ipcRenderer.invoke(
+        channels.print.printCustomerStatement,
+        input,
+      ) as Promise<CustomerStatementPrintOutcome>,
   },
   invoice: {
     printSaleInvoice: (saleId: string): Promise<InvoicePrintOutcome> =>
@@ -313,6 +350,10 @@ contextBridge.exposeInMainWorld('api', {
   payment: {
     receive: (input: CreatePaymentInput): Promise<PaymentDto> =>
       ipcRenderer.invoke(channels.payment.receive, input) as Promise<PaymentDto>,
+    getReceipt: (paymentId: string): Promise<PaymentReceiptDataDto | null> =>
+      ipcRenderer.invoke(channels.payment.getReceipt, {
+        paymentId,
+      }) as Promise<PaymentReceiptDataDto | null>,
   },
   job: {
     create: (input: CreateJobInput): Promise<JobDto> =>
@@ -388,14 +429,16 @@ contextBridge.exposeInMainWorld('api', {
       ) as Promise<SupplierBalanceImportResult>,
   },
   importCustomerBalance: {
-    dryRun: (): Promise<CustomerBalanceImportResult | null> =>
+    dryRun: (input: ImportCustomerBalanceInput): Promise<CustomerBalanceImportResult> =>
       ipcRenderer.invoke(
         channels.importData.customerBalanceDryRun,
-      ) as Promise<CustomerBalanceImportResult | null>,
-    commit: (): Promise<CustomerBalanceImportResult | null> =>
+        input,
+      ) as Promise<CustomerBalanceImportResult>,
+    commit: (input: ImportCustomerBalanceInput): Promise<CustomerBalanceImportResult> =>
       ipcRenderer.invoke(
         channels.importData.customerBalanceCommit,
-      ) as Promise<CustomerBalanceImportResult | null>,
+        input,
+      ) as Promise<CustomerBalanceImportResult>,
   },
   backup: {
     now: (): Promise<BackupNowResult | null> =>
@@ -438,5 +481,9 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.setDiscountPctPresets, input) as Promise<void>,
     getDiscountConfig: (): Promise<DiscountConfigDto> =>
       ipcRenderer.invoke(channels.setting.getDiscountConfig) as Promise<DiscountConfigDto>,
+    getShopIdentity: (): Promise<ShopIdentityDto> =>
+      ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
+    setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setShopIdentity, input) as Promise<void>,
   },
 });
