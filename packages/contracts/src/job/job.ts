@@ -86,8 +86,55 @@ export const JobDto = z.object({
   labourChargePaisa: z.number().int(),
   saleId: z.string().uuid().nullable(),
   invoiceDocNo: z.string().nullable(),
+  cancellationReason: z.string().nullable(),
+  /** P14-6 — the existing job.diagnosis column (Q-A), named diagnosedFault at the DTO layer. */
+  diagnosedFault: z.string().nullable(),
+  /** P14-8 — fallback timestamp for the synthesised diagnosis History event. */
+  updatedAt: z.string(),
 });
 export type JobDto = z.infer<typeof JobDto>;
+
+/** P14-8 — one job_status_history row, read-only. */
+export const JobStatusHistoryDto = z.object({
+  fromStatus: JobStatus.nullable(),
+  toStatus: JobStatus,
+  changedAt: z.string(),
+});
+export type JobStatusHistoryDto = z.infer<typeof JobStatusHistoryDto>;
+
+/**
+ * P14-6 — narrow update endpoint (BUG-17's job:update stays unbuilt;
+ * this covers exactly the two fields P14-6 needs, owner-approved as an
+ * explicit exception, 2026-09-20). Both fields are .nullable().optional():
+ * omitted entirely = "don't touch this column"; explicit null = "clear
+ * it". tenantId is NOT part of this contract — every other job.* input
+ * in this file omits it too; it's always injected server-side from the
+ * handler's own deps, never accepted from the renderer (multi-tenant
+ * isolation boundary).
+ */
+export const UpdateJobDiagnosisInput = z.object({
+  jobId: z.string().uuid(),
+  diagnosedFault: z.string().nullable().optional(),
+  promisedDate: z.string().nullable().optional(),
+});
+export type UpdateJobDiagnosisInput = z.infer<typeof UpdateJobDiagnosisInput>;
+
+/** OD-2 — fixed list, not free text. Stored in job.cancellation_reason (migration 0015). */
+export const CancellationReason = z.enum([
+  'customer_declined_estimate',
+  'unrepairable',
+  'customer_collected_unrepaired',
+  'duplicate_job',
+  'other',
+]);
+export type CancellationReason = z.infer<typeof CancellationReason>;
+
+export const CancelJobInput = z.object({
+  jobId: z.string().uuid(),
+  reason: CancellationReason,
+  notes: z.string().trim().min(1).nullable(),
+});
+export type CancelJobInput = z.infer<typeof CancelJobInput>;
 
 export const IssuePartsToTechnicianInput = z.object({
   itemId: z.string().uuid(),
@@ -216,6 +263,24 @@ export const CustodyReconciliationResult = z.object({
 });
 export type CustodyReconciliationResult = z.infer<typeof CustodyReconciliationResult>;
 
+export const TechnicianAssignmentDto = z.object({
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  partyId: z.string().uuid(),
+  assignedAt: z.string(),
+  unassignedAt: z.string().nullable(),
+});
+export type TechnicianAssignmentDto = z.infer<typeof TechnicianAssignmentDto>;
+
+/** P14-5 — targets one job_technician row by its own id (not jobId +
+ * technicianPartyId), since a technician could in principle be
+ * assigned/unassigned/reassigned to the same job more than once over
+ * time and only the specific active row should be closed. */
+export const UnassignTechnicianInput = z.object({
+  id: z.string().uuid(),
+});
+export type UnassignTechnicianInput = z.infer<typeof UnassignTechnicianInput>;
+
 export const JobSummaryDto = z.object({
   id: z.string().uuid(),
   docNo: z.string(),
@@ -228,5 +293,18 @@ export const JobSummaryDto = z.object({
   applianceType: z.string().nullable(),
   applianceBrand: z.string().nullable(),
   reportedFault: z.string().nullable(),
+  /**
+   * P14-7/Q-C — owner-approved narrow exception to Phase 14's
+   * renderer-only rule: widening an existing read, no schema change, no
+   * new IPC channel. Needed for the list's overdue/stale indicators.
+   */
+  promisedDate: z.string().nullable(),
+  createdAt: z.string(),
+  /** P14-6 — job.diagnosis, shown in the list's Fault column ahead of reportedFault when set. */
+  diagnosedFault: z.string().nullable(),
+  /** P14-7 — same narrow-exception widening as promisedDate/createdAt: needed so the
+   * list's print icon (delivered jobs) can call invoice:printSaleInvoice without an
+   * extra job:getById round trip per click. */
+  saleId: z.string().uuid().nullable(),
 });
 export type JobSummaryDto = z.infer<typeof JobSummaryDto>;

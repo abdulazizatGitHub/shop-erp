@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { DeliverJobResult, JobDto } from '@shop/contracts';
-import { Alert, Button } from '@shop/ui';
+import { Alert } from '@shop/ui';
 import type { JobPartRecord } from '../../types/electron-api.js';
 import { ipc } from '../../lib/ipc.js';
+import { CancelJobModal } from './CancelJobModal.js';
+import { CANCELLATION_REASON_LABELS } from './cancellation-reason-labels.js';
+import { DiagnosedFaultSection } from './DiagnosedFaultSection.js';
 import { JobActivitySection } from './JobActivitySection.js';
-import { JobDeliveryDrawer } from './JobDeliveryDrawer.js';
+import { JobDeliveryModal } from './JobDeliveryModal.js';
 import { JobDetailHeader } from './JobDetailHeader.js';
+import { partIssuedTransitionTarget } from './job-status-machine.js';
 import { JobPartsSection } from './JobPartsSection.js';
 import { JobPropertyPanel } from './JobPropertyPanel.js';
 
@@ -14,6 +18,8 @@ export interface JobDetailPageProps {
   readonly onBack: () => void;
   /** Refreshes JobsPage's list in the background — does not navigate away. */
   readonly onListChanged: () => void;
+  /** P14-2/OD-6 — see JobPropertyPanel.tsx's prop doc comment. */
+  readonly onNavigateToCustomer: (customerId: string) => void;
 }
 
 /** Full-page job detail — replaces the old JobCardModal. Loads the job,
@@ -24,6 +30,7 @@ export function JobDetailPage({
   jobId,
   onBack,
   onListChanged,
+  onNavigateToCustomer,
 }: JobDetailPageProps): React.JSX.Element {
   const [job, setJob] = useState<JobDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -35,6 +42,7 @@ export function JobDetailPage({
   const [deliveredNotice, setDeliveredNotice] = useState<DeliverJobResult | null>(null);
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   useEffect(() => {
     ipc.job
@@ -55,6 +63,34 @@ export function JobDetailPage({
       .catch((err: unknown) => {
         setPartsError(err instanceof Error ? err.message : 'Failed to load parts');
       });
+  }
+
+  /**
+   * P14-3 — first-part-issued auto-transition. Reloads the parts list
+   * (as before P14-3) and, if the job is still 'received', advances it
+   * to 'in_progress' via canTransition-gated job-status-machine.ts (never
+   * a bare job:transitionStatus call — see this task's own scoping note
+   * on the three call sites needing to agree). A transition failure is
+   * swallowed rather than surfaced: the part issue itself already
+   * succeeded and is the real user-facing action here; the status pill
+   * simply stays as-is until the next issue or a manual override.
+   */
+  async function handlePartsChanged(): Promise<void> {
+    if (!job) return;
+    loadParts(job.id);
+    const target = partIssuedTransitionTarget(job.status);
+    if (target) {
+      try {
+        const updated = await ipc.job.transitionStatus({
+          jobId: job.id,
+          toStatus: target,
+          note: null,
+        });
+        setJob(updated);
+      } catch {
+        // See doc comment above — non-fatal.
+      }
+    }
   }
 
   useEffect(() => {
@@ -113,64 +149,84 @@ export function JobDetailPage({
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-8 px-6 py-6">
       <JobDetailHeader
         docNo={job.docNo}
         applianceType={job.applianceType}
         applianceBrand={job.applianceBrand}
         reportedFault={job.reportedFault}
+        diagnosedFault={job.diagnosedFault}
         status={job.status}
+        invoiceDocNo={deliveredNotice?.docNo ?? job.invoiceDocNo ?? null}
+        saleId={job.saleId}
+        printing={printing}
+        onPrintInvoice={() => {
+          void handlePrint(job.saleId as string);
+        }}
         onBack={onBack}
         onOpenDeliver={() => {
           setDeliverOpen(true);
         }}
+        onOpenCancel={() => {
+          setCancelOpen(true);
+        }}
       />
 
-      <div className="flex gap-8 px-6 py-6">
+      <div className="flex gap-8">
         <div className="min-w-0 flex-1 flex flex-col gap-8">
           {job.status === 'cancelled' && (
-            <p className="text-lg font-bold text-red-700">Job cancelled</p>
+            <p className="text-lg font-bold text-red-700">
+              Job cancelled
+              {job.cancellationReason && (
+                <span className="ml-2 text-sm font-normal text-red-600">
+                  —{' '}
+                  {(CANCELLATION_REASON_LABELS as Record<string, string>)[job.cancellationReason] ??
+                    job.cancellationReason}
+                </span>
+              )}
+            </p>
           )}
-          {job.status === 'delivered' && (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-gray-600">
-                Job delivered — invoice {deliveredNotice?.docNo ?? job.invoiceDocNo ?? 'recorded'}.
-              </p>
-              {printError && (
-                <Alert
-                  variant="warning"
-                  onDismiss={() => {
-                    setPrintError(null);
-                  }}
-                >
-                  Invoice did not print: {printError}
-                </Alert>
-              )}
-              {job.saleId && (
-                <Button
-                  variant="secondary"
-                  disabled={printing}
-                  onClick={() => {
-                    void handlePrint(job.saleId as string);
-                  }}
-                >
-                  Print Invoice
-                </Button>
-              )}
-            </div>
+          {job.status === 'delivered' && printError && (
+            <Alert
+              variant="warning"
+              onDismiss={() => {
+                setPrintError(null);
+              }}
+            >
+              Invoice did not print: {printError}
+            </Alert>
           )}
 
-          <JobPartsSection
-            job={job}
-            technicians={technicians}
-            parts={parts}
-            loadError={partsError}
-            onPartsChanged={() => {
-              loadParts(job.id);
-            }}
-          />
+          {/* F2 — Reported/Diagnosed Fault now share one card, same
+           * treatment as Parts & Labour/History below — was an unwrapped
+           * text block sitting directly on the grey page background. */}
+          <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+            <DiagnosedFaultSection job={job} onJobChanged={setJob} />
+          </div>
 
-          <JobActivitySection job={job} parts={parts} />
+          {/* V5 — same card-with-shadow treatment as the Customers list/
+           * ledger-table cards (exact className copied from
+           * CustomersPage.tsx), applied per-section so Parts & Labour and
+           * History read as grouped surfaces instead of floating text. */}
+          <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+            <JobPartsSection
+              job={job}
+              technicians={technicians}
+              parts={parts}
+              loadError={partsError}
+              onPartsChanged={() => {
+                void handlePartsChanged();
+              }}
+            />
+          </div>
+
+          <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+            <JobActivitySection
+              job={job}
+              parts={parts}
+              technicianNames={Object.fromEntries(technicians.map((t) => [t.id, t.name]))}
+            />
+          </div>
         </div>
 
         <JobPropertyPanel
@@ -178,11 +234,12 @@ export function JobDetailPage({
           technicians={technicians}
           customerName={customerName}
           onJobChanged={setJob}
+          onNavigateToCustomer={onNavigateToCustomer}
         />
       </div>
 
       {deliverOpen && (
-        <JobDeliveryDrawer
+        <JobDeliveryModal
           job={job}
           onClose={() => {
             setDeliverOpen(false);
@@ -203,6 +260,19 @@ export function JobDetailPage({
           }}
         />
       )}
+
+      <CancelJobModal
+        open={cancelOpen}
+        job={job}
+        onClose={() => {
+          setCancelOpen(false);
+        }}
+        onCancelled={(updated) => {
+          setCancelOpen(false);
+          setJob(updated);
+          onListChanged();
+        }}
+      />
     </div>
   );
 }

@@ -19,6 +19,8 @@ import { registerPaymentHandlers } from './ipc/handlers/payment.handler.js';
 import { registerJobHandlers } from './ipc/handlers/job.handler.js';
 import { registerJobIssueHandlers } from './ipc/handlers/job-issue.handler.js';
 import { registerJobDeliveryHandlers } from './ipc/handlers/job-delivery.handler.js';
+import { registerJobCancelHandlers } from './ipc/handlers/job-cancel.handler.js';
+import { registerJobDiagnosisHandlers } from './ipc/handlers/job-diagnosis.handler.js';
 import { registerCustodyHandlers } from './ipc/handlers/custody.handler.js';
 import { registerImportHandlers } from './ipc/handlers/import.handler.js';
 import { registerOpeningStockImportHandlers } from './ipc/handlers/opening-stock-import.handler.js';
@@ -101,6 +103,8 @@ function registerIpcHandlers(dbPath: string): void {
   registerJobHandlers({ dbPath, tenantId, deviceCode });
   registerJobIssueHandlers({ dbPath, tenantId, deviceCode });
   registerJobDeliveryHandlers({ dbPath, tenantId, deviceCode });
+  registerJobCancelHandlers({ dbPath, tenantId, deviceCode });
+  registerJobDiagnosisHandlers({ dbPath, tenantId, deviceCode });
   registerCustodyHandlers({ dbPath, tenantId, deviceCode });
   registerImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });
   registerOpeningStockImportHandlers({ dbPath, tenantId, deviceCode, logDir: resolveLogDir() });

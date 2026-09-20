@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { JobDto } from '@shop/contracts';
-import { Alert, MoneyDisplay, QuantityDisplay } from '@shop/ui';
+import { Alert, Button, MoneyDisplay, QuantityDisplay } from '@shop/ui';
 import type { JobPartRecord } from '../../types/electron-api.js';
 import { JobIssuePartForm } from './JobIssuePartForm.js';
 
@@ -85,15 +85,19 @@ export function JobPartsSection({
       {canAddLines && (
         <>
           <div className="mt-3 flex gap-3">
-            <button
-              type="button"
+            {/* V3 — was a raw <button> with a border-gray-300 border that
+             * read as invisible on white; the shared Button's `secondary`
+             * variant uses the design system's own border-line/bg-surface
+             * tokens instead, giving it a real visible border without
+             * being as prominent as a primary action. */}
+            <Button
+              variant="secondary"
               onClick={() => {
                 setShowIssueForm((v) => !v);
               }}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
             >
               + Add part
-            </button>
+            </Button>
           </div>
 
           <p className="mt-2 text-xs text-gray-400">

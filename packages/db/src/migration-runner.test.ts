@@ -42,12 +42,13 @@ describe('migrate', () => {
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
+      '0015_job_technician.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 49 tables and 11 views — the 44-table baseline (through 0013), +5 for purchase_order/purchase_order_line/grn/grn_line/item_price_history (0014); 0013 reformats item.item_code in place (net zero)', () => {
+  it('applies exactly 50 tables and 11 views — the 49-table baseline (through 0014), +1 for job_technician (0015); job.cancellation_reason is a column add, not a new table', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -56,7 +57,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(49);
+    expect(tables).toHaveLength(50);
     expect(views).toHaveLength(11);
   });
 
@@ -93,6 +94,7 @@ describe('migrate', () => {
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
+      '0015_job_technician.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -120,6 +122,7 @@ describe('migrate', () => {
       { version: 12, name: '0012_job_split_v2.sql' },
       { version: 13, name: '0013_item_code_reformat.sql' },
       { version: 14, name: '0014_purchase_order_grn.sql' },
+      { version: 15, name: '0015_job_technician.sql' },
     ]);
   });
 
@@ -192,6 +195,7 @@ describe('migrate', () => {
       '0012_job_split_v2.sql',
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
+      '0015_job_technician.sql',
     ]);
 
     db = new Database(dbPath);

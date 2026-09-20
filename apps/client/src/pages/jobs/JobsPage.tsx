@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react';
 import type { JobStatus, JobSummaryDto } from '@shop/contracts';
 import {
   Alert,
+  Button,
   EmptyState,
   LoadingState,
   Modal,
   PageHeader,
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeaderCell,
   TableRow,
+  TextInput,
 } from '@shop/ui';
+import { Pagination } from '../../components/shared/Pagination.js';
 import { ipc } from '../../lib/ipc.js';
-import { STATUS_PILL_CLASSES } from './JobDetailHeader.js';
 import { JobCreateForm } from './JobCreateForm.js';
 import { JobDetailPage } from './JobDetailPage.js';
+import { JobsTableRow } from './JobsTableRow.js';
 
 type StatusFilter = 'all' | JobStatus;
 
@@ -28,20 +30,28 @@ const STATUS_FILTERS: ReadonlyArray<{ key: StatusFilter; label: string }> = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-/** Truncates the fault text for the table column — the full text is on the job detail page. */
-function truncate(text: string | null, max: number): string {
-  if (!text) return '—';
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+/** V4 — matches every report page's own constant (ItemsSoldTable.tsx,
+ * ReceivablesAgingReport.tsx, etc. all use 10, not 20 — confirmed by
+ * grep across every reports/*.tsx file before picking this value). */
+const ROWS_PER_PAGE = 10;
+
+export interface JobsPageProps {
+  /** P14-2/OD-6 — see JobPropertyPanel.tsx's prop doc comment. */
+  readonly onNavigateToCustomer: (customerId: string) => void;
 }
 
-export default function JobsPage(): React.JSX.Element {
+export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchText, setSearchText] = useState('');
   const [jobs, setJobs] = useState<readonly JobSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [technicianNames, setTechnicianNames] = useState<Record<string, string>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [printingJobId, setPrintingJobId] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   function loadJobs(): void {
     ipc.job
@@ -83,7 +93,14 @@ export default function JobsPage(): React.JSX.Element {
       });
   }, []);
 
-  useEffect(loadJobs, [statusFilter]);
+  useEffect(() => {
+    loadJobs();
+    setPage(1);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchText]);
 
   function handleCreated(): void {
     setCreateOpen(false);
@@ -96,6 +113,37 @@ export default function JobsPage(): React.JSX.Element {
     return 'Walk-in';
   }
 
+  /**
+   * P14-7/SUB-4 — job:list has no search parameter (JobSearchInput is
+   * status/assignedTo/customerId only, confirmed by reading it before
+   * building this), so this filters the already-fetched list client-side.
+   * No debounce — nothing async happens per keystroke.
+   */
+  function matchesSearch(job: JobSummaryDto): boolean {
+    const q = searchText.trim().toLowerCase();
+    if (q.length === 0) return true;
+    const fault = (job.diagnosedFault ?? job.reportedFault ?? '').toLowerCase();
+    return (
+      job.docNo.toLowerCase().includes(q) ||
+      customerLabel(job).toLowerCase().includes(q) ||
+      fault.includes(q)
+    );
+  }
+
+  async function handlePrint(job: JobSummaryDto): Promise<void> {
+    if (!job.saleId) return;
+    setPrintingJobId(job.id);
+    setPrintError(null);
+    try {
+      const outcome = await ipc.invoice.printSaleInvoice(job.saleId);
+      setPrintError(outcome.printError);
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : 'Print invoice failed');
+    } finally {
+      setPrintingJobId(null);
+    }
+  }
+
   if (selectedJobId) {
     return (
       <JobDetailPage
@@ -104,97 +152,122 @@ export default function JobsPage(): React.JSX.Element {
           setSelectedJobId(null);
         }}
         onListChanged={loadJobs}
+        onNavigateToCustomer={onNavigateToCustomer}
       />
     );
   }
+
+  const filteredJobs = (jobs ?? []).filter(matchesSearch);
+  const visibleJobs = filteredJobs.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Jobs"
         actions={
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => {
               setCreateOpen(true);
             }}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             New Job
-          </button>
+          </Button>
         }
       />
 
-      <select
-        aria-label="Status filter"
-        value={statusFilter}
-        onChange={(e) => {
-          setStatusFilter(e.target.value as StatusFilter);
-        }}
-        className="w-fit rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
-      >
-        {STATUS_FILTERS.map((f) => (
-          <option key={f.key} value={f.key}>
-            {f.label}
-          </option>
-        ))}
-      </select>
-
       {error && <Alert variant="danger">{error}</Alert>}
-
-      {jobs === null ? (
-        <LoadingState message="Loading jobs…" />
-      ) : jobs.length === 0 ? (
-        <EmptyState message="No jobs found." hint="Click New Job to create one." />
-      ) : (
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>Job No</TableHeaderCell>
-              <TableHeaderCell>Date</TableHeaderCell>
-              <TableHeaderCell>Customer</TableHeaderCell>
-              <TableHeaderCell>Appliance</TableHeaderCell>
-              <TableHeaderCell>Fault</TableHeaderCell>
-              <TableHeaderCell>Technician</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {jobs.map((job) => (
-              // Raw <tr> (not the shared TableRow) so the whole row — not
-              // each cell separately — gets one cursor-pointer/hover
-              // treatment on click, per the P6.5 brief.
-              <tr
-                key={job.id}
-                className="cursor-pointer even:bg-surface-sunken hover:bg-gray-50"
-                onClick={() => {
-                  setSelectedJobId(job.id);
-                }}
-              >
-                <TableCell>{job.docNo}</TableCell>
-                <TableCell>{job.receivedDate}</TableCell>
-                <TableCell>{customerLabel(job)}</TableCell>
-                <TableCell>
-                  {[job.applianceType, job.applianceBrand].filter(Boolean).join(' — ') || '—'}
-                </TableCell>
-                <TableCell className="max-w-xs truncate" title={job.reportedFault ?? undefined}>
-                  {truncate(job.reportedFault, 40)}
-                </TableCell>
-                <TableCell>
-                  {job.assignedTo ? (technicianNames[job.assignedTo] ?? '…') : '—'}
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_PILL_CLASSES[job.status]}`}
-                  >
-                    {job.status}
-                  </span>
-                </TableCell>
-              </tr>
-            ))}
-          </TableBody>
-        </Table>
+      {printError && (
+        <Alert
+          variant="warning"
+          onDismiss={() => {
+            setPrintError(null);
+          }}
+        >
+          Invoice did not print: {printError}
+        </Alert>
       )}
+
+      {/* V5 — same card-with-shadow container CustomersPage.tsx wraps
+       * CustomerListView in (exact className copied from there), so the
+       * jobs list reads as one grouped surface instead of a bare table
+       * floating on the page background. */}
+      <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+        <div className="mb-4 flex items-center gap-3">
+          <select
+            aria-label="Status filter"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as StatusFilter);
+            }}
+            className="w-fit rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
+          >
+            {STATUS_FILTERS.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <div className="flex-1">
+            <TextInput
+              variant="search"
+              aria-label="Search jobs"
+              placeholder="Search by job number, customer, or fault…"
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+              }}
+            />
+          </div>
+        </div>
+
+        {jobs === null ? (
+          <LoadingState message="Loading jobs…" />
+        ) : filteredJobs.length === 0 ? (
+          <EmptyState message="No jobs found." hint="Click New Job to create one." />
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Job No</TableHeaderCell>
+                <TableHeaderCell>Date</TableHeaderCell>
+                <TableHeaderCell>Client</TableHeaderCell>
+                <TableHeaderCell>Appliance</TableHeaderCell>
+                <TableHeaderCell>Brand</TableHeaderCell>
+                <TableHeaderCell>Fault</TableHeaderCell>
+                <TableHeaderCell>Technicians</TableHeaderCell>
+                <TableHeaderCell>Promised Date</TableHeaderCell>
+                <TableHeaderCell>Status</TableHeaderCell>
+                <TableHeaderCell>Actions</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visibleJobs.map((job) => (
+                <JobsTableRow
+                  key={job.id}
+                  job={job}
+                  customerLabel={customerLabel(job)}
+                  technicianLabel={job.assignedTo ? (technicianNames[job.assignedTo] ?? '…') : '—'}
+                  onSelect={() => {
+                    setSelectedJobId(job.id);
+                  }}
+                  onPrint={() => {
+                    void handlePrint(job);
+                  }}
+                  printing={printingJobId === job.id}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        <Pagination
+          totalRows={filteredJobs.length}
+          rowsPerPage={ROWS_PER_PAGE}
+          currentPage={page}
+          onPageChange={setPage}
+        />
+      </div>
 
       <Modal
         open={createOpen}

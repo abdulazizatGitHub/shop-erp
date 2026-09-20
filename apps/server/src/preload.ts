@@ -46,6 +46,11 @@ import type {
   JobSearchInput,
   JobStatusTransitionInput,
   JobSummaryDto,
+  JobStatusHistoryDto,
+  TechnicianAssignmentDto,
+  UnassignTechnicianInput,
+  CancelJobInput,
+  UpdateJobDiagnosisInput,
   TechnicianCustodyInput,
   PartyAnyDto,
   PartySearchAnyInput,
@@ -393,6 +398,20 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.job.listServiceCharges) as Promise<
         readonly ServiceChargeOption[]
       >,
+    listTechnicianAssignments: (id: string): Promise<readonly TechnicianAssignmentDto[]> =>
+      ipcRenderer.invoke(channels.job.listTechnicianAssignments, { id }) as Promise<
+        readonly TechnicianAssignmentDto[]
+      >,
+    unassignTechnician: (input: UnassignTechnicianInput): Promise<void> =>
+      ipcRenderer.invoke(channels.job.unassignTechnician, input) as Promise<void>,
+    listStatusHistory: (id: string): Promise<readonly JobStatusHistoryDto[]> =>
+      ipcRenderer.invoke(channels.job.listStatusHistory, { id }) as Promise<
+        readonly JobStatusHistoryDto[]
+      >,
+    cancelJob: (input: CancelJobInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.cancelJob, input) as Promise<JobDto>,
+    updateDiagnosis: (input: UpdateJobDiagnosisInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.updateDiagnosis, input) as Promise<JobDto>,
   },
   uom: {
     listConversions: (): Promise<readonly UomConversionOption[]> =>

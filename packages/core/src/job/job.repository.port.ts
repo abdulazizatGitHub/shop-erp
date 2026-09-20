@@ -43,6 +43,20 @@ export interface JobRecord {
   readonly saleId: string | null;
   /** sale.doc_no for saleId, e.g. INV-A-000123 — null until the job is delivered. */
   readonly invoiceDocNo: string | null;
+  /** P14-4 — set only by cancelJob; null for every non-cancelled job. */
+  readonly cancellationReason: string | null;
+  /** P14-6 — job.diagnosis column, Q-A naming. */
+  readonly diagnosedFault: string | null;
+  /** P14-8 — fallback timestamp for the synthesised diagnosis event when
+   * no 'diagnosed' job_status_history row exists (edge case). */
+  readonly updatedAt: string;
+}
+
+/** P14-8 — one job_status_history row, read-only. */
+export interface JobStatusHistoryRecord {
+  readonly fromStatus: JobStatus | null;
+  readonly toStatus: JobStatus;
+  readonly changedAt: string;
 }
 
 /** All fields optional/null — an unset field is not filtered on. */
@@ -65,6 +79,11 @@ export interface JobSummaryRecord {
   readonly applianceType: string | null;
   readonly applianceBrand: string | null;
   readonly reportedFault: string | null;
+  /** P14-7/Q-C — owner-approved narrow exception, widening an existing read. */
+  readonly promisedDate: string | null;
+  readonly createdAt: string;
+  readonly diagnosedFault: string | null;
+  readonly saleId: string | null;
 }
 
 /** Mirrors v_job_split's columns exactly — see 0010_job_additions.sql. */
@@ -168,4 +187,6 @@ export interface JobRepositoryPort {
   updateJobStatus(input: JobStatusTransitionInput): Promise<JobRecord>;
   /** Plain UPDATE to job.assigned_to — job is not an append-only table. */
   assignTechnician(input: AssignTechnicianInput): Promise<JobRecord>;
+  /** P14-8 — plain filtered SELECT, changed_at ASC, every row (no netting/aggregation). */
+  listStatusHistory(jobId: string): Promise<readonly JobStatusHistoryRecord[]>;
 }

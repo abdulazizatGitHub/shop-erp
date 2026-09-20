@@ -41,6 +41,263 @@
 
 ---
 
+## [2026-09-20] Session 72 — Phase 14: G1–G6 final polish, Phase 14 COMPLETE + committed
+
+**Goal:** Six targeted, renderer-only fixes closing out the visual review
+of the Jobs module (G1–G6), following Session 71's P14-1–P14-8 and the
+same-session V1–V5/F1–F3 polish passes. Then mark Phase 14 COMPLETE and
+commit the entire phase.
+
+**Done, one task at a time, `npm run build --workspace=@shop/client`
+after each:**
+
+- **G1/G2** — owner decision: the manual "Update status →" picker is
+  removed entirely, no replacement (auto-transitions handle the primary
+  flow; edge cases deferred to a future workflow phase). Deleted
+  `JobStatusPicker.tsx` outright (confirmed zero remaining importers by
+  grep) and its only call site/state in `JobPropertyPanel.tsx`. The
+  sidebar's STATUS section (label + badge) was then removed in full,
+  G2, since it duplicated the status pill already shown in the header
+  card (F2) — sidebar now shows Client/Technicians/Received/Promised/
+  Estimate/Job Type only.
+- **G3** — read `JobDetailHeader.tsx` and `JobDetailPage.tsx` first, per
+  the task's own instruction, to find which file rendered the floating
+  delivered-state block: it was `JobDetailPage.tsx` (lines 179–208 pre-
+  edit), not the header. Moved the invoice doc-no text and Print Invoice
+  button into `JobDetailHeader.tsx` (new props: `invoiceDocNo`,
+  `saleId`, `printing`, `onPrintInvoice`) — Print Invoice now renders
+  next to the status pill as `variant="secondary"` (was `primary` after
+  F2; a delivered job's invoice is already done, so printing is
+  secondary here), and the invoice number is a small muted line under
+  the subtitle. `JobDetailPage.tsx` keeps only the printError `Alert`
+  for a delivered job; the floating prose block and full-width button
+  are gone.
+- **G4** — grepped `Customer` across `apps/client/src/pages/jobs/` first
+  (pasted in-session) before editing. Renamed the job-screen-only display
+  strings "Customer"→"Client": the sidebar label (`JobPropertyPanel.tsx`),
+  the jobs-list column header (`JobsPage.tsx`), and the intake field
+  label — which actually lives in `CustomerPicker.tsx`, not
+  `JobCreateForm.tsx` itself (both its selected- and unselected-state
+  labels), since that's the component `JobCreateForm.tsx` renders it
+  through. `JobDetailHeader.tsx` and `JobDeliveryModal.tsx` were
+  confirmed by grep to have zero "Customer" display strings — no change
+  needed in either. The Customers tab/`CustomersPage.tsx`/ledger were not
+  touched, per the task's explicit scope. Updated
+  `JobCreateForm.test.tsx`'s `getByLabelText('Customer')` to `'Client'`
+  to match.
+- **G5** — read `JobDeliveryModal.tsx` and `Modal.tsx` first: **Modal
+  only has two sizes, `'default'` (max-w-md) and `'wide'` (max-w-4xl) —
+  no `'sm'`/`'md'`/`'lg'` as the task assumed.** `DeliveryPartLines.tsx`
+  renders a 6-column table (Item/Qty/Unit Cost/Price/Payer/Revenue type)
+  with inline `<Select>` dropdowns; at `'default'` width (448px) that
+  table would break. Per the task's own qualifier — "use the smallest
+  that fits the content comfortably" — kept `size="wide"` unchanged and
+  documented the finding rather than forcing a narrower width that would
+  break the table. "Deliver & Invoice" changed from a raw
+  `bg-green-600` button to the shared `Button` component,
+  `variant="primary" size="large" fullWidth` (matches its previous
+  `px-6 py-3 text-lg` sizing exactly). Read `PaymentMethodToggle.tsx`
+  (`RecordPaymentModal.tsx`'s equivalent control) for the Cash/Credit
+  question: its active/inactive convention (selected = `border-brand
+bg-brand text-white`, unselected = `border-line bg-surface`, brand is
+  `#1B5E8C` — a dark blue) is **already** exactly what
+  `JobDeliveryPaymentPanel.tsx`'s Cash/Credit toggle implements — not
+  "both dark blue" as the task's screenshot description assumed; only
+  the selected one renders brand-coloured. Left unchanged, per "match
+  that pattern exactly" — it already does.
+- **G6** — read `JobCreateForm.tsx`: "Create Job" was a raw
+  `<button className="... bg-blue-600 ...">`, the file's own documented
+  DEBT-1 exception. Replaced with `<Button variant="primary" fullWidth>`
+  (wrapped in a `mt-2` div, since `Button` takes no `className` prop) —
+  one-line functional change, nothing else in the file touched.
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client` — exit 0 after every one of
+  the six sub-tasks.
+- `grep -rn "JobStatusPicker" apps/` — zero hits (G1).
+- `grep -rn '"Customer"' apps/client/src/pages/jobs/` — zero hits (G4).
+- `npm run verify` — first run failed 311/627 with the recurring
+  `TypeError: Cannot read properties of undefined (reading 'close')` in
+  every repository test's `afterEach` (the documented better-sqlite3
+  NODE_MODULE_VERSION mismatch, unrelated to this session's code — same
+  environmental issue logged in Sessions 70/71 and earlier phases).
+  Fixed with `taskkill /F /IM electron.exe` (PowerShell) + `npm rebuild
+better-sqlite3`. Re-ran: **627/627 tests, 109/109 test files, exit
+  0** — unchanged from before G1–G6 (one component deleted, existing
+  tests updated in place for label/behaviour changes, no new test files
+  needed for this pass).
+- Line counts (before → after), all under the 300-line convention:
+  `JobPropertyPanel.tsx` 126→108, `JobDetailHeader.tsx` 127→148,
+  `JobDetailPage.tsx` 288→274, `CustomerPicker.tsx` 145 (label text only,
+  no line-count change), `JobsPage.tsx` 288 (unchanged), `JobDeliveryModal.tsx`
+  290 (unchanged), `JobDeliveryPaymentPanel.tsx` 98→103,
+  `JobCreateForm.tsx` 282 (unchanged). `JobStatusPicker.tsx` (84 lines)
+  deleted.
+- `git status --short` — clean of surprises before commit; matched
+  expectations for every file across P14-1–P14-8/V1–V5/F1–F3/G1–G6.
+
+**Not done / deferred:** Nothing — all six G-tasks were explicitly
+renderer-only with no backend/IPC/migration component.
+
+**Bugs found:** BUG-JOBCLIENT-1 (see PROJECT.md §4) — job intake's
+client search queries `party_type='customer'` (the Spare Parts ledger
+population), not a dedicated job-client population. Not fixed this
+session (deliberately out of scope — Phase 15).
+
+**Decisions taken:** Q-P15-1 (PROJECT.md §5) — `job_client` will be a
+separate table, not a `party_type='job_client'` row on the existing
+`party` table. Owner decision, 2026-09-20.
+
+**Blocked on:** nothing.
+
+**Next session should:** start Phase 15 with the `job_client` table
+migration (see BUG-JOBCLIENT-1 / Q-P15-1) — do not start any Phase 15
+work in this session, per explicit instruction.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase (BUG-JOBCLIENT-1 was
+      pre-existing behaviour, surfaced and logged this session, not
+      introduced by G1–G6)
+- [x] PROJECT.md updated with new status (Phase 14 row added, COMPLETE;
+      BUG-JOBCLIENT-1 and Q-P15-1 added)
+- [x] PROGRESS.md updated with session entry (this entry)
+- [x] Next phase prerequisites are met (Phase 15 scope decided: Q-P15-1)
+- [x] Any new bugs documented in PROJECT.md (BUG-JOBCLIENT-1)
+- [x] Test suite passing (627/627)
+
+---
+
+## [2026-09-20] Session 71 — Phase 14: Jobs Module Redesign, P14-1 through P14-8, COMPLETE
+
+**Goal:** Redesign the repair job workflow end to end — multi-technician
+assignment, phone-deduped customer intake, automatic status transitions,
+cancel-with-stock-reversal, a diagnosed-fault field, an overdue/stale job
+list, and a real chronological History panel. Full task list and every
+design decision/verification are in `docs/phases/PHASE_14.md`; this entry
+summarizes.
+
+**Done, one task at a time, each independently verified against a real
+SQLite database (not simulated) before moving to the next:**
+
+- **P14-1** — `job_technician` table (migration `0015_job_technician.sql`),
+  multi-technician dual-write (`job.assigned_to` set once, first
+  assignment only — a bug in my own first draft, caught by my own
+  verification before it shipped, fixed same task). `job.repository.ts`
+  extracted into 4 files (DEBT-6, resolved same day per explicit owner
+  instruction not to defer it).
+- **P14-2** — job intake redesigned to 5 fields; `CustomerPicker.tsx`
+  (search-or-create, phone shown per OD-4); every job now carries a real
+  `customerId` (existing, deduped, or newly created) instead of bare
+  adhoc text; OD-6 customer-name → `CustomerDetailPage` link wired via a
+  new `App.tsx`-lifted `pendingCustomerId`.
+- **P14-3** — `job-status-machine.ts`, single source of truth for
+  transitions (`ALLOWED_TRANSITIONS`/`canTransition`), extracted from a
+  hardcoded array in `JobPropertyPanel.tsx`. Auto-transition on first
+  part issued (received→in_progress). The diagnosis→diagnosed trigger
+  was built and verified via script but deliberately left with no UI
+  call site — no diagnosis-save action existed yet (owner-approved,
+  AskUserQuestion).
+- **P14-4** — `job:cancelJob`, one transaction. Two corrections to the
+  session's own original brief, found by reading live code before
+  writing any: stock reversal reuses the ORIGINAL issue row's
+  `source_type`/`source_id` (not a new `'job_cancel'` source — matches
+  `cancelSale`'s established precedent and `DATABASE_RULES.md` §3);
+  `job.status` is never UPDATEd, only a new `job_status_history` row
+  (matches every other status-changing method in the codebase). Sign
+  convention derived, not assumed: `job_return` quantity is the
+  negation of the original (already-negative) `job_issue` row.
+- **P14-5** — `TechnicianAssignmentPanel.tsx` (multi-tech list, legacy
+  fallback for pre-P14-1 jobs, read-only once delivered/cancelled). New
+  minimal `job:unassignTechnician` (only `unassigned_at = now`, no other
+  writes — owner's explicit scope). `JobPropertyPanel.tsx` shrank
+  198→137 lines.
+- **P14-6** — owner chose OPTION A: a narrow `job:updateDiagnosis`
+  (exactly `diagnosedFault`/`promisedDate`, `undefined` = don't touch /
+  `null` = clear) built this phase rather than deferred. `PromisedDateField.tsx`
+  replaces a display-only section that couldn't ever SET a first
+  promised date. `JobDetailHeader.tsx` shows `diagnosedFault` as primary
+  whenever set (a judgment call on the brief's "after delivery" wording,
+  flagged explicitly, not silently assumed).
+- **P14-7** — job list: Brand/Fault(with silent diagnosedFault fallback)/
+  Technicians/Promised Date/Actions columns; overdue red dot and stale
+  amber clock (real `text-danger`/`text-warning` tokens, read from
+  `packages/ui/src/tokens/colors.ts`, not hardcoded); client-side search
+  (confirmed `job:list` has no search param before choosing this);
+  print icon reusing the exact existing `invoice:printSaleInvoice`
+  call path. Technicians column: owner chose option (b) — logged as
+  **BUG-TECHLIST-1**.
+- **P14-8** — `job-history-events.ts`, pure event-merge/sort/format logic
+  (no React — unit-tested directly, 7 tests, no jsdom). New
+  `job:listStatusHistory` channel (confirmed no existing read returned
+  full history — every prior use read only the latest row). Item names
+  for part events needed no new query — `job:listJobParts` already
+  joined to `item`. `CANCELLATION_REASON_LABELS` extracted out of
+  `CancelJobModal.tsx` into its own file after the pure module's test
+  broke on `window.api` being touched at import time — found by running
+  the test, not assumed. `STATUS_LABELS` (all 8 statuses) built in
+  `JobDetailHeader.tsx` — no complete label map existed anywhere before
+  this; every status badge in the app previously rendered the raw enum
+  string.
+
+**Verified, every task, against a real migrated+seeded SQLite database**
+(via throwaway `tsx` scripts, deleted after use, plus new permanent
+component/unit tests where the logic was reusable — `JobCreateForm.test.tsx`,
+`JobsPage.test.tsx` additions, `job-history-events.test.ts`): dual-write
+correctness, cancellation stock math (hand-calculated, matched exactly),
+technician assign/unassign append-only integrity, diagnosis save +
+auto-transition + clear-to-null, and a full 6-step job lifecycle (create
+→ assign two → issue a part → diagnose → unassign one → deliver)
+producing a correctly time-ordered 9-event History panel.
+
+**Bugs found:**
+
+- BUG-17 — narrowed, not closed (see PROJECT.md).
+- BUG-COMMISSION-MULTI (new) — a second technician on a job earns no
+  commission; deferred to a future Settings — Job Configuration phase
+  per OD-1's original decision.
+- BUG-TECHLIST-1 (new) — job list shows only the primary technician;
+  owner-approved trade-off.
+- DEBT-6 — resolved same day.
+
+**Decisions taken:** Q-A/Q-B/Q-C (session-opening plan) plus every
+per-task decision in `docs/phases/PHASE_14.md` §5 — no new ADRs (all
+within existing architectural precedent, several explicitly correcting
+this session's own original brief against the live code).
+
+**Blocked on:** nothing — Phase 14 is closed. BUG-17's remaining scope
+(every job field other than diagnosedFault/promisedDate) needs its own
+future decision, same as before this phase.
+
+**Not committed:** none of this session's work has been committed to
+git — the working tree is clean of stray files (`git status` checked
+after every task) but nothing has been staged/committed; that's the
+user's call, not done automatically per this session's operating rules.
+
+**Next session should:** Start whatever comes after Phase 14, or commit
+this phase's work first if that's the priority — 8 tasks, ~40 files
+touched/created, all independently verified. If touching
+`job.repository.ts` again, check `wc -l` first (282 lines, close to the
+300 convention).
+
+**Checklist:**
+
+- [x] All verification checks passed — `npm run verify` 617/617, exit 0,
+      every task verified independently before the next began
+- [x] No unresolved bugs introduced by this phase — all found bugs are
+      either resolved (DEBT-6) or explicitly deferred with an owner
+      decision (BUG-COMMISSION-MULTI, BUG-TECHLIST-1, BUG-17 narrowed)
+- [x] PROJECT.md updated with new status (DEBT-6, BUG-COMMISSION-MULTI,
+      BUG-TECHLIST-1)
+- [x] PROGRESS.md updated with session entry (this one)
+- [x] Next phase prerequisites are met — nothing blocking
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (`npm run verify` 617/617, exit 0)
+
+---
+
 ## [2026-09-20] Session 70 — Phase 13 CLOSE-OUT: verified, tested, marked COMPLETE
 
 **Goal:** Close out Phase 13 for real — full suite green, fill the test

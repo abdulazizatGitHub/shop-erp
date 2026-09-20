@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DeliverJobInput, DeliverJobResult, JobDto } from '@shop/contracts';
 import { Money } from '@shop/shared';
-import { Alert, MoneyDisplay } from '@shop/ui';
+import { Alert, Modal } from '@shop/ui';
 import type { JobPartRecord, ServiceChargeOption } from '../../types/electron-api.js';
 import { ipc } from '../../lib/ipc.js';
 import { DeliveryPartLines, type PartLineEdit } from './DeliveryPartLines.js';
 import { DeliveryLabourLines, type LabourLineEdit } from './DeliveryLabourLines.js';
+import { DeliveryTotals } from './DeliveryTotals.js';
 import { JobDeliveryPaymentPanel } from './JobDeliveryPaymentPanel.js';
 
 function todayIso(): string {
@@ -24,24 +25,27 @@ function deliverableParts(parts: readonly JobPartRecord[]): readonly JobPartReco
   return parts.filter((p) => p.entryType === 'issue' && !returnedIssueIds.has(p.id));
 }
 
-export interface JobDeliveryDrawerProps {
+export interface JobDeliveryModalProps {
   readonly job: JobDto;
   readonly onClose: () => void;
   readonly onDelivered: (result: DeliverJobResult) => void;
 }
 
 /**
- * Right-side slide-in drawer for delivering a job — the same delivery
- * logic as the retired JobDeliverTab.tsx (same hooks, same
- * ipc.job.deliver call, same DeliveryPartLines/DeliveryLabourLines/
- * JobDeliverPaymentBox reuse), just moved into a drawer shell instead of
- * a modal tab per the P6.5 full-page redesign.
+ * F3 — centred modal, converted from the retired JobDeliveryDrawer.tsx
+ * (a fixed right-side panel). Same delivery logic, same
+ * DeliveryPartLines/DeliveryLabourLines/JobDeliveryPaymentPanel reuse —
+ * only the container changed, to the same Modal wrapper CancelJobModal.tsx
+ * uses (Modal already renders its own title + close (×) button, so the
+ * hand-rolled header this file used to have is gone). `size="wide"` —
+ * the content is tabular (multiple part/labour line columns), needs more
+ * room than Modal's default max-w-md.
  */
-export function JobDeliveryDrawer({
+export function JobDeliveryModal({
   job,
   onClose,
   onDelivered,
-}: JobDeliveryDrawerProps): React.JSX.Element {
+}: JobDeliveryModalProps): React.JSX.Element {
   const [allParts, setAllParts] = useState<readonly JobPartRecord[] | null>(null);
   const [serviceCharges, setServiceCharges] = useState<readonly ServiceChargeOption[]>([]);
   const [partEdits, setPartEdits] = useState<Record<string, PartLineEdit>>({});
@@ -220,32 +224,8 @@ export function JobDeliveryDrawer({
   }
 
   return (
-    <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-        <h2 className="text-lg font-semibold text-gray-900">Deliver Job {job.docNo}</h2>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="-m-1 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <line x1="6" y1="6" x2="18" y2="18" />
-            <line x1="18" y1="6" x2="6" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+    <Modal open title={`Deliver Job ${job.docNo}`} onClose={onClose} size="wide">
+      <div className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto">
         {error && <Alert variant="danger">{error}</Alert>}
 
         {allParts === null ? (
@@ -286,20 +266,11 @@ export function JobDeliveryDrawer({
               />
             </section>
 
-            <section className="flex flex-col gap-1 border-t border-gray-200 pt-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Parts total</span>
-                <MoneyDisplay paisaValue={partsTotalPaisa} size="sm" />
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Labour total</span>
-                <MoneyDisplay paisaValue={labourTotalPaisa} size="sm" />
-              </div>
-              <div className="mt-1 flex items-center justify-between border-t border-gray-200 pt-1">
-                <span className="text-base font-bold text-gray-900">Total due</span>
-                <MoneyDisplay paisaValue={grandTotalPaisa} size="total" />
-              </div>
-            </section>
+            <DeliveryTotals
+              partsTotalPaisa={partsTotalPaisa}
+              labourTotalPaisa={labourTotalPaisa}
+              grandTotalPaisa={grandTotalPaisa}
+            />
 
             <JobDeliveryPaymentPanel
               multiPayer={multiPayer}
@@ -314,6 +285,6 @@ export function JobDeliveryDrawer({
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

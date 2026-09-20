@@ -1,4 +1,5 @@
-import { Alert, TextInput } from '@shop/ui';
+import { Alert, Button, TextInput } from '@shop/ui';
+import { sanitizeMoneyInput } from './money-input.js';
 
 export interface JobDeliveryPaymentPanelProps {
   readonly multiPayer: boolean;
@@ -10,15 +11,20 @@ export interface JobDeliveryPaymentPanelProps {
 }
 
 /**
- * Split out of JobDeliveryDrawer.tsx to keep that file under the 300-line
- * limit — same content/behaviour as the retired JobDeliverPaymentBox.tsx.
+ * Split out of JobDeliveryDrawer.tsx (now JobDeliveryModal.tsx, F3) to
+ * keep that file under the 300-line limit — same content/behaviour as
+ * the retired JobDeliverPaymentBox.tsx.
  * The Cash/Credit toggle is a shortcut for the "Amount paid" field —
  * DeliverJobInput has no paymentMode field, so Cash just sets the field
- * to the full total and Credit sets it to 0; no new IPC state. "Deliver &
- * Invoice" is a raw <button> (not the shared Button component) to get
- * the green the brief asks for — Button has no green variant and
- * packages/ui primitives are off-limits this session; same DEBT-1
- * category as JobDetailHeader's status pills (PROJECT.md).
+ * to the full total and Credit sets it to 0; no new IPC state. Its
+ * selected/unselected styling (border-brand+bg-brand vs border-line+
+ * bg-surface) already matches PaymentMethodToggle.tsx's active/inactive
+ * pattern (RecordPaymentModal.tsx's equivalent control) — confirmed by
+ * reading it for G5, so left unchanged. "Deliver & Invoice" now uses the
+ * shared Button component's variant="primary" (G5) instead of a raw
+ * green <button> — was a DEBT-1 exception (PROJECT.md) from when
+ * packages/ui primitives were off-limits; that restriction no longer
+ * applies here.
  */
 export function JobDeliveryPaymentPanel({
   multiPayer,
@@ -46,7 +52,7 @@ export function JobDeliveryPaymentPanel({
             variant="number"
             value={paidRupees}
             onChange={(e) => {
-              onPaidRupeesChange(e.target.value);
+              onPaidRupeesChange(sanitizeMoneyInput(e.target.value));
             }}
           />
           <div role="radiogroup" aria-label="Payment mode" className="grid grid-cols-2 gap-3">
@@ -83,14 +89,9 @@ export function JobDeliveryPaymentPanel({
           </div>
         </>
       )}
-      <button
-        type="button"
-        disabled={submitting}
-        onClick={onDeliver}
-        className="w-full rounded-md bg-green-600 px-6 py-3 text-lg font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
+      <Button variant="primary" size="large" fullWidth disabled={submitting} onClick={onDeliver}>
         Deliver &amp; Invoice
-      </button>
+      </Button>
     </div>
   );
 }

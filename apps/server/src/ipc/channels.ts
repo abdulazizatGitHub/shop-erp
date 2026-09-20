@@ -90,6 +90,11 @@ export const channels = {
     getTechnicianCustody: 'job:getTechnicianCustody',
     listTechnicians: 'job:listTechnicians',
     listServiceCharges: 'job:listServiceCharges',
+    listTechnicianAssignments: 'job:listTechnicianAssignments',
+    unassignTechnician: 'job:unassignTechnician',
+    listStatusHistory: 'job:listStatusHistory',
+    cancelJob: 'job:cancelJob',
+    updateDiagnosis: 'job:updateDiagnosis',
   },
   uom: { listConversions: 'uom:listConversions' },
   report: {

@@ -13,6 +13,7 @@ import {
   TextInput,
 } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { sanitizeMoneyInput } from './money-input.js';
 import type { JobPartRecord } from '../../types/electron-api.js';
 import { SearchSelect } from '../sales/SearchSelect.js';
 
@@ -119,7 +120,7 @@ export function DeliveryPartLines({
                   variant="number"
                   value={edit.priceRupees}
                   onChange={(e) => {
-                    onChange(p.id, { ...edit, priceRupees: e.target.value });
+                    onChange(p.id, { ...edit, priceRupees: sanitizeMoneyInput(e.target.value) });
                   }}
                 />
               </TableCell>

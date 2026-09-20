@@ -14,6 +14,7 @@ import {
 } from '@shop/ui';
 import type { ServiceChargeOption } from '../../types/electron-api.js';
 import { OtherPartyPicker, type PayerChoice } from './DeliveryPartLines.js';
+import { sanitizeMoneyInput } from './money-input.js';
 
 export interface LabourLineEdit {
   readonly key: string;
@@ -87,7 +88,10 @@ export function DeliveryLabourLines({
                     variant="number"
                     value={line.priceRupees}
                     onChange={(e) => {
-                      onChange(line.key, { ...line, priceRupees: e.target.value });
+                      onChange(line.key, {
+                        ...line,
+                        priceRupees: sanitizeMoneyInput(e.target.value),
+                      });
                     }}
                   />
                 </TableCell>
@@ -145,11 +149,12 @@ export function DeliveryLabourLines({
                 <TableCell>
                   <Button
                     variant="secondary"
+                    aria-label={`Remove ${line.serviceChargeName}`}
                     onClick={() => {
                       onRemove(line.key);
                     }}
                   >
-                    Remove
+                    ×
                   </Button>
                 </TableCell>
               </TableRow>

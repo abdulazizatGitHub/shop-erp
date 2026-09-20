@@ -4,6 +4,7 @@ import type {
   JobRecord,
   JobRepositoryPort,
   JobSplitRecord,
+  JobStatusHistoryRecord,
   JobStatusTransitionInput,
   JobSummaryRecord,
   NewJobInput,
@@ -47,6 +48,9 @@ class FakeJobRepository implements JobRepositoryPort {
     labourChargePaisa: 0,
     saleId: null,
     invoiceDocNo: null,
+    cancellationReason: null,
+    diagnosedFault: null,
+    updatedAt: '2026-09-05T00:00:00.000Z',
   };
 
   getJob(): Promise<JobRecord | null> {
@@ -59,6 +63,9 @@ class FakeJobRepository implements JobRepositoryPort {
     return Promise.resolve(null);
   }
   getTechnicianCustody(): Promise<readonly TechnicianCustodyRecord[]> {
+    return Promise.resolve([]);
+  }
+  listStatusHistory(): Promise<readonly JobStatusHistoryRecord[]> {
     return Promise.resolve([]);
   }
   createJob(input: NewJobInput): Promise<JobRecord> {

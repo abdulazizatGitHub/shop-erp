@@ -204,6 +204,7 @@ export type {
   JobSearchQuery,
   JobSummaryRecord,
   JobSplitRecord,
+  JobStatusHistoryRecord,
   TechnicianCustodyRecord,
   NewJobInput,
   JobStatusTransitionInput,
@@ -211,6 +212,20 @@ export type {
   JobRepositoryPort,
 } from './job/job.repository.port.js';
 export { createJob, assignTechnician, transitionJobStatus } from './job/job.service.js';
+
+export type {
+  TechnicianAssignmentRecord,
+  JobTechnicianRepositoryPort,
+} from './job/job-technician.repository.port.js';
+
+export type { CancelJobInput, JobCancelRepositoryPort } from './job/job-cancel.repository.port.js';
+export { cancelJob } from './job/job-cancel.service.js';
+
+export type {
+  UpdateJobDiagnosisInput,
+  JobDiagnosisRepositoryPort,
+} from './job/job-diagnosis.repository.port.js';
+export { updateJobDiagnosis } from './job/job-diagnosis.service.js';
 
 export type {
   IssuePartsToTechnicianInput,

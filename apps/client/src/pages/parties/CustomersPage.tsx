@@ -6,19 +6,29 @@ import { CustomerDetailPage } from './CustomerDetailPage.js';
 import { CustomerListView } from './CustomerListView.js';
 import { ImportCustomersModal } from './ImportCustomersModal.js';
 
+export interface CustomersPageProps {
+  /** P14-2/OD-6: set when navigated here from a job card's customer-name
+   * link (JobPropertyPanel.tsx via App.tsx) — opens straight to that
+   * customer's detail view instead of the list. Read once at mount, same
+   * as every other prop here; App.tsx clears it after the tab switch
+   * commits so returning to Customers via the sidebar later shows the
+   * list, not the same customer again. */
+  readonly initialCustomerId?: string | null;
+}
+
 /**
  * P4.5-8, updated for CL-5/CL-9: import moved from an inline card into a
  * modal; row selection now drills into CustomerDetailPage instead of
  * staying on the list.
  */
-export function CustomersPage(): React.JSX.Element {
+export function CustomersPage({ initialCustomerId = null }: CustomersPageProps): React.JSX.Element {
   const [importOpen, setImportOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   // Remounts CustomerListView after an import/add, forcing a fresh load —
   // same pattern as SuppliersPage.
   const [listVersion, setListVersion] = useState(0);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(initialCustomerId);
 
   if (selectedCustomerId) {
     return (

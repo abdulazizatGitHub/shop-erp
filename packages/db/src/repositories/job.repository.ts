@@ -1,5 +1,5 @@
-import { sql, type Kysely } from 'kysely';
-import { formatDisplayDocNumber, newId } from '@shop/shared';
+import type { Kysely } from 'kysely';
+import { newId } from '@shop/shared';
 import type {
   AssignTechnicianInput,
   JobRecord,
@@ -7,76 +7,38 @@ import type {
   JobSearchQuery,
   JobSplitRecord,
   JobStatus,
+  JobStatusHistoryRecord,
   JobStatusTransitionInput,
   JobSummaryRecord,
   NewJobInput,
   TechnicianCustodyRecord,
 } from '@shop/core';
 import { withRetry } from '../retry.js';
-import type { Database, JobTable } from '../kysely-schema.js';
+import type { Database } from '../kysely-schema.js';
+import {
+  deriveStatus,
+  JOB_RECORD_COLUMNS,
+  nextJobDocNo,
+  resolveInvoiceDocNo,
+  toJobRecord,
+} from './job-shared.js';
+import {
+  getJobQuery,
+  getJobSplitQuery,
+  getTechnicianCustodyQuery,
+  listJobsQuery,
+  listJobStatusHistoryQuery,
+} from './job-query.repository.js';
+import { assignTechnicianWrite } from './job-technician.repository.js';
 
-const JOB_CODE_DOC_TYPE = 'job';
-const JOB_CODE_PREFIX = 'JOB';
-
-const JOB_RECORD_COLUMNS = [
-  'id',
-  'docNo',
-  'customerId',
-  'customerNameAdhoc',
-  'customerPhone',
-  'jobType',
-  'applianceType',
-  'applianceBrand',
-  'applianceModel',
-  'applianceSerial',
-  'reportedFault',
-  'receivedDate',
-  'promisedDate',
-  'estimateAmount',
-  'estimateApproved',
-  'assignedTo',
-  'status',
-  'businessUnitId',
-  'billToPartyId',
-  'revenueType',
-  'labourCharge',
-  'saleId',
-] as const;
-
-type JobRow = Pick<JobTable, (typeof JOB_RECORD_COLUMNS)[number]>;
-
-function toJobRecord(
-  row: JobRow,
-  derivedStatus: JobStatus,
-  invoiceDocNo: string | null,
-): JobRecord {
-  return {
-    id: row.id,
-    docNo: row.docNo,
-    customerId: row.customerId,
-    customerNameAdhoc: row.customerNameAdhoc,
-    customerPhone: row.customerPhone,
-    jobType: row.jobType,
-    applianceType: row.applianceType,
-    applianceBrand: row.applianceBrand,
-    applianceModel: row.applianceModel,
-    applianceSerial: row.applianceSerial,
-    reportedFault: row.reportedFault,
-    receivedDate: row.receivedDate,
-    promisedDate: row.promisedDate,
-    estimateAmountPaisa: row.estimateAmount,
-    estimateApproved: row.estimateApproved === 1,
-    assignedTo: row.assignedTo,
-    status: derivedStatus,
-    businessUnitId: row.businessUnitId,
-    billToPartyId: row.billToPartyId,
-    revenueType: row.revenueType,
-    labourChargePaisa: row.labourCharge,
-    saleId: row.saleId,
-    invoiceDocNo,
-  };
-}
-
+/**
+ * Write-side of the job repository. Read methods delegate to
+ * job-query.repository.ts, shared plumbing to job-shared.ts, and
+ * technician assignment to job-technician.repository.ts (all split out in
+ * Phase 14/P14-2 to keep this file under the project's 300-line
+ * convention — see PROJECT.md DEBT-6; this was 656 lines before the
+ * split, no behaviour change, same code).
+ */
 export class KyselyJobRepository implements JobRepositoryPort {
   constructor(
     private readonly db: Kysely<Database>,
@@ -84,249 +46,30 @@ export class KyselyJobRepository implements JobRepositoryPort {
     private readonly deviceCode: string,
   ) {}
 
-  private async nextJobDocNo(trx: Kysely<Database>): Promise<string> {
-    const existing = await trx
-      .selectFrom('documentSequence')
-      .select('nextNumber')
-      .where('tenantId', '=', this.tenantId)
-      .where('docType', '=', JOB_CODE_DOC_TYPE)
-      .where('deviceCode', '=', this.deviceCode)
-      .executeTakeFirst();
-
-    const nextNumber = existing?.nextNumber ?? 1;
-
-    if (existing) {
-      await trx
-        .updateTable('documentSequence')
-        .set({ nextNumber: nextNumber + 1 })
-        .where('tenantId', '=', this.tenantId)
-        .where('docType', '=', JOB_CODE_DOC_TYPE)
-        .where('deviceCode', '=', this.deviceCode)
-        .execute();
-    } else {
-      await trx
-        .insertInto('documentSequence')
-        .values({
-          tenantId: this.tenantId,
-          docType: JOB_CODE_DOC_TYPE,
-          prefix: JOB_CODE_PREFIX,
-          deviceCode: this.deviceCode,
-          nextNumber: 2,
-        })
-        .execute();
-    }
-
-    return formatDisplayDocNumber(JOB_CODE_PREFIX, nextNumber);
-  }
-
-  /**
-   * Current status is always DERIVED from the latest job_status_history
-   * row — never trusted from job.status directly (GAP-6's STATUS
-   * MACHINE rule: job.status is written once, at createJob, and never
-   * updated again). Falls back to the job.status column only when no
-   * history row exists yet — a defensive path for rows that predate
-   * this convention; createJob always inserts the first history row in
-   * the same transaction, so real application data never relies on it.
-   */
-  private async deriveStatus(
-    qb: Kysely<Database>,
-    jobId: string,
-    fallbackStatus: string,
-  ): Promise<JobStatus> {
-    const latest = await qb
-      .selectFrom('jobStatusHistory')
-      .select('toStatus')
-      .where('jobId', '=', jobId)
-      .where('tenantId', '=', this.tenantId)
-      .orderBy('changedAt', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1)
-      .executeTakeFirst();
-    return (latest?.toStatus ?? fallbackStatus) as JobStatus;
-  }
-
-  /**
-   * P8-2 (BUG-P6.5-1): sale.doc_no for row.saleId, or null if the job
-   * hasn't been delivered (saleId is null) yet.
-   */
-  private async resolveInvoiceDocNo(
-    qb: Kysely<Database>,
-    saleId: string | null,
-  ): Promise<string | null> {
-    if (!saleId) return null;
-    const sale = await qb
-      .selectFrom('sale')
-      .select('docNo')
-      .where('id', '=', saleId)
-      .where('tenantId', '=', this.tenantId)
-      .executeTakeFirst();
-    return sale?.docNo ?? null;
-  }
-
   async getJob(id: string): Promise<JobRecord | null> {
-    const row = await this.db
-      .selectFrom('job')
-      .leftJoin('sale', 'sale.id', 'job.saleId')
-      .select([
-        'job.id',
-        'job.docNo',
-        'job.customerId',
-        'job.customerNameAdhoc',
-        'job.customerPhone',
-        'job.jobType',
-        'job.applianceType',
-        'job.applianceBrand',
-        'job.applianceModel',
-        'job.applianceSerial',
-        'job.reportedFault',
-        'job.receivedDate',
-        'job.promisedDate',
-        'job.estimateAmount',
-        'job.estimateApproved',
-        'job.assignedTo',
-        'job.status',
-        'job.businessUnitId',
-        'job.billToPartyId',
-        'job.revenueType',
-        'job.labourCharge',
-        'job.saleId',
-        'sale.docNo as invoiceDocNo',
-      ])
-      .where('job.id', '=', id)
-      .where('job.tenantId', '=', this.tenantId)
-      .executeTakeFirst();
-
-    if (!row) return null;
-
-    const status = await this.deriveStatus(this.db, id, row.status);
-    return toJobRecord(row, status, row.invoiceDocNo ?? null);
+    return getJobQuery(this.db, this.tenantId, id);
   }
 
   /** Plain filtered SELECT, most recent first — no business logic. */
   async listJobs(query: JobSearchQuery): Promise<readonly JobSummaryRecord[]> {
-    let q = this.db
-      .selectFrom('job')
-      .select([
-        'id',
-        'docNo',
-        'customerId',
-        'customerNameAdhoc',
-        'jobType',
-        'status',
-        'receivedDate',
-        'assignedTo',
-        'applianceType',
-        'applianceBrand',
-        'reportedFault',
-      ])
-      .where('tenantId', '=', this.tenantId);
-
-    if (query.assignedTo) {
-      q = q.where('assignedTo', '=', query.assignedTo);
-    }
-    if (query.customerId) {
-      q = q.where('customerId', '=', query.customerId);
-    }
-
-    const rows = await q.orderBy('receivedDate', 'desc').orderBy('createdAt', 'desc').execute();
-
-    const withDerivedStatus = await Promise.all(
-      rows.map(async (row) => ({
-        id: row.id,
-        docNo: row.docNo,
-        customerId: row.customerId,
-        customerNameAdhoc: row.customerNameAdhoc,
-        jobType: row.jobType,
-        status: await this.deriveStatus(this.db, row.id, row.status),
-        receivedDate: row.receivedDate,
-        assignedTo: row.assignedTo,
-        applianceType: row.applianceType,
-        applianceBrand: row.applianceBrand,
-        reportedFault: row.reportedFault,
-      })),
-    );
-
-    // query.status filters on the DERIVED status, not the raw column —
-    // done in JS after derivation rather than in SQL, at this shop's
-    // transaction volume (DATABASE_RULES.md §6: "at 500 transactions/day
-    // none of this is urgent").
-    return query.status
-      ? withDerivedStatus.filter((row) => row.status === query.status)
-      : withDerivedStatus;
+    return listJobsQuery(this.db, this.tenantId, query);
   }
 
   /** Reads v_job_split directly — never re-implements its aggregation. */
   async getJobSplit(jobId: string): Promise<JobSplitRecord | null> {
-    const result = await sql<{
-      jobId: string;
-      docNo: string;
-      receivedDate: string;
-      jobType: string;
-      revenueType: string;
-      status: string;
-      customerName: string | null;
-      billedToName: string | null;
-      technicianName: string | null;
-      partsChargedPaisa: number;
-      partsCostPaisa: number;
-      partsMarginPaisa: number;
-      labourChargePaisa: number;
-      totalBillPaisa: number;
-    }>`
-      SELECT  job_id            AS jobId,
-              doc_no            AS docNo,
-              received_date     AS receivedDate,
-              job_type          AS jobType,
-              revenue_type      AS revenueType,
-              status,
-              customer_name     AS customerName,
-              billed_to_name    AS billedToName,
-              technician_name   AS technicianName,
-              parts_charged_paisa AS partsChargedPaisa,
-              parts_cost_paisa    AS partsCostPaisa,
-              parts_margin_paisa  AS partsMarginPaisa,
-              labour_charge_paisa AS labourChargePaisa,
-              total_bill_paisa    AS totalBillPaisa
-      FROM    v_job_split
-      WHERE   job_id = ${jobId} AND tenant_id = ${this.tenantId}
-    `.execute(this.db);
-
-    return result.rows[0] ?? null;
+    return getJobSplitQuery(this.db, this.tenantId, jobId);
   }
 
-  /**
-   * What one technician currently holds, in exact milli-units. Does NOT
-   * read v_technician_custody — see job.repository.port.ts's doc comment
-   * on this method for why (that view's qty_held is a SQL-side float
-   * division, violating the milli-unit-integer contract). Re-implements
-   * the identical WHERE/GROUP BY/HAVING shape, summing the raw integer.
-   */
+  /** See job-query.repository.ts's getTechnicianCustodyQuery doc comment. */
   async getTechnicianCustody(
     technicianPartyId: string,
   ): Promise<readonly TechnicianCustodyRecord[]> {
-    const result = await sql<{
-      itemId: string;
-      itemName: string;
-      qtyHeldMilli: number;
-      lastMovement: string | null;
-      warehouseId: string;
-    }>`
-      SELECT  sm.item_id                AS itemId,
-              i.name_en                 AS itemName,
-              SUM(sm.quantity)          AS qtyHeldMilli,
-              MAX(sm.movement_date)     AS lastMovement,
-              w.id                      AS warehouseId
-      FROM        stock_movement sm
-      JOIN        warehouse w  ON w.id  = sm.warehouse_id
-      JOIN        item i       ON i.id  = sm.item_id
-      WHERE       w.warehouse_kind = 'technician'
-              AND w.custodian_party_id = ${technicianPartyId}
-              AND sm.tenant_id = ${this.tenantId}
-      GROUP BY    sm.item_id, i.name_en, w.id
-      HAVING      SUM(sm.quantity) <> 0
-    `.execute(this.db);
+    return getTechnicianCustodyQuery(this.db, this.tenantId, technicianPartyId);
+  }
 
-    return result.rows;
+  /** See job-query.repository.ts's listJobStatusHistoryQuery doc comment. */
+  async listStatusHistory(jobId: string): Promise<readonly JobStatusHistoryRecord[]> {
+    return listJobStatusHistoryQuery(this.db, this.tenantId, jobId);
   }
 
   /**
@@ -352,7 +95,7 @@ export class KyselyJobRepository implements JobRepositoryPort {
           );
         }
 
-        const docNo = await this.nextJobDocNo(trx);
+        const docNo = await nextJobDocNo(trx, this.tenantId, this.deviceCode);
         const jobId = newId();
         const now = new Date().toISOString();
         const status: JobStatus = 'received';
@@ -399,6 +142,7 @@ export class KyselyJobRepository implements JobRepositoryPort {
             contractId: null,
             claimReference: null,
             claimStatus: null,
+            cancellationReason: null,
           })
           .execute();
 
@@ -448,34 +192,18 @@ export class KyselyJobRepository implements JobRepositoryPort {
           })
           .execute();
 
-        return toJobRecord(
-          {
-            id: jobId,
-            docNo,
-            customerId: input.customerId,
-            customerNameAdhoc: input.customerNameAdhoc,
-            customerPhone: input.customerPhone,
-            jobType: input.jobType,
-            applianceType: input.applianceType,
-            applianceBrand: input.applianceBrand,
-            applianceModel: input.applianceModel,
-            applianceSerial: input.applianceSerial,
-            reportedFault: input.reportedFault,
-            receivedDate: input.receivedDate,
-            promisedDate: input.promisedDate,
-            estimateAmount: input.estimateAmountPaisa,
-            estimateApproved: 0,
-            assignedTo: input.assignedTo,
-            status,
-            businessUnitId: repairUnit.id,
-            billToPartyId: null,
-            revenueType: 'customer_paid',
-            labourCharge: 0,
-            saleId: null,
-          },
-          status,
-          null,
-        );
+        // Re-select rather than hand-reconstruct the record — same
+        // pattern updateJobStatus/assignTechnician already use below,
+        // and the single source of truth for what a freshly-created
+        // job's columns actually are.
+        const row = await trx
+          .selectFrom('job')
+          .select(JOB_RECORD_COLUMNS)
+          .where('id', '=', jobId)
+          .where('tenantId', '=', this.tenantId)
+          .executeTakeFirstOrThrow();
+
+        return toJobRecord(row, status, null);
       }),
     );
   }
@@ -498,7 +226,7 @@ export class KyselyJobRepository implements JobRepositoryPort {
           throw new Error(`Job ${input.jobId} not found`);
         }
 
-        const fromStatus = await this.deriveStatus(trx, input.jobId, row.status);
+        const fromStatus = await deriveStatus(trx, this.tenantId, input.jobId, row.status);
         const now = new Date().toISOString();
 
         await trx
@@ -547,77 +275,14 @@ export class KyselyJobRepository implements JobRepositoryPort {
           })
           .execute();
 
-        const invoiceDocNo = await this.resolveInvoiceDocNo(trx, row.saleId);
+        const invoiceDocNo = await resolveInvoiceDocNo(trx, this.tenantId, row.saleId);
         return toJobRecord(row, input.toStatus, invoiceDocNo);
       }),
     );
   }
 
-  /** Plain UPDATE to job.assigned_to — job is not an append-only table. */
+  /** See job-technician.repository.ts's assignTechnicianWrite doc comment. */
   async assignTechnician(input: AssignTechnicianInput): Promise<JobRecord> {
-    return withRetry(() =>
-      this.db.transaction().execute(async (trx) => {
-        const existing = await trx
-          .selectFrom('job')
-          .select(['id'])
-          .where('id', '=', input.jobId)
-          .where('tenantId', '=', this.tenantId)
-          .executeTakeFirst();
-        if (!existing) {
-          throw new Error(`Job ${input.jobId} not found`);
-        }
-
-        const now = new Date().toISOString();
-        await trx
-          .updateTable('job')
-          .set({ assignedTo: input.technicianPartyId, updatedAt: now })
-          .where('id', '=', input.jobId)
-          .where('tenantId', '=', this.tenantId)
-          .execute();
-
-        await trx
-          .insertInto('auditLog')
-          .values({
-            id: newId(),
-            tenantId: this.tenantId,
-            tableName: 'job',
-            recordId: input.jobId,
-            action: 'update',
-            changedFields: JSON.stringify({ assignedTo: input.technicianPartyId }),
-            oldValues: null,
-            userId: null,
-            deviceCode: this.deviceCode,
-            createdAt: now,
-          })
-          .execute();
-
-        await trx
-          .insertInto('syncOutbox')
-          .values({
-            id: newId(),
-            tenantId: this.tenantId,
-            tableName: 'job',
-            recordId: input.jobId,
-            operation: 'update',
-            payload: null,
-            createdAt: now,
-            syncedAt: null,
-            syncAttempts: 0,
-            lastError: null,
-          })
-          .execute();
-
-        const row = await trx
-          .selectFrom('job')
-          .select(JOB_RECORD_COLUMNS)
-          .where('id', '=', input.jobId)
-          .where('tenantId', '=', this.tenantId)
-          .executeTakeFirstOrThrow();
-
-        const status = await this.deriveStatus(trx, input.jobId, row.status);
-        const invoiceDocNo = await this.resolveInvoiceDocNo(trx, row.saleId);
-        return toJobRecord(row, status, invoiceDocNo);
-      }),
-    );
+    return assignTechnicianWrite(this.db, this.tenantId, this.deviceCode, input);
   }
 }

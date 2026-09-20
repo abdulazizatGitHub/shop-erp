@@ -6,14 +6,18 @@ import {
   JobSearchInput,
   JobStatusTransitionInput,
   TechnicianCustodyInput,
+  UnassignTechnicianInput,
   type JobDto,
   type JobSummaryDto,
+  type JobStatusHistoryDto,
+  type TechnicianAssignmentDto,
 } from '@shop/contracts';
 import { assignTechnician, createJob, transitionJobStatus } from '@shop/core';
 import type { JobSplitRecord, TechnicianCustodyRecord } from '@shop/core';
 import {
   createKyselyDb,
   KyselyJobRepository,
+  KyselyJobTechnicianRepository,
   listServiceCharges,
   listTechnicians,
   openDatabase,
@@ -154,6 +158,48 @@ export function registerJobHandlers(deps: JobHandlerDeps): void {
       const db = openDatabase(deps.dbPath);
       try {
         return await listServiceCharges(createKyselyDb(db), deps.tenantId);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.job.listTechnicianAssignments,
+    withError(async (_event, raw: unknown): Promise<readonly TechnicianAssignmentDto[]> => {
+      const input = JobIdInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyJobTechnicianRepository(createKyselyDb(db), deps.tenantId);
+        return await repo.listTechnicianAssignments(input.id);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.job.unassignTechnician,
+    withError(async (_event, raw: unknown): Promise<void> => {
+      const input = UnassignTechnicianInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyJobTechnicianRepository(createKyselyDb(db), deps.tenantId);
+        await repo.unassignTechnician(input.id);
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.job.listStatusHistory,
+    withError(async (_event, raw: unknown): Promise<readonly JobStatusHistoryDto[]> => {
+      const input = JobIdInput.parse(raw);
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyJobRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
+        return await repo.listStatusHistory(input.id);
       } finally {
         db.close();
       }

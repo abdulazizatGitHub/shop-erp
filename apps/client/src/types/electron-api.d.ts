@@ -46,6 +46,11 @@ import type {
   JobSearchInput,
   JobStatusTransitionInput,
   JobSummaryDto,
+  JobStatusHistoryDto,
+  TechnicianAssignmentDto,
+  UnassignTechnicianInput,
+  CancelJobInput,
+  UpdateJobDiagnosisInput,
   TechnicianCustodyInput,
   PaymentDto,
   PaymentReceiptDataDto,
@@ -504,6 +509,11 @@ export interface ElectronApi {
     ) => Promise<readonly TechnicianCustodyRecord[]>;
     readonly listTechnicians: () => Promise<readonly TechnicianOption[]>;
     readonly listServiceCharges: () => Promise<readonly ServiceChargeOption[]>;
+    readonly listTechnicianAssignments: (id: string) => Promise<readonly TechnicianAssignmentDto[]>;
+    readonly unassignTechnician: (input: UnassignTechnicianInput) => Promise<void>;
+    readonly listStatusHistory: (id: string) => Promise<readonly JobStatusHistoryDto[]>;
+    readonly cancelJob: (input: CancelJobInput) => Promise<JobDto>;
+    readonly updateDiagnosis: (input: UpdateJobDiagnosisInput) => Promise<JobDto>;
   };
   readonly uom: {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;

@@ -3,6 +3,7 @@ import type { ItemDto } from '@shop/contracts';
 import { Money, Qty } from '@shop/shared';
 import { Alert, Button, Select, TextInput } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { sanitizeMoneyInput } from './money-input.js';
 import { SearchSelect } from '../sales/SearchSelect.js';
 
 export interface JobIssuePartFormProps {
@@ -109,13 +110,16 @@ export function JobIssuePartForm({
             variant="number"
             value={priceRupees}
             onChange={(e) => {
-              setPriceRupees(e.target.value);
+              setPriceRupees(sanitizeMoneyInput(e.target.value));
             }}
           />
         </div>
         <div className="w-40">
+          {/* F3 — was "Technician"; renamed to remove ambiguity about
+           * what the field means (the technician the part is being
+           * handed to, not e.g. who requested it). */}
           <Select
-            label="Technician"
+            label="Issued to (technician)"
             value={technicianId}
             onChange={(e) => {
               setTechnicianId(e.target.value);
