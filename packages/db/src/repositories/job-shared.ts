@@ -1,6 +1,6 @@
 import { type Kysely } from 'kysely';
-import { formatDisplayDocNumber } from '@shop/shared';
-import type { JobRecord, JobStatus } from '@shop/core';
+import { formatDisplayDocNumber, newId } from '@shop/shared';
+import type { JobRecord, JobStatus, NewJobClientInput } from '@shop/core';
 import type { Database, JobTable } from '../kysely-schema.js';
 
 /**
@@ -21,6 +21,7 @@ export const JOB_RECORD_COLUMNS = [
   'customerId',
   'customerNameAdhoc',
   'customerPhone',
+  'jobClientId',
   'jobType',
   'applianceType',
   'applianceBrand',
@@ -49,6 +50,7 @@ export function toJobRecord(
   row: JobRow,
   derivedStatus: JobStatus,
   invoiceDocNo: string | null,
+  jobClientDisplay: JobClientDisplay = { name: null, phone: null },
 ): JobRecord {
   return {
     id: row.id,
@@ -56,6 +58,9 @@ export function toJobRecord(
     customerId: row.customerId,
     customerNameAdhoc: row.customerNameAdhoc,
     customerPhone: row.customerPhone,
+    jobClientId: row.jobClientId,
+    jobClientName: jobClientDisplay.name,
+    jobClientPhone: jobClientDisplay.phone,
     jobType: row.jobType,
     applianceType: row.applianceType,
     applianceBrand: row.applianceBrand,
@@ -124,6 +129,70 @@ export async function resolveInvoiceDocNo(
     .where('tenantId', '=', tenantId)
     .executeTakeFirst();
   return sale?.docNo ?? null;
+}
+
+export interface JobClientDisplay {
+  readonly name: string | null;
+  readonly phone: string | null;
+}
+
+/**
+ * Phase 15 — job_client.name/phone for row.jobClientId, or {null, null}
+ * when no client is linked. Same lookup-after-write pattern as
+ * resolveInvoiceDocNo above, for the write paths (createJob,
+ * updateJobStatus, assignTechnician) that don't already JOIN job_client
+ * the way getJobQuery/listJobsQuery do.
+ */
+export async function resolveJobClientDisplay(
+  qb: Kysely<Database>,
+  tenantId: string,
+  jobClientId: string | null,
+): Promise<JobClientDisplay> {
+  if (!jobClientId) return { name: null, phone: null };
+  const jobClient = await qb
+    .selectFrom('jobClient')
+    .select(['name', 'phone'])
+    .where('id', '=', jobClientId)
+    .where('tenantId', '=', tenantId)
+    .executeTakeFirst();
+  return { name: jobClient?.name ?? null, phone: jobClient?.phone ?? null };
+}
+
+/**
+ * Phase 15 — resolves job.job_client_id for createJob. Inlined here
+ * (not via KyselyJobClientRepository, which opens its own separate
+ * db.transaction()) so the jobClient INSERT and the job INSERT share
+ * ONE transaction: if the job INSERT later fails, this row rolls back
+ * with it. At most one of jobClientId/newClient should be set on the
+ * input (CreateJobInput's own doc comment); both null returns null
+ * (walk-in, no client recorded, OD-3).
+ */
+export async function resolveJobClientId(
+  trx: Kysely<Database>,
+  tenantId: string,
+  jobClientId: string | null,
+  newClient: NewJobClientInput | null,
+): Promise<string | null> {
+  if (newClient) {
+    const id = newId();
+    await trx
+      .insertInto('jobClient')
+      .values({
+        id,
+        tenantId,
+        name: newClient.name,
+        phone: newClient.phone,
+        phone2: newClient.phone2,
+        address: newClient.address,
+        area: newClient.area,
+        landmark: newClient.landmark,
+        notes: newClient.notes,
+        createdAt: new Date().toISOString(),
+      })
+      .execute();
+    return id;
+  }
+  return jobClientId;
 }
 
 /** Next JOB-NNNN doc number — mutates document_sequence, must run inside the caller's transaction. */

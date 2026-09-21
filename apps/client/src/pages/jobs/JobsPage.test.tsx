@@ -34,6 +34,9 @@ const BASE_JOB = {
   docNo: 'JOB-0001',
   customerId: null,
   customerNameAdhoc: 'Ahmad Fridge Repairs',
+  jobClientId: null,
+  jobClientName: null,
+  jobClientPhone: null,
   jobType: 'in_shop',
   status: 'in_progress' as const,
   receivedDate: '2026-09-01',
@@ -49,7 +52,7 @@ const BASE_JOB = {
 
 describe('JobsPage (P6-8 smoke test)', () => {
   it('renders the header and an empty state once job:list resolves with no jobs', async () => {
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
 
     expect(screen.getByText('Jobs')).toBeTruthy();
     expect(await screen.findByText('No jobs found.')).toBeTruthy();
@@ -61,7 +64,7 @@ describe('JobsPage (P14-7 — overdue/stale indicators)', () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     jobList.mockResolvedValueOnce([{ ...BASE_JOB, promisedDate: yesterday }]);
 
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
 
     const dot = await screen.findByLabelText('Overdue');
     expect(dot).toBeTruthy();
@@ -74,7 +77,7 @@ describe('JobsPage (P14-7 — overdue/stale indicators)', () => {
       { ...BASE_JOB, promisedDate: null, createdAt: daysAgoIso(15), status: 'received' },
     ]);
 
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
 
     expect(
       await screen.findByLabelText('Stale — no promised date, over 14 days since intake'),
@@ -85,7 +88,7 @@ describe('JobsPage (P14-7 — overdue/stale indicators)', () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     jobList.mockResolvedValueOnce([{ ...BASE_JOB, promisedDate: yesterday, status: 'delivered' }]);
 
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
     await screen.findByText('JOB-0001');
     expect(screen.queryByLabelText('Overdue')).toBeNull();
   });
@@ -95,7 +98,7 @@ describe('JobsPage (P14-7 — search)', () => {
   it('finds a job by job number, and shows empty state for text matching nothing', async () => {
     jobList.mockResolvedValue([BASE_JOB]);
 
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
     await screen.findByText('JOB-0001');
 
     const search = screen.getByLabelText('Search jobs');
@@ -111,7 +114,7 @@ describe('JobsPage (P14-7 — print icon)', () => {
   it('clicking the print icon on a delivered job calls invoice:printSaleInvoice with saleId, and does not open the job card', async () => {
     jobList.mockResolvedValueOnce([{ ...BASE_JOB, status: 'delivered', saleId: 'sale-123' }]);
 
-    render(<JobsPage onNavigateToCustomer={() => {}} />);
+    render(<JobsPage />);
     const printButton = await screen.findByLabelText('Print invoice');
     fireEvent.click(printButton);
 

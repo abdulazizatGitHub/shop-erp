@@ -35,17 +35,11 @@ const STATUS_FILTERS: ReadonlyArray<{ key: StatusFilter; label: string }> = [
  * grep across every reports/*.tsx file before picking this value). */
 const ROWS_PER_PAGE = 10;
 
-export interface JobsPageProps {
-  /** P14-2/OD-6 — see JobPropertyPanel.tsx's prop doc comment. */
-  readonly onNavigateToCustomer: (customerId: string) => void;
-}
-
-export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React.JSX.Element {
+export default function JobsPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchText, setSearchText] = useState('');
   const [jobs, setJobs] = useState<readonly JobSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [customerNames, setCustomerNames] = useState<Record<string, string>>({});
   const [technicianNames, setTechnicianNames] = useState<Record<string, string>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -63,19 +57,6 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
       .then((rows) => {
         setJobs(rows);
         setError(null);
-        const uniqueCustomerIds = [
-          ...new Set(rows.map((r) => r.customerId).filter((id): id is string => id !== null)),
-        ];
-        uniqueCustomerIds.forEach((id) => {
-          ipc.customer
-            .get(id)
-            .then((customer) => {
-              if (customer) setCustomerNames((prev) => ({ ...prev, [id]: customer.name }));
-            })
-            .catch(() => {
-              // Falls back to the raw id below; not fatal to the list.
-            });
-        });
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load jobs');
@@ -107,17 +88,13 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
     loadJobs();
   }
 
-  function customerLabel(job: JobSummaryDto): string {
-    if (job.customerNameAdhoc) return job.customerNameAdhoc;
-    if (job.customerId) return customerNames[job.customerId] ?? '…';
-    return 'Walk-in';
-  }
-
   /**
    * P14-7/SUB-4 — job:list has no search parameter (JobSearchInput is
    * status/assignedTo/customerId only, confirmed by reading it before
    * building this), so this filters the already-fetched list client-side.
-   * No debounce — nothing async happens per keystroke.
+   * No debounce — nothing async happens per keystroke. P15-5 — matches
+   * on jobClientName (denormalized by P15-3) instead of the old
+   * per-row customer-id lookup.
    */
   function matchesSearch(job: JobSummaryDto): boolean {
     const q = searchText.trim().toLowerCase();
@@ -125,7 +102,7 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
     const fault = (job.diagnosedFault ?? job.reportedFault ?? '').toLowerCase();
     return (
       job.docNo.toLowerCase().includes(q) ||
-      customerLabel(job).toLowerCase().includes(q) ||
+      (job.jobClientName ?? '').toLowerCase().includes(q) ||
       fault.includes(q)
     );
   }
@@ -152,7 +129,6 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
           setSelectedJobId(null);
         }}
         onListChanged={loadJobs}
-        onNavigateToCustomer={onNavigateToCustomer}
       />
     );
   }
@@ -246,7 +222,6 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
                 <JobsTableRow
                   key={job.id}
                   job={job}
-                  customerLabel={customerLabel(job)}
                   technicianLabel={job.assignedTo ? (technicianNames[job.assignedTo] ?? '…') : '—'}
                   onSelect={() => {
                     setSelectedJobId(job.id);
@@ -272,6 +247,7 @@ export default function JobsPage({ onNavigateToCustomer }: JobsPageProps): React
       <Modal
         open={createOpen}
         title="New Job"
+        size="wide"
         onClose={() => {
           setCreateOpen(false);
         }}

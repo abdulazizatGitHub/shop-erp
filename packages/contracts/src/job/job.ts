@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CreateJobClientInput } from './job-client.js';
 
 /** GAP-6: the schema's existing 8 states — 0001_init.sql's job.status comment. */
 export const JobStatus = z.enum([
@@ -17,6 +18,13 @@ export const CreateJobInput = z.object({
   customerId: z.string().uuid().nullable(),
   customerNameAdhoc: z.string().trim().min(1).nullable(),
   customerPhone: z.string().trim().min(1).nullable(),
+  /** Phase 15 — an existing job_client to link, OR newClient to create one
+   * in the same transaction. At most one of the two should be set; both
+   * null means no client recorded (walk-in, OD-3). Independent of and
+   * additive to customerId above — that legacy party-linked field is
+   * never removed or zeroed out (OD-3, BUG-JOBCLIENT-1). */
+  jobClientId: z.string().uuid().nullable(),
+  newClient: CreateJobClientInput.nullable(),
   jobType: z.enum(['in_shop', 'on_site', 'installation']),
   applianceType: z.string().trim().min(1).nullable(),
   applianceBrand: z.string().trim().min(1).nullable(),
@@ -68,6 +76,9 @@ export const JobDto = z.object({
   customerId: z.string().uuid().nullable(),
   customerNameAdhoc: z.string().nullable(),
   customerPhone: z.string().nullable(),
+  jobClientId: z.string().uuid().nullable(),
+  jobClientName: z.string().nullable(),
+  jobClientPhone: z.string().nullable(),
   jobType: z.string(),
   applianceType: z.string().nullable(),
   applianceBrand: z.string().nullable(),
@@ -99,6 +110,7 @@ export const JobStatusHistoryDto = z.object({
   fromStatus: JobStatus.nullable(),
   toStatus: JobStatus,
   changedAt: z.string(),
+  note: z.string().nullable(),
 });
 export type JobStatusHistoryDto = z.infer<typeof JobStatusHistoryDto>;
 
@@ -136,133 +148,6 @@ export const CancelJobInput = z.object({
 });
 export type CancelJobInput = z.infer<typeof CancelJobInput>;
 
-export const IssuePartsToTechnicianInput = z.object({
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int().positive(),
-  fromWarehouseId: z.string().uuid().nullable(),
-  technicianPartyId: z.string().uuid(),
-});
-export type IssuePartsToTechnicianInput = z.infer<typeof IssuePartsToTechnicianInput>;
-
-export const IssuePartsToTechnicianResult = z.object({
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int(),
-  fromWarehouseId: z.string().uuid(),
-  toWarehouseId: z.string().uuid(),
-});
-export type IssuePartsToTechnicianResult = z.infer<typeof IssuePartsToTechnicianResult>;
-
-export const IssuePartsToJobInput = z.object({
-  jobId: z.string().uuid(),
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int().positive(),
-  technicianPartyId: z.string().uuid(),
-  unitPricePaisa: z.number().int().nonnegative().nullable(),
-  isBillable: z.boolean().default(true),
-});
-export type IssuePartsToJobInput = z.infer<typeof IssuePartsToJobInput>;
-
-export const IssuePartsToJobResult = z.object({
-  jobPartId: z.string().uuid(),
-  jobId: z.string().uuid(),
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int(),
-  unitCostPaisa: z.number().int(),
-  unitPricePaisa: z.number().int(),
-  businessUnitId: z.string().uuid(),
-});
-export type IssuePartsToJobResult = z.infer<typeof IssuePartsToJobResult>;
-
-export const RevenueType = z.enum(['customer_paid', 'contract', 'warranty', 'internal']);
-export type RevenueType = z.infer<typeof RevenueType>;
-
-export const DeliverJobPartLineInput = z.object({
-  jobPartId: z.string().uuid(),
-  unitPricePaisa: z.number().int().nonnegative(),
-  payerPartyId: z.string().uuid().nullable(),
-  revenueType: RevenueType,
-});
-export type DeliverJobPartLineInput = z.infer<typeof DeliverJobPartLineInput>;
-
-export const DeliverJobLabourLineInput = z.object({
-  serviceChargeId: z.string().uuid(),
-  unitPricePaisa: z.number().int().nonnegative().nullable(),
-  payerPartyId: z.string().uuid().nullable(),
-  revenueType: RevenueType,
-});
-export type DeliverJobLabourLineInput = z.infer<typeof DeliverJobLabourLineInput>;
-
-export const DeliverJobInput = z
-  .object({
-    jobId: z.string().uuid(),
-    saleDate: z.string().min(1),
-    partLines: z.array(DeliverJobPartLineInput),
-    labourLines: z.array(DeliverJobLabourLineInput),
-    paidPaisa: z.number().int().nonnegative(),
-  })
-  .refine((data) => data.partLines.length + data.labourLines.length > 0, {
-    message: 'A delivery must have at least one line',
-    path: ['partLines'],
-  });
-export type DeliverJobInput = z.infer<typeof DeliverJobInput>;
-
-export const DeliverJobResult = z.object({
-  id: z.string().uuid(),
-  docNo: z.string(),
-  totalAmountPaisa: z.number().int(),
-});
-export type DeliverJobResult = z.infer<typeof DeliverJobResult>;
-
-export const InternalTransferReason = z.enum([
-  'free_installation',
-  'warranty_rework',
-  'shop_own_use',
-  'sample',
-  'other',
-]);
-export type InternalTransferReason = z.infer<typeof InternalTransferReason>;
-
-export const InternalTransferLineInput = z.object({
-  itemId: z.string().uuid(),
-  quantityMilli: z.number().int().positive(),
-});
-export type InternalTransferLineInput = z.infer<typeof InternalTransferLineInput>;
-
-export const CreateInternalTransferInput = z.object({
-  transferDate: z.string().min(1),
-  reason: InternalTransferReason,
-  jobId: z.string().uuid().nullable(),
-  lines: z.array(InternalTransferLineInput).min(1),
-  notes: z.string().trim().min(1).nullable(),
-});
-export type CreateInternalTransferInput = z.infer<typeof CreateInternalTransferInput>;
-
-export const NewInternalTransferResult = z.object({
-  id: z.string().uuid(),
-  docNo: z.string(),
-  totalAmountPaisa: z.number().int(),
-});
-export type NewInternalTransferResult = z.infer<typeof NewInternalTransferResult>;
-
-export const RecordCustodyReconciliationInput = z.object({
-  warehouseId: z.string().uuid(),
-  custodianPartyId: z.string().uuid(),
-  reconciledOn: z.string().min(1),
-  shortageValuePaisa: z.number().int().nonnegative(),
-  notes: z.string().trim().min(1).nullable(),
-});
-export type RecordCustodyReconciliationInput = z.infer<typeof RecordCustodyReconciliationInput>;
-
-export const CustodyReconciliationResult = z.object({
-  id: z.string().uuid(),
-  warehouseId: z.string().uuid(),
-  custodianPartyId: z.string().uuid(),
-  reconciledOn: z.string(),
-  shortageValuePaisa: z.number().int(),
-  actionTaken: z.string(),
-});
-export type CustodyReconciliationResult = z.infer<typeof CustodyReconciliationResult>;
-
 export const TechnicianAssignmentDto = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -286,6 +171,9 @@ export const JobSummaryDto = z.object({
   docNo: z.string(),
   customerId: z.string().uuid().nullable(),
   customerNameAdhoc: z.string().nullable(),
+  jobClientId: z.string().uuid().nullable(),
+  jobClientName: z.string().nullable(),
+  jobClientPhone: z.string().nullable(),
   jobType: z.string(),
   status: JobStatus,
   receivedDate: z.string(),

@@ -41,6 +41,251 @@
 
 ---
 
+## [2026-09-22] Session 74 — H1–H3: jobs list Actions icon, wider New Job modal, labour rate display
+
+**Goal:** Three small, renderer-only targeted fixes ahead of Phase 16
+scoping: an Actions-column indicator for active (non-terminal) jobs, a
+wider New Job modal with a proper two-column on-site address layout, and
+showing the labour-charge rate in the delivery modal's dropdown.
+
+**Done, one task at a time, `npm run build --workspace=@shop/client`
+after each:**
+
+- **H1** — `JobsTableRow.tsx`: confirmed by reading the file first that
+  the print icon lives in the Actions column (last `TableCell`), gated
+  on `status === 'delivered' && saleId`, and that non-delivered/
+  non-cancelled jobs showed nothing there. Confirmed via
+  `job-list-indicators.ts` that the existing amber stale clock
+  (`isJobStale`) is in the DATE column, a fully separate concern — left
+  untouched. Added a muted `Clock` icon (already imported in this file)
+  to the Actions cell for any status other than `delivered`/`cancelled`
+  — no click handler, no tooltip, `aria-hidden`. **Flagged, not
+  silently worked around:** no `text-muted`/`text-secondary` Tailwind
+  class exists in this app (the real muted token is `ink.muted`,
+  exposed as `text-ink-muted`) — but this file already uses the raw
+  DEBT-1 Tailwind-gray exception for its own print button, so used
+  `text-gray-400` to match this file's own established convention
+  rather than introducing a token into a file that doesn't use them.
+- **H2** — `JobsPage.tsx`'s New Job `<Modal>` set to `size="wide"`
+  (confirmed valid against `Modal.tsx`'s `ModalSize = 'default' |
+'wide'` type) — applies regardless of job type, per instruction.
+  `JobAddressFields.tsx` rewritten from three stacked full-width inputs
+  to `grid grid-cols-2 gap-4` (Address spans both columns via
+  `col-span-2`, Area/Landmark side by side below) — copied the exact
+  className already used for two-column layouts in
+  `AddCustomerModal.tsx`, not a new pattern.
+- **H3** — read `DeliveryLabourLines.tsx` and `ServiceChargeOption`
+  (`packages/db/src/repositories/lookup.repository.ts`) before
+  assuming a gap existed: **`retailChargePaisa` was already on the DTO
+  and already fully populated** by `listServiceCharges`'s query — no
+  `BUG-SERVICECHARGE-RATE` was needed, contrary to the task's own
+  fallback assumption. Dropdown option text changed to `"[name] — Rs
+[rate]"` using `Money.format(Money.of(...))` from `packages/shared`
+  — the same canonical formatter already used in 13 other files in the
+  app, not a new inline `Rs ${...}` pattern. Logged **Q-H3** in
+  `PROJECT.md` §5 confirming the source table and that adding/editing
+  charges stays out of scope until the Settings phase (no create/update
+  IPC exists yet for `service_charge`).
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client`: exit 0 after each of the
+  three tasks.
+- A real, unrelated regression surfaced mid-session: 318/644 tests
+  failed across 39 files (backup/bootstrap/migration-runner/attendance/
+  cash-session/commission/... — none touched by H1–H3) with the
+  documented `better-sqlite3` `NODE_MODULE_VERSION 130` vs `127`
+  mismatch, the same recurring environment issue from prior sessions.
+  Diagnosed by reading the actual error text on one isolated failing
+  file before acting, not assumed. Fixed with `npm rebuild
+better-sqlite3` (no source changes; a first `taskkill /F /IM
+electron.exe` attempt via the Bash tool mis-parsed the Windows flag
+  syntax under Git Bash — retried via PowerShell's `Get-Process |
+Stop-Process`, but the rebuild itself then succeeded on a plain
+  retry once the transient file lock cleared, without needing to kill
+  any of the many stray leftover `node.exe` worker processes found
+  running).
+  This left exactly one real, predictable test failure —
+  `JobDeliveryModal.test.tsx`'s `addCharge` helper did an exact-text
+  match against a dropdown option whose text now includes the rate
+  (H3); fixed the helper to match on `content.startsWith(name)`
+  instead of hand-waving it away.
+- `npm run verify` (final): **644/644, exit 0** — meets the ≥644 bar
+  (unchanged count: H1–H3 fixed an existing test rather than adding
+  new coverage, which the task did not require).
+- Line counts, every touched file, all ≤300: `JobsTableRow.tsx` 103,
+  `JobsPage.tsx` 264, `JobAddressFields.tsx` 61,
+  `DeliveryLabourLines.tsx` 186, `JobDeliveryModal.test.tsx` 108.
+
+**Not done / deferred:** Nothing outstanding from H1–H3. Adding/editing
+`service_charge` rows remains explicitly deferred to the Settings
+phase (Q-H3), not built here.
+
+**Bugs found:** none new in the H1–H3 code itself. The
+`better-sqlite3` ABI mismatch is the same pre-existing, already-
+documented environment issue hit repeatedly in prior sessions (not a
+new bug, not logged again).
+
+**Decisions taken:** none requiring owner input this session — all
+three tasks matched their spec once the actual codebase state
+(`Clock` already imported, no `text-muted` token, `Modal`'s real size
+name, `AddCustomerModal.tsx`'s existing grid pattern, `ServiceChargeOption`
+already carrying the rate) was read and confirmed first.
+
+**Blocked on:** nothing.
+
+**Next session should:** scope Phase 16 (`docs/PHASES.md` has no
+Phase 16 section yet). `job.repository.ts` is still at 299/300 lines —
+extract before adding to it.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated (Q-H3 logged)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (644/644)
+
+---
+
+## [2026-09-21–22] Session 73 — Phase 15: P15-1–P15-6, Phase 15 COMPLETE
+
+**Goal:** Fix BUG-JOBCLIENT-1 by giving job clients their own table
+separate from the Spare Parts ledger, add on-site job type with an
+address group, and let staff explicitly mark a job as awaiting parts
+with a reason that auto-clears when a part is subsequently issued.
+
+**Done, one task at a time, `npm run verify` (and `npm run build
+--workspace=@shop/client` for renderer-only tasks) after each:**
+
+- **P15-1** — `job_client` migration (0016): exact OD-2 column list
+  (`id, tenant_id, name, phone, phone_2, address, area, landmark, notes,
+created_at`), `idx_job_client_tenant`/`idx_job_client_name`. `job`
+  gained `job_client_id` (nullable FK); `job.customer_id` never touched
+  (OD-3). Table count 50→51.
+- **P15-2** — `job-client.repository.ts` (search by name OR phone,
+  create, getById), `jobClient:search`/`create`/`getById` IPC, full
+  contracts/port/handler/preload/electron-api.d.ts wiring. Found and
+  fixed a real bug: Kysely's `CamelCasePlugin` doesn't round-trip
+  `phone_2`↔`phone2` by default (no digit-underscore rule) — fixed with
+  the plugin's own `underscoreBeforeDigits` option in `kysely-db.ts`,
+  verified no other schema field was affected, full suite re-run since
+  it's a global change.
+- **P15-3** — job creation linked to job_client: `createJob`'s
+  transaction extended in place (`resolveJobClientId` in
+  `job-shared.ts`, inlined — NOT via `KyselyJobClientRepository`, which
+  opens its own separate transaction) so a new client and its job commit
+  or roll back together. `jobClientId`/`jobClientName`/`jobClientPhone`
+  denormalized onto `JobDto`/`JobSummaryDto` via LEFT JOIN
+  (`getJobQuery`/`listJobsQuery`). Found and fixed a second real bug:
+  `job-cancel.repository.ts`/`job-diagnosis.repository.ts` would have
+  silently returned null client display fields on their `toJobRecord`
+  calls (a defaulted 4th parameter masked it at the type level) — fixed
+  both, not just the two files the plan named. `packages/contracts/src/job/job.ts`
+  was already over 300 lines pre-Phase-15; split into
+  `job.ts`/`job-client.ts`/`job-parts.ts`/`job-delivery.ts`/
+  `internal-transfer.ts`/`custody.ts` on the user's call.
+- **P15-4** — job intake redesign: `JobClientPicker.tsx` replaces
+  `CustomerPicker.tsx` (deleted, zero remaining importers confirmed by
+  grep), Job Type toggle (In shop/On-site) + conditional
+  Address/Area/Landmark group, extracted into
+  `JobTypeToggle.tsx`/`JobAddressFields.tsx`/`JobApplianceFields.tsx` to
+  keep `JobCreateForm.tsx` under 300 lines after crossing it twice.
+  Submit always sends `customerId: null` from this form going forward
+  (the field itself stays in the contract, per OD-3).
+- **P15-5** — CLIENT section now reads `job.jobClientName`/`jobClientId`
+  (was the old party-linked `customerName`/`customerId`); lazy-fetch
+  inline expansion (`JobClientSection.tsx`) shows the full job_client
+  record on click — no generic Popover/Tooltip primitive exists anywhere
+  in this codebase (confirmed by grep), so built the documented inline
+  fallback. Retired the entire `onNavigateToCustomer`/`pendingCustomerId`
+  prop chain (App.tsx → JobsPage.tsx → JobDetailPage.tsx →
+  JobPropertyPanel.tsx) end-to-end once its only purpose (the old
+  customer-name Customers-tab link) was gone — confirmed with the user
+  before removing, since it reached App.tsx. Jobs list CLIENT column and
+  search now use the same denormalized `jobClientName` — this let
+  `JobsPage.tsx` delete its entire per-row `ipc.customer.get` fetch loop
+  outright. Awaiting-parts reason line added below the status badge in
+  `JobDetailHeader.tsx`, fed by a small independent fetch
+  (`useAwaitingPartsReason.ts`).
+- **P15-6** — state machine: `received`/`in_progress` gained
+  `awaiting_parts` as an allowed target (`diagnosed` already had it);
+  `partIssuedTransitionTarget` now also fires from `awaiting_parts` →
+  `in_progress`; new `canMarkAwaitingParts()` helper. Confirmed before
+  building: the backend has no transition guard at all (`updateJobStatus`
+  never calls `canTransition`) — an incomplete `ALLOWED_TRANSITIONS`
+  would have meant _silent_ acceptance of an invalid transition, not
+  rejection, making the state-machine fix non-optional. New
+  `AwaitingPartsModal.tsx` (same Modal/confirm-cancel pattern as
+  `CancelJobModal.tsx`, required min-10-char reason textarea), "Awaiting
+  parts…" button in `JobDetailHeader.tsx` next to the status pill,
+  visible only when `canMarkAwaitingParts(job.status)`. `job:transitionStatus`
+  already accepted and persisted `note` end-to-end (confirmed by
+  reading the handler/service/repository before building — no backend
+  change needed).
+
+**Verified:**
+
+- `npm run verify`: 627 (Phase 14 baseline) → 628 (P15-2a) → 633
+  (P15-2b, P15-2c, P15-3, P15-4) → 637 (P15-5) → 644 (P15-6, final).
+  Every task's count strictly greater than the prior task's, as
+  required throughout.
+- Direct SQLite verification (not simulated) at the end of P15-1, P15-3,
+  P15-4, and P15-6: real `tsx` scripts against a freshly-migrated
+  database, output pasted in `docs/phases/PHASE_15.md` §6 for each —
+  `job_client` row shape, transaction atomicity (new-client-then-job
+  rollback-together), dedup-by-id (no duplicate `job_client` row on
+  reselect), null-client walk-in path, and the full
+  `received → awaiting_parts (with reason) → in_progress` status
+  history sequence.
+- `npm run typecheck`, `npm run lint` (0 warnings), and
+  `npm run build --workspace=@shop/client` all exit 0 at every
+  checkpoint from P15-2c onward.
+- `grep -rn "CustomerPicker" apps/` and `grep -rn "ipc\.customer\.get" apps/client/src/pages/jobs/`:
+  zero source hits, confirmed at session close.
+
+**Not done / deferred:** Nothing — all 6 planned tasks (P15-1–P15-6)
+shipped. Explicitly out of scope per the phase brief and unchanged:
+job client edit page, job clients linked to party records, map/GPS
+coordinates, on-site job routing/scheduling, BUG-COMMISSION-MULTI.
+
+**Bugs found:** two real bugs found and fixed during implementation
+(not deferred, since both blocked correct behavior of the feature being
+built this session): the `CamelCasePlugin`/`phone_2` round-trip gap
+(P15-2), and the `job-cancel`/`job-diagnosis` repositories' silently-null
+client-display defaults (P15-3). BUG-JOBCLIENT-1 (PROJECT.md §4) —
+CLOSED this session. BUG-COMMISSION-MULTI — still open, untouched,
+out of scope.
+
+**Decisions taken:** two scope questions asked and answered by the user
+mid-session rather than assumed: (1) P15-5's CLIENT section reads only
+`jobClientId` going forward — pre-Phase-15 jobs with only `customerId`
+now show "No client recorded." (confirmed acceptable — no real shop
+data exists yet pre-go-live); (2) the dead `onNavigateToCustomer`
+prop chain removed fully end-to-end rather than left wired-but-unused.
+
+**Blocked on:** nothing.
+
+**Next session should:** start Phase 16 per `docs/PHASES.md` once that
+section exists (it did not exist at Phase 15 kickoff — noted, not
+authored this session, out of scope). `job.repository.ts` is at 299/300
+lines — the very next task that touches it must extract something
+first, before adding a single line.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (both found-and-fixed this session)
+- [x] Test suite passing (644/644)
+
+---
+
 ## [2026-09-20] Session 72 — Phase 14: G1–G6 final polish, Phase 14 COMPLETE + committed
 
 **Goal:** Six targeted, renderer-only fixes closing out the visual review

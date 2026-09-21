@@ -31,6 +31,9 @@ const JOB: JobDto = {
   customerId: 'cust-1',
   customerNameAdhoc: null,
   customerPhone: null,
+  jobClientId: null,
+  jobClientName: null,
+  jobClientPhone: null,
   jobType: 'in_shop',
   applianceType: 'AC',
   applianceBrand: 'Gree',
@@ -56,7 +59,8 @@ const JOB: JobDto = {
 
 function addCharge(name: string): void {
   const select = screen.getByLabelText('Add labour charge');
-  const option = within(select).getByText<HTMLOptionElement>(name);
+  // H3 — option text is now "[name] — Rs [rate]", not the bare name.
+  const option = within(select).getByText<HTMLOptionElement>((content) => content.startsWith(name));
   fireEvent.change(select, { target: { value: option.value } });
   fireEvent.click(screen.getByText('Add'));
 }

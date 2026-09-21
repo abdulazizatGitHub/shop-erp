@@ -20,6 +20,8 @@ import {
   JOB_RECORD_COLUMNS,
   nextJobDocNo,
   resolveInvoiceDocNo,
+  resolveJobClientDisplay,
+  resolveJobClientId,
   toJobRecord,
 } from './job-shared.js';
 import {
@@ -99,6 +101,12 @@ export class KyselyJobRepository implements JobRepositoryPort {
         const jobId = newId();
         const now = new Date().toISOString();
         const status: JobStatus = 'received';
+        const jobClientId = await resolveJobClientId(
+          trx,
+          this.tenantId,
+          input.jobClientId,
+          input.newClient,
+        );
 
         await trx
           .insertInto('job')
@@ -109,6 +117,7 @@ export class KyselyJobRepository implements JobRepositoryPort {
             customerId: input.customerId,
             customerNameAdhoc: input.customerNameAdhoc,
             customerPhone: input.customerPhone,
+            jobClientId,
             jobType: input.jobType,
             applianceType: input.applianceType,
             applianceBrand: input.applianceBrand,
@@ -203,7 +212,8 @@ export class KyselyJobRepository implements JobRepositoryPort {
           .where('tenantId', '=', this.tenantId)
           .executeTakeFirstOrThrow();
 
-        return toJobRecord(row, status, null);
+        const jobClientDisplay = await resolveJobClientDisplay(trx, this.tenantId, jobClientId);
+        return toJobRecord(row, status, null, jobClientDisplay);
       }),
     );
   }
@@ -276,7 +286,8 @@ export class KyselyJobRepository implements JobRepositoryPort {
           .execute();
 
         const invoiceDocNo = await resolveInvoiceDocNo(trx, this.tenantId, row.saleId);
-        return toJobRecord(row, input.toStatus, invoiceDocNo);
+        const jobClientDisplay = await resolveJobClientDisplay(trx, this.tenantId, row.jobClientId);
+        return toJobRecord(row, input.toStatus, invoiceDocNo, jobClientDisplay);
       }),
     );
   }

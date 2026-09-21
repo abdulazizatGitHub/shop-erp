@@ -25,11 +25,11 @@ import type { JobStatus } from '@shop/contracts';
  * something routed through the manual status picker.
  */
 export const ALLOWED_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
-  received: ['diagnosed', 'in_progress', 'cancelled'],
+  received: ['diagnosed', 'in_progress', 'awaiting_parts', 'cancelled'],
   diagnosed: ['awaiting_parts', 'in_progress', 'cancelled'],
   awaiting_approval: [],
   awaiting_parts: ['in_progress', 'cancelled'],
-  in_progress: ['ready', 'diagnosed', 'cancelled'],
+  in_progress: ['ready', 'diagnosed', 'awaiting_parts', 'cancelled'],
   ready: [],
   delivered: [],
   cancelled: [],
@@ -78,12 +78,24 @@ export function diagnosisSavedTransitionTarget(currentStatus: JobStatus): JobSta
 /**
  * P14-3's first auto-transition trigger ("first part issued to a job").
  * Returns the target status to transition to, or null if no transition
- * should fire (guard: only a 'received' job auto-advances — a job
- * already 'in_progress' or further along a part issue does not move it
- * backward or re-trigger anything).
+ * should fire. Guard: fires for 'received' (a job auto-advances on its
+ * first part) AND 'awaiting_parts' (P15-6/OD-6 — the part that was being
+ * waited on has now arrived, so the job resumes as 'in_progress' with no
+ * extra click). A job already 'in_progress' or further along a part
+ * issue does not move backward or re-trigger anything.
  */
 export function partIssuedTransitionTarget(currentStatus: JobStatus): JobStatus | null {
-  if (currentStatus !== 'received') return null;
+  if (currentStatus !== 'received' && currentStatus !== 'awaiting_parts') return null;
   const target: JobStatus = 'in_progress';
   return canTransition(currentStatus, target) ? target : null;
+}
+
+/**
+ * P15-6/OD-6 — statuses from which staff can explicitly mark a job as
+ * awaiting parts. Kept as its own function (not inlined at each call
+ * site) so the button-visibility rule lives in one place, matching this
+ * file's own stated purpose for every other transition decision.
+ */
+export function canMarkAwaitingParts(status: JobStatus): boolean {
+  return status === 'received' || status === 'diagnosed' || status === 'in_progress';
 }

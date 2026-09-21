@@ -7,6 +7,7 @@ import {
   deriveStatus,
   JOB_RECORD_COLUMNS,
   resolveInvoiceDocNo,
+  resolveJobClientDisplay,
   toJobRecord,
 } from './job-shared.js';
 
@@ -216,7 +217,12 @@ export class KyselyJobCancelRepository implements JobCancelRepositoryPort {
           .executeTakeFirstOrThrow();
 
         const invoiceDocNo = await resolveInvoiceDocNo(trx, this.tenantId, updatedRow.saleId);
-        return toJobRecord(updatedRow, 'cancelled', invoiceDocNo);
+        const jobClientDisplay = await resolveJobClientDisplay(
+          trx,
+          this.tenantId,
+          updatedRow.jobClientId,
+        );
+        return toJobRecord(updatedRow, 'cancelled', invoiceDocNo, jobClientDisplay);
       }),
     );
   }

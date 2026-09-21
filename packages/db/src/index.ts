@@ -34,6 +34,7 @@ export { KyselyJobRepository } from './repositories/job.repository.js';
 export { KyselyJobTechnicianRepository } from './repositories/job-technician.repository.js';
 export { KyselyJobCancelRepository } from './repositories/job-cancel.repository.js';
 export { KyselyJobDiagnosisRepository } from './repositories/job-diagnosis.repository.js';
+export { KyselyJobClientRepository } from './repositories/job-client.repository.js';
 export { KyselyJobPartRepository } from './repositories/job-part.repository.js';
 export { KyselyJobDeliveryRepository } from './repositories/job-delivery.repository.js';
 export { KyselyInternalTransferRepository } from './repositories/internal-transfer.repository.js';

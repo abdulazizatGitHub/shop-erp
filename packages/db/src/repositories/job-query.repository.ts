@@ -25,12 +25,14 @@ export async function getJobQuery(
   const row = await db
     .selectFrom('job')
     .leftJoin('sale', 'sale.id', 'job.saleId')
+    .leftJoin('jobClient', 'jobClient.id', 'job.jobClientId')
     .select([
       'job.id',
       'job.docNo',
       'job.customerId',
       'job.customerNameAdhoc',
       'job.customerPhone',
+      'job.jobClientId',
       'job.jobType',
       'job.applianceType',
       'job.applianceBrand',
@@ -52,6 +54,8 @@ export async function getJobQuery(
       'job.diagnosis',
       'job.updatedAt',
       'sale.docNo as invoiceDocNo',
+      'jobClient.name as jobClientName',
+      'jobClient.phone as jobClientPhone',
     ])
     .where('job.id', '=', id)
     .where('job.tenantId', '=', tenantId)
@@ -60,7 +64,10 @@ export async function getJobQuery(
   if (!row) return null;
 
   const status = await deriveStatus(db, tenantId, id, row.status);
-  return toJobRecord(row, status, row.invoiceDocNo ?? null);
+  return toJobRecord(row, status, row.invoiceDocNo ?? null, {
+    name: row.jobClientName ?? null,
+    phone: row.jobClientPhone ?? null,
+  });
 }
 
 /** Plain filtered SELECT, most recent first — no business logic. */
@@ -71,33 +78,40 @@ export async function listJobsQuery(
 ): Promise<readonly JobSummaryRecord[]> {
   let q = db
     .selectFrom('job')
+    .leftJoin('jobClient', 'jobClient.id', 'job.jobClientId')
     .select([
-      'id',
-      'docNo',
-      'customerId',
-      'customerNameAdhoc',
-      'jobType',
-      'status',
-      'receivedDate',
-      'assignedTo',
-      'applianceType',
-      'applianceBrand',
-      'reportedFault',
-      'promisedDate',
-      'createdAt',
-      'diagnosis',
-      'saleId',
+      'job.id',
+      'job.docNo',
+      'job.customerId',
+      'job.customerNameAdhoc',
+      'job.jobClientId',
+      'job.jobType',
+      'job.status',
+      'job.receivedDate',
+      'job.assignedTo',
+      'job.applianceType',
+      'job.applianceBrand',
+      'job.reportedFault',
+      'job.promisedDate',
+      'job.createdAt',
+      'job.diagnosis',
+      'job.saleId',
+      'jobClient.name as jobClientName',
+      'jobClient.phone as jobClientPhone',
     ])
-    .where('tenantId', '=', tenantId);
+    .where('job.tenantId', '=', tenantId);
 
   if (query.assignedTo) {
-    q = q.where('assignedTo', '=', query.assignedTo);
+    q = q.where('job.assignedTo', '=', query.assignedTo);
   }
   if (query.customerId) {
-    q = q.where('customerId', '=', query.customerId);
+    q = q.where('job.customerId', '=', query.customerId);
   }
 
-  const rows = await q.orderBy('receivedDate', 'desc').orderBy('createdAt', 'desc').execute();
+  const rows = await q
+    .orderBy('job.receivedDate', 'desc')
+    .orderBy('job.createdAt', 'desc')
+    .execute();
 
   const withDerivedStatus = await Promise.all(
     rows.map(async (row) => ({
@@ -105,6 +119,9 @@ export async function listJobsQuery(
       docNo: row.docNo,
       customerId: row.customerId,
       customerNameAdhoc: row.customerNameAdhoc,
+      jobClientId: row.jobClientId,
+      jobClientName: row.jobClientName ?? null,
+      jobClientPhone: row.jobClientPhone ?? null,
       jobType: row.jobType,
       status: await deriveStatus(db, tenantId, row.id, row.status),
       receivedDate: row.receivedDate,
@@ -221,7 +238,7 @@ export async function listJobStatusHistoryQuery(
 ): Promise<readonly JobStatusHistoryRecord[]> {
   const rows = await db
     .selectFrom('jobStatusHistory')
-    .select(['fromStatus', 'toStatus', 'changedAt'])
+    .select(['fromStatus', 'toStatus', 'changedAt', 'note'])
     .where('jobId', '=', jobId)
     .where('tenantId', '=', tenantId)
     .orderBy('changedAt', 'asc')
@@ -231,5 +248,6 @@ export async function listJobStatusHistoryQuery(
     fromStatus: row.fromStatus as JobStatusHistoryRecord['fromStatus'],
     toStatus: row.toStatus as JobStatusHistoryRecord['toStatus'],
     changedAt: row.changedAt,
+    note: row.note,
   }));
 }

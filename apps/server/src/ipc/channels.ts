@@ -96,6 +96,11 @@ export const channels = {
     cancelJob: 'job:cancelJob',
     updateDiagnosis: 'job:updateDiagnosis',
   },
+  jobClient: {
+    search: 'jobClient:search',
+    create: 'jobClient:create',
+    getById: 'jobClient:getById',
+  },
   uom: { listConversions: 'uom:listConversions' },
   report: {
     dailySales: 'report:dailySales',

@@ -1,5 +1,6 @@
 import type { JobStatus } from '@shop/contracts';
 import { Button } from '@shop/ui';
+import { canMarkAwaitingParts } from './job-status-machine.js';
 
 /** DEBT-1 (PROJECT.md): raw Tailwind palette, not this project's named
  * tokens — same owner-approved exception used elsewhere in Jobs (was
@@ -45,6 +46,9 @@ export interface JobDetailHeaderProps {
    * drops to a secondary "Reported by customer:" line below it. */
   readonly diagnosedFault: string | null;
   readonly status: JobStatus;
+  /** P15-5/OD-7 — most recent awaiting_parts reason, or null. Shown only
+   * when status is 'awaiting_parts' AND this is set. */
+  readonly awaitingPartsReason: string | null;
   /** G3 — set only once delivered (deliveredNotice?.docNo ?? job.invoiceDocNo);
    * null otherwise. Renders as a muted "Invoice ..." line under the subtitle. */
   readonly invoiceDocNo: string | null;
@@ -56,6 +60,8 @@ export interface JobDetailHeaderProps {
   readonly onOpenDeliver: () => void;
   /** P14-4 — same eligibility as Deliver: hidden once delivered/cancelled. */
   readonly onOpenCancel: () => void;
+  /** P15-6/OD-6 — visible only when canMarkAwaitingParts(status) is true. */
+  readonly onOpenAwaitingParts: () => void;
 }
 
 /** Sticky top header: back link + job number/appliance line on the left,
@@ -69,6 +75,7 @@ export function JobDetailHeader({
   reportedFault,
   diagnosedFault,
   status,
+  awaitingPartsReason,
   invoiceDocNo,
   saleId,
   printing,
@@ -76,6 +83,7 @@ export function JobDetailHeader({
   onBack,
   onOpenDeliver,
   onOpenCancel,
+  onOpenAwaitingParts,
 }: JobDetailHeaderProps): React.JSX.Element {
   const canDeliver = status !== 'delivered' && status !== 'cancelled';
   const applianceLine = `${applianceType ?? '—'} · ${applianceBrand ?? '—'}`;
@@ -114,11 +122,23 @@ export function JobDetailHeader({
       </div>
 
       <div className="flex items-center gap-4">
-        <span
-          className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold ${STATUS_PILL_CLASSES[status]}`}
-        >
-          {status}
-        </span>
+        <div>
+          <span
+            className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold ${STATUS_PILL_CLASSES[status]}`}
+          >
+            {status}
+          </span>
+          {status === 'awaiting_parts' && awaitingPartsReason && (
+            <p className="mt-1 max-w-[220px] text-xs text-gray-400">
+              Reason: {awaitingPartsReason}
+            </p>
+          )}
+        </div>
+        {canMarkAwaitingParts(status) && (
+          <Button variant="secondary" onClick={onOpenAwaitingParts}>
+            Awaiting parts…
+          </Button>
+        )}
         {status === 'delivered' && saleId && (
           <Button variant="secondary" disabled={printing} onClick={onPrintInvoice}>
             Print Invoice

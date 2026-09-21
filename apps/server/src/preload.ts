@@ -6,6 +6,7 @@ import type {
   CashBookRowDto,
   CreateCustomerInput,
   CreateItemInput,
+  CreateJobClientInput,
   CreateJobInput,
   CreatePaymentInput,
   CreateGrnInput,
@@ -41,6 +42,7 @@ import type {
   ItemPricesDto,
   ItemSearchInput,
   ItemTopSellingInput,
+  JobClientDto,
   JobDto,
   JobIdInput,
   JobSearchInput,
@@ -70,6 +72,7 @@ import type {
   ReceivablesReportInput,
   ReceivablesAgingRowDto,
   RecordCustodyReconciliationInput,
+  SearchJobClientsInput,
   StockPerformanceInput,
   StockPerformanceRowDto,
   SaleSearchInput,
@@ -412,6 +415,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.job.cancelJob, input) as Promise<JobDto>,
     updateDiagnosis: (input: UpdateJobDiagnosisInput): Promise<JobDto> =>
       ipcRenderer.invoke(channels.job.updateDiagnosis, input) as Promise<JobDto>,
+  },
+  jobClient: {
+    search: (input: SearchJobClientsInput): Promise<readonly JobClientDto[]> =>
+      ipcRenderer.invoke(channels.jobClient.search, input) as Promise<readonly JobClientDto[]>,
+    create: (input: CreateJobClientInput): Promise<JobClientDto> =>
+      ipcRenderer.invoke(channels.jobClient.create, input) as Promise<JobClientDto>,
+    getById: (id: string): Promise<JobClientDto | null> =>
+      ipcRenderer.invoke(channels.jobClient.getById, { id }) as Promise<JobClientDto | null>,
   },
   uom: {
     listConversions: (): Promise<readonly UomConversionOption[]> =>

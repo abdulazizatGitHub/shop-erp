@@ -9,6 +9,9 @@ const BASE_JOB: JobDto = {
   customerId: null,
   customerNameAdhoc: 'Ahmad Fridge Repairs',
   customerPhone: null,
+  jobClientId: null,
+  jobClientName: null,
+  jobClientPhone: null,
   jobType: 'in_shop',
   applianceType: 'AC',
   applianceBrand: 'Gree',
@@ -35,9 +38,19 @@ const BASE_JOB: JobDto = {
 describe('buildHistoryEvents', () => {
   it('produces a full lifecycle in chronological order with the exact required strings', () => {
     const statusHistory: JobStatusHistoryDto[] = [
-      { fromStatus: null, toStatus: 'received', changedAt: '2026-09-01T09:00:00.000Z' },
-      { fromStatus: 'received', toStatus: 'in_progress', changedAt: '2026-09-01T10:00:00.000Z' },
-      { fromStatus: 'in_progress', toStatus: 'diagnosed', changedAt: '2026-09-02T11:00:00.000Z' },
+      { fromStatus: null, toStatus: 'received', changedAt: '2026-09-01T09:00:00.000Z', note: null },
+      {
+        fromStatus: 'received',
+        toStatus: 'in_progress',
+        changedAt: '2026-09-01T10:00:00.000Z',
+        note: null,
+      },
+      {
+        fromStatus: 'in_progress',
+        toStatus: 'diagnosed',
+        changedAt: '2026-09-02T11:00:00.000Z',
+        note: null,
+      },
     ];
     const technicianAssignments: TechnicianAssignmentDto[] = [
       {
@@ -131,7 +144,12 @@ describe('buildHistoryEvents', () => {
       },
       parts: [],
       statusHistory: [
-        { fromStatus: 'in_progress', toStatus: 'cancelled', changedAt: '2026-09-04T08:00:00.000Z' },
+        {
+          fromStatus: 'in_progress',
+          toStatus: 'cancelled',
+          changedAt: '2026-09-04T08:00:00.000Z',
+          note: null,
+        },
       ],
       technicianAssignments: [],
       technicianNames: {},
@@ -146,7 +164,12 @@ describe('buildHistoryEvents', () => {
       job: { ...BASE_JOB, status: 'delivered', diagnosedFault: null, invoiceDocNo: 'INV-0042' },
       parts: [],
       statusHistory: [
-        { fromStatus: 'ready', toStatus: 'delivered', changedAt: '2026-09-05T14:00:00.000Z' },
+        {
+          fromStatus: 'ready',
+          toStatus: 'delivered',
+          changedAt: '2026-09-05T14:00:00.000Z',
+          note: null,
+        },
       ],
       technicianAssignments: [],
       technicianNames: {},

@@ -13,6 +13,8 @@ export async function createJob(
     customerId: input.customerId,
     customerNameAdhoc: input.customerNameAdhoc,
     customerPhone: input.customerPhone,
+    jobClientId: input.jobClientId,
+    newClient: input.newClient,
     jobType: input.jobType,
     applianceType: input.applianceType,
     applianceBrand: input.applianceBrand,

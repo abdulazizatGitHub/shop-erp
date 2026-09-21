@@ -12,7 +12,6 @@ function truncate(text: string | null, max: number): string {
 
 export interface JobsTableRowProps {
   readonly job: JobSummaryDto;
-  readonly customerLabel: string;
   readonly technicianLabel: string;
   readonly onSelect: () => void;
   readonly onPrint: () => void;
@@ -29,7 +28,6 @@ export interface JobsTableRowProps {
  */
 export function JobsTableRow({
   job,
-  customerLabel,
   technicianLabel,
   onSelect,
   onPrint,
@@ -57,7 +55,7 @@ export function JobsTableRow({
           {job.receivedDate}
         </span>
       </TableCell>
-      <TableCell>{customerLabel}</TableCell>
+      <TableCell>{job.jobClientName ?? '—'}</TableCell>
       <TableCell>{job.applianceType ?? '—'}</TableCell>
       <TableCell>{job.applianceBrand ?? '—'}</TableCell>
       <TableCell className="max-w-xs truncate" title={fault ?? undefined}>
@@ -95,6 +93,9 @@ export function JobsTableRow({
           >
             <Printer size={16} aria-hidden="true" />
           </button>
+        )}
+        {job.status !== 'delivered' && job.status !== 'cancelled' && (
+          <Clock size={16} className="text-gray-400" aria-hidden="true" />
         )}
       </TableCell>
     </tr>

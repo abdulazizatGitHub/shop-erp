@@ -12,6 +12,7 @@ import {
   deriveStatus,
   JOB_RECORD_COLUMNS,
   resolveInvoiceDocNo,
+  resolveJobClientDisplay,
   toJobRecord,
 } from './job-shared.js';
 
@@ -148,7 +149,8 @@ export async function assignTechnicianWrite(
 
       const status = await deriveStatus(trx, tenantId, input.jobId, row.status);
       const invoiceDocNo = await resolveInvoiceDocNo(trx, tenantId, row.saleId);
-      return toJobRecord(row, status, invoiceDocNo);
+      const jobClientDisplay = await resolveJobClientDisplay(trx, tenantId, row.jobClientId);
+      return toJobRecord(row, status, invoiceDocNo, jobClientDisplay);
     }),
   );
 }

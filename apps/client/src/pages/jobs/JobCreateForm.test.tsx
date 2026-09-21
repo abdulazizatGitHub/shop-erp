@@ -8,6 +8,10 @@ vi.mock('../../lib/ipc.js', () => ({
       search: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
     },
+    jobClient: {
+      search: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+    },
     job: {
       create: vi.fn(),
     },
@@ -19,6 +23,7 @@ import { JobCreateForm } from './JobCreateForm.js';
 
 const jobCreate = vi.mocked(ipc.job.create);
 const customerCreate = vi.mocked(ipc.customer.create);
+const jobClientSearch = vi.mocked(ipc.jobClient.search);
 
 afterEach(cleanup);
 
@@ -61,5 +66,61 @@ describe('JobCreateForm (P14-2)', () => {
     fireEvent.change(phoneInput, { target: { value: '0300-abc-1234567' } });
 
     expect(phoneInput.value).toBe('03001234567');
+  });
+});
+
+describe('JobCreateForm (P15-4 — job type + on-site address group)', () => {
+  it('defaults to "In shop" and does not show the address group', () => {
+    render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
+
+    expect(screen.queryByLabelText('Address')).toBeNull();
+    expect(screen.queryByLabelText('Area')).toBeNull();
+    expect(screen.queryByLabelText('Landmark')).toBeNull();
+  });
+
+  it('clicking "On-site" reveals the Address/Area/Landmark group', () => {
+    render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
+
+    fireEvent.click(screen.getByText('On-site'));
+
+    expect(screen.getByLabelText('Address')).toBeTruthy();
+    expect(screen.getByLabelText('Area')).toBeTruthy();
+    expect(screen.getByLabelText('Landmark')).toBeTruthy();
+  });
+
+  it('clicking back to "In shop" hides the address group again', () => {
+    render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
+
+    fireEvent.click(screen.getByText('On-site'));
+    expect(screen.getByLabelText('Address')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('In shop'));
+    expect(screen.queryByLabelText('Address')).toBeNull();
+  });
+
+  it('selecting an existing client auto-fills Address/Area/Landmark when on-site is shown', async () => {
+    jobClientSearch.mockResolvedValueOnce([
+      {
+        id: 'client-1',
+        name: 'Fazal Rabbi',
+        phone: '03119876543',
+        phone2: null,
+        address: 'House 12, GT Road',
+        area: 'Batkhela',
+        landmark: 'next to blue mosque',
+        notes: null,
+      },
+    ]);
+
+    render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'Fazal' } });
+    fireEvent.mouseDown(await screen.findByText('Fazal Rabbi'));
+
+    fireEvent.click(screen.getByText('On-site'));
+
+    expect(screen.getByLabelText<HTMLInputElement>('Address').value).toBe('House 12, GT Road');
+    expect(screen.getByLabelText<HTMLInputElement>('Area').value).toBe('Batkhela');
+    expect(screen.getByLabelText<HTMLInputElement>('Landmark').value).toBe('next to blue mosque');
   });
 });

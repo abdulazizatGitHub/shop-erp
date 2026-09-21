@@ -1,32 +1,11 @@
 import { useState } from 'react';
-import type { CreateJobInput, CustomerDto } from '@shop/contracts';
-import { Alert, Button, Select, TextInput } from '@shop/ui';
+import type { CreateJobInput, JobClientDto } from '@shop/contracts';
+import { Alert, Button, TextInput } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
-import { CustomerPicker } from './CustomerPicker.js';
-
-const APPLIANCE_TYPES = ['AC', 'Fridge', 'Oven', 'Other'] as const;
-
-/**
- * V1 — the `brand` table (0001_init.sql) exists but has zero seeded rows
- * anywhere in the codebase (confirmed by grep across every migration and
- * bootstrap.ts before writing this) and no IPC channel exposes it yet —
- * a hardcoded fallback list per this task's own instructions, not a new
- * job:listBrands read against an empty table. "Other" always reveals a
- * free-text input so no real brand is ever blocked.
- */
-const BRAND_OPTIONS = [
-  'Dawlance',
-  'Gree',
-  'Haier',
-  'PEL',
-  'Orient',
-  'Waves',
-  'Samsung',
-  'LG',
-  'Kenwood',
-  'Changhong Ruba',
-  'Other',
-] as const;
+import { JobAddressFields } from './JobAddressFields.js';
+import { JobApplianceFields } from './JobApplianceFields.js';
+import { JobClientPicker } from './JobClientPicker.js';
+import { JobTypeToggle, type JobTypeChoice } from './JobTypeToggle.js';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -51,8 +30,12 @@ export interface JobCreateFormProps {
  */
 export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): React.JSX.Element {
   const [customerName, setCustomerName] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDto | null>(null);
+  const [selectedClient, setSelectedClient] = useState<JobClientDto | null>(null);
   const [phone, setPhone] = useState('');
+  const [jobType, setJobType] = useState<JobTypeChoice>('in_shop');
+  const [address, setAddress] = useState('');
+  const [area, setArea] = useState('');
+  const [landmark, setLandmark] = useState('');
   const [applianceType, setApplianceType] = useState('');
   const [brandChoice, setBrandChoice] = useState('');
   const [brandOther, setBrandOther] = useState('');
@@ -61,30 +44,46 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function handleSelectCustomer(customer: CustomerDto): void {
-    setSelectedCustomer(customer);
-    setCustomerName(customer.name);
-    setPhone(customer.phone ?? '');
+  /**
+   * OD-4 — auto-fills the address group from the selected client's own
+   * job_client record. Populated unconditionally here (not gated on
+   * jobType === 'on_site') since the fields are simply hidden while
+   * job type is 'in_shop' — the same result as a jobType-gated effect,
+   * without a second effect watching [jobType, selectedClient]. Still
+   * editable after auto-fill (OD-4) since these are plain controlled
+   * TextInputs, not locked like the Phone field.
+   */
+  function handleSelectClient(client: JobClientDto): void {
+    setSelectedClient(client);
+    setCustomerName(client.name);
+    setPhone(client.phone ?? '');
+    setAddress(client.address ?? '');
+    setArea(client.area ?? '');
+    setLandmark(client.landmark ?? '');
   }
 
   function handleClearSelection(): void {
-    setSelectedCustomer(null);
+    setSelectedClient(null);
     setPhone('');
+    setAddress('');
+    setArea('');
+    setLandmark('');
   }
 
   /**
-   * OD-4's name+phone dedup, for the case where staff typed a fresh
-   * name+phone rather than clicking a CustomerPicker dropdown row — if
-   * they happen to match an existing customer exactly (case-insensitive
-   * name, exact phone), reuse that party rather than creating a
-   * duplicate. Re-searches by name (customer:search has no phone
-   * parameter) and filters client-side for an exact phone match.
+   * OD-5's name+phone dedup, for the case where staff typed a fresh
+   * name+phone rather than clicking a JobClientPicker dropdown row — if
+   * they happen to match an existing job_client exactly (case-insensitive
+   * name, exact phone), reuse that record rather than creating a
+   * duplicate. Re-searches by name (jobClient:search also matches phone,
+   * but a bare name search is enough here) and filters client-side for
+   * an exact phone match — same split CustomerPicker/JobCreateForm used.
    */
   async function findExactDuplicate(
     name: string,
     phoneDigits: string,
-  ): Promise<CustomerDto | null> {
-    const matches = await ipc.customer.search({ query: name });
+  ): Promise<JobClientDto | null> {
+    const matches = await ipc.jobClient.search({ query: name });
     return (
       matches.find(
         (c) => c.name.trim().toLowerCase() === name.trim().toLowerCase() && c.phone === phoneDigits,
@@ -97,13 +96,13 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
 
     const trimmedName = customerName.trim();
     if (trimmedName.length === 0) {
-      setError('Customer name is required');
+      setError('Client name is required');
       return;
     }
-    // Phone is required only while resolving/creating a customer by hand —
-    // once an existing customer is selected, identity (customerId) already
-    // disambiguates, so a customer with no phone on file doesn't block intake.
-    if (!selectedCustomer) {
+    // Phone is required only while resolving/creating a client by hand —
+    // once an existing client is selected, identity (jobClientId) already
+    // disambiguates, so a client with no phone on file doesn't block intake.
+    if (!selectedClient) {
       if (phone.length === 0) {
         setError('Phone is required');
         return;
@@ -124,34 +123,40 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
 
     setSubmitting(true);
     try {
-      let customerId: string;
-      if (selectedCustomer) {
-        customerId = selectedCustomer.id;
+      let jobClientId: string | null = null;
+      let newClient: CreateJobInput['newClient'] = null;
+      if (selectedClient) {
+        jobClientId = selectedClient.id;
       } else {
         const duplicate = await findExactDuplicate(trimmedName, phone);
         if (duplicate) {
-          customerId = duplicate.id;
+          jobClientId = duplicate.id;
         } else {
-          const created = await ipc.customer.create({
-            partyCode: null,
+          const onSite = jobType === 'on_site';
+          newClient = {
             name: trimmedName,
-            shopName: null,
             phone,
-            address: null,
-            customerType: null,
-            priceLevelId: null,
-            creditLimitPaisa: null,
+            phone2: null,
+            address: onSite && address.trim().length > 0 ? address.trim() : null,
+            area: onSite && area.trim().length > 0 ? area.trim() : null,
+            landmark: onSite && landmark.trim().length > 0 ? landmark.trim() : null,
             notes: null,
-          });
-          customerId = created.id;
+          };
         }
       }
 
       const input: CreateJobInput = {
-        customerId,
+        // BUG-JOBCLIENT-1 — job intake no longer creates/links a party
+        // (Spare Parts ledger customer); job_client is a separate
+        // population (Q-P15-1). customerId stays in the contract
+        // (never removed — job.customer_id is never dropped, OD-3) but
+        // this form always sends null going forward.
+        customerId: null,
         customerNameAdhoc: null,
         customerPhone: null,
-        jobType: 'in_shop',
+        jobClientId,
+        newClient,
+        jobType,
         applianceType: applianceType.length > 0 ? applianceType : null,
         applianceBrand: brand.trim().length > 0 ? brand.trim() : null,
         applianceModel: null,
@@ -176,14 +181,14 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
 
-      <CustomerPicker
+      <JobClientPicker
         name={customerName}
         onNameChange={(value) => {
           setCustomerName(value);
-          if (selectedCustomer) setSelectedCustomer(null);
+          if (selectedClient) setSelectedClient(null);
         }}
-        selected={selectedCustomer}
-        onSelect={handleSelectCustomer}
+        selected={selectedClient}
+        onSelect={handleSelectClient}
         onClearSelection={handleClearSelection}
       />
 
@@ -194,7 +199,7 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
         pattern="[0-9]*"
         maxLength={11}
         placeholder="03XXXXXXXXX"
-        disabled={selectedCustomer !== null}
+        disabled={selectedClient !== null}
         value={phone}
         onChange={(e) => {
           const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
@@ -202,48 +207,27 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
         }}
       />
 
-      <Select
-        label="Appliance type"
-        value={applianceType}
-        onChange={(e) => {
-          setApplianceType(e.target.value);
-        }}
-      >
-        <option value="">—</option>
-        {APPLIANCE_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </Select>
+      <JobTypeToggle value={jobType} onChange={setJobType} />
 
-      <Select
-        label="Brand"
-        required
-        value={brandChoice}
-        onChange={(e) => {
-          setBrandChoice(e.target.value);
-        }}
-      >
-        <option value="">—</option>
-        {BRAND_OPTIONS.map((b) => (
-          <option key={b} value={b}>
-            {b}
-          </option>
-        ))}
-      </Select>
-
-      {brandChoice === 'Other' && (
-        <TextInput
-          label="Brand (other)"
-          required
-          autoFocus
-          value={brandOther}
-          onChange={(e) => {
-            setBrandOther(e.target.value);
-          }}
+      {jobType === 'on_site' && (
+        <JobAddressFields
+          address={address}
+          onAddressChange={setAddress}
+          area={area}
+          onAreaChange={setArea}
+          landmark={landmark}
+          onLandmarkChange={setLandmark}
         />
       )}
+
+      <JobApplianceFields
+        applianceType={applianceType}
+        onApplianceTypeChange={setApplianceType}
+        brandChoice={brandChoice}
+        onBrandChoiceChange={setBrandChoice}
+        brandOther={brandOther}
+        onBrandOtherChange={setBrandOther}
+      />
 
       <TextInput
         label="Reported fault"

@@ -7,6 +7,7 @@ import {
   deriveStatus,
   JOB_RECORD_COLUMNS,
   resolveInvoiceDocNo,
+  resolveJobClientDisplay,
   toJobRecord,
 } from './job-shared.js';
 
@@ -80,7 +81,8 @@ export class KyselyJobDiagnosisRepository implements JobDiagnosisRepositoryPort 
 
         const status = await deriveStatus(trx, this.tenantId, input.jobId, row.status);
         const invoiceDocNo = await resolveInvoiceDocNo(trx, this.tenantId, row.saleId);
-        return toJobRecord(row, status, invoiceDocNo);
+        const jobClientDisplay = await resolveJobClientDisplay(trx, this.tenantId, row.jobClientId);
+        return toJobRecord(row, status, invoiceDocNo, jobClientDisplay);
       }),
     );
   }

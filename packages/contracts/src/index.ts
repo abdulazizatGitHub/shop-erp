@@ -101,22 +101,38 @@ export {
   CancelJobInput,
   UpdateJobDiagnosisInput,
   TechnicianCustodyInput,
+} from './job/job.js';
+
+export {
+  CreateJobClientInput,
+  SearchJobClientsInput,
+  JobClientIdInput,
+  JobClientDto,
+} from './job/job-client.js';
+
+export {
   IssuePartsToTechnicianInput,
   IssuePartsToTechnicianResult,
   IssuePartsToJobInput,
   IssuePartsToJobResult,
+} from './job/job-parts.js';
+
+export {
   RevenueType,
   DeliverJobPartLineInput,
   DeliverJobLabourLineInput,
   DeliverJobInput,
   DeliverJobResult,
+} from './job/job-delivery.js';
+
+export {
   InternalTransferReason,
   InternalTransferLineInput,
   CreateInternalTransferInput,
   NewInternalTransferResult,
-  RecordCustodyReconciliationInput,
-  CustodyReconciliationResult,
-} from './job/job.js';
+} from './job/internal-transfer.js';
+
+export { RecordCustodyReconciliationInput, CustodyReconciliationResult } from './job/custody.js';
 
 export {
   PurchaseLineInput,

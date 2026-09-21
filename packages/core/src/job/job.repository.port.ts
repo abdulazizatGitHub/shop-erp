@@ -1,3 +1,5 @@
+import type { NewJobClientInput } from './job-client.repository.port.js';
+
 /**
  * Repository interface (port) — defined here in core, implemented in db.
  * Dependency inversion: core never imports db. See docs/ARCHITECTURE.md
@@ -23,6 +25,11 @@ export interface JobRecord {
   readonly customerId: string | null;
   readonly customerNameAdhoc: string | null;
   readonly customerPhone: string | null;
+  /** Phase 15 — see CreateJobInput's doc comment (packages/contracts/src/job/job.ts). */
+  readonly jobClientId: string | null;
+  /** Denormalized from job_client for list/card display — null when jobClientId is null. */
+  readonly jobClientName: string | null;
+  readonly jobClientPhone: string | null;
   readonly jobType: string;
   readonly applianceType: string | null;
   readonly applianceBrand: string | null;
@@ -57,6 +64,8 @@ export interface JobStatusHistoryRecord {
   readonly fromStatus: JobStatus | null;
   readonly toStatus: JobStatus;
   readonly changedAt: string;
+  /** P15-5/OD-6 — the awaiting-parts reason (or any other transition note); null for most rows. */
+  readonly note: string | null;
 }
 
 /** All fields optional/null — an unset field is not filtered on. */
@@ -72,6 +81,10 @@ export interface JobSummaryRecord {
   readonly docNo: string;
   readonly customerId: string | null;
   readonly customerNameAdhoc: string | null;
+  /** Phase 15 — see JobRecord's doc comment above. */
+  readonly jobClientId: string | null;
+  readonly jobClientName: string | null;
+  readonly jobClientPhone: string | null;
   readonly jobType: string;
   readonly status: JobStatus;
   readonly receivedDate: string;
@@ -119,6 +132,9 @@ export interface NewJobInput {
   readonly customerId: string | null;
   readonly customerNameAdhoc: string | null;
   readonly customerPhone: string | null;
+  /** Phase 15 — see CreateJobInput's doc comment (packages/contracts/src/job/job.ts). */
+  readonly jobClientId: string | null;
+  readonly newClient: NewJobClientInput | null;
   readonly jobType: string;
   readonly applianceType: string | null;
   readonly applianceBrand: string | null;

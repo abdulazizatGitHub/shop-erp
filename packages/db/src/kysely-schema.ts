@@ -356,6 +356,20 @@ export interface JobTable {
   claimReference: string | null;
   claimStatus: string | null;
   cancellationReason: string | null;
+  jobClientId: string | null;
+}
+
+export interface JobClientTable {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string | null;
+  phone2: string | null;
+  address: string | null;
+  area: string | null;
+  landmark: string | null;
+  notes: string | null;
+  createdAt: string;
 }
 
 export interface JobTechnicianTable {
@@ -617,6 +631,7 @@ export interface Database {
   syncOutbox: SyncOutboxTable;
   setting: SettingTable;
   job: JobTable;
+  jobClient: JobClientTable;
   jobTechnician: JobTechnicianTable;
   jobPart: JobPartTable;
   jobStatusHistory: JobStatusHistoryTable;

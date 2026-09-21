@@ -3,6 +3,7 @@ import type { DeliverJobResult, JobDto } from '@shop/contracts';
 import { Alert } from '@shop/ui';
 import type { JobPartRecord } from '../../types/electron-api.js';
 import { ipc } from '../../lib/ipc.js';
+import { AwaitingPartsModal } from './AwaitingPartsModal.js';
 import { CancelJobModal } from './CancelJobModal.js';
 import { CANCELLATION_REASON_LABELS } from './cancellation-reason-labels.js';
 import { DiagnosedFaultSection } from './DiagnosedFaultSection.js';
@@ -12,30 +13,27 @@ import { JobDetailHeader } from './JobDetailHeader.js';
 import { partIssuedTransitionTarget } from './job-status-machine.js';
 import { JobPartsSection } from './JobPartsSection.js';
 import { JobPropertyPanel } from './JobPropertyPanel.js';
+import { useAwaitingPartsReason } from './useAwaitingPartsReason.js';
 
 export interface JobDetailPageProps {
   readonly jobId: string;
   readonly onBack: () => void;
   /** Refreshes JobsPage's list in the background — does not navigate away. */
   readonly onListChanged: () => void;
-  /** P14-2/OD-6 — see JobPropertyPanel.tsx's prop doc comment. */
-  readonly onNavigateToCustomer: (customerId: string) => void;
 }
 
 /** Full-page job detail — replaces the old JobCardModal. Loads the job,
- * its technicians, its parts (shared by JobPartsSection and
- * JobActivitySection), and the customer's registered name, then renders
- * the sticky header, the two-column body, and the delivery drawer. */
+ * its technicians, and its parts (shared by JobPartsSection and
+ * JobActivitySection), then renders the sticky header, the two-column
+ * body, and the delivery drawer. */
 export function JobDetailPage({
   jobId,
   onBack,
   onListChanged,
-  onNavigateToCustomer,
 }: JobDetailPageProps): React.JSX.Element {
   const [job, setJob] = useState<JobDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [technicians, setTechnicians] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
-  const [customerName, setCustomerName] = useState<string | null>(null);
   const [parts, setParts] = useState<readonly JobPartRecord[] | null>(null);
   const [partsError, setPartsError] = useState<string | null>(null);
   const [deliverOpen, setDeliverOpen] = useState(false);
@@ -43,6 +41,8 @@ export function JobDetailPage({
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [awaitingPartsOpen, setAwaitingPartsOpen] = useState(false);
+  const awaitingPartsReason = useAwaitingPartsReason(job);
 
   useEffect(() => {
     ipc.job
@@ -98,7 +98,6 @@ export function JobDetailPage({
     setDeliveredNotice(null);
     setJob(null);
     setParts(null);
-    setCustomerName(null);
     ipc.job
       .getById({ id: jobId })
       .then((loaded) => {
@@ -108,16 +107,6 @@ export function JobDetailPage({
           return;
         }
         loadParts(loaded.id);
-        if (loaded.customerId) {
-          ipc.customer
-            .get(loaded.customerId)
-            .then((customer) => {
-              if (customer) setCustomerName(customer.name);
-            })
-            .catch(() => {
-              // Customer section falls back to "…"; not fatal to viewing the job.
-            });
-        }
       })
       .catch((err: unknown) => {
         setLoadError(err instanceof Error ? err.message : 'Failed to load job');
@@ -157,6 +146,7 @@ export function JobDetailPage({
         reportedFault={job.reportedFault}
         diagnosedFault={job.diagnosedFault}
         status={job.status}
+        awaitingPartsReason={awaitingPartsReason}
         invoiceDocNo={deliveredNotice?.docNo ?? job.invoiceDocNo ?? null}
         saleId={job.saleId}
         printing={printing}
@@ -169,6 +159,9 @@ export function JobDetailPage({
         }}
         onOpenCancel={() => {
           setCancelOpen(true);
+        }}
+        onOpenAwaitingParts={() => {
+          setAwaitingPartsOpen(true);
         }}
       />
 
@@ -229,13 +222,7 @@ export function JobDetailPage({
           </div>
         </div>
 
-        <JobPropertyPanel
-          job={job}
-          technicians={technicians}
-          customerName={customerName}
-          onJobChanged={setJob}
-          onNavigateToCustomer={onNavigateToCustomer}
-        />
+        <JobPropertyPanel job={job} technicians={technicians} onJobChanged={setJob} />
       </div>
 
       {deliverOpen && (
@@ -269,6 +256,19 @@ export function JobDetailPage({
         }}
         onCancelled={(updated) => {
           setCancelOpen(false);
+          setJob(updated);
+          onListChanged();
+        }}
+      />
+
+      <AwaitingPartsModal
+        open={awaitingPartsOpen}
+        job={job}
+        onClose={() => {
+          setAwaitingPartsOpen(false);
+        }}
+        onConfirmed={(updated) => {
+          setAwaitingPartsOpen(false);
           setJob(updated);
           onListChanged();
         }}

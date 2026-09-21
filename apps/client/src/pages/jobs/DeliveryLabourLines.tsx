@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { RevenueType } from '@shop/contracts';
-import { newId } from '@shop/shared';
+import { Money, newId } from '@shop/shared';
 import {
   Button,
   Select,
@@ -173,7 +173,7 @@ export function DeliveryLabourLines({
           <option value="">Add a labour charge…</option>
           {serviceCharges.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.name} — {Money.format(Money.of(c.retailChargePaisa))}
             </option>
           ))}
         </Select>

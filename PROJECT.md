@@ -3,11 +3,10 @@
 > Single source of truth for **where the project is right now**.
 > Updated at the end of every session. Read at the start of every session.
 
-**Last updated:** 2026-09-20 (Phase 14 — COMPLETE, P14-1–P14-8 plus the
-V1–V5/F1–F3/G1–G6 polish passes, 627/627 tests — see PROGRESS.md
-Session 72)
-**Previous:** Phase 13 — COMPLETE, owner visual sign-off confirmed on the
-shop machine
+**Last updated:** 2026-09-22 (Phase 15 — COMPLETE, P15-1–P15-6, 644/644
+tests — see PROGRESS.md latest session; closes BUG-JOBCLIENT-1)
+**Previous:** Phase 14 — COMPLETE, P14-1–P14-8 plus the V1–V5/F1–F3/G1–G6
+polish passes, 627/627 tests
 **Update, 2026-09-19 — Phase 13 (Customer Ledger, Invoice Modal, Payment
 Receipt, Customer Statement, Add Customer, Import Balances) all eleven
 tasks (CL-0a–CL-10) built in the spec's mandated order and
@@ -2140,21 +2139,28 @@ for any new icon need in apps/client going forward.
 
 ## 4. Known bugs
 
-### BUG-JOBCLIENT-1: Job intake form's client search queries the wrong population — HIGH
+### BUG-JOBCLIENT-1: Job intake form's client search queries the wrong population — HIGH — CLOSED
 
 Found in: Phase 14, G-series, 2026-09-20.
 Description: Job intake's client search (`CustomerPicker.tsx` →
-`ipc.customer.search`) queries `party_type='customer'` — the Spare Parts
+`ipc.customer.search`) queried `party_type='customer'` — the Spare Parts
 ledger customer population. Job clients (people bringing in an AC/fridge
 for repair) are a separate population and need their own `job_client`
 table.
-Impact: The search currently surfaces the wrong records — a repair
-customer typed at job intake may not appear (if never a Spare Parts
-counter customer), or a Spare Parts ledger customer may appear who has
-never brought in a repair job. Affects every new job created.
-Fix: Phase 15 — separate `job_client` table, new search IPC, address
-field, on-site job type.
-Status: UNFIXED — waiting for Phase 15.
+Impact: The search surfaced the wrong records — a repair customer typed
+at job intake might not appear (if never a Spare Parts counter
+customer), or a Spare Parts ledger customer might appear who has never
+brought in a repair job. Affected every new job created.
+Fix: Phase 15 — dedicated `job_client` table (0016_job_client.sql, P15-1),
+`jobClient:search`/`jobClient:create`/`jobClient:getById` IPC (P15-2),
+job creation linked to job_client with denormalized
+name/phone (P15-3), `JobClientPicker.tsx` replacing `CustomerPicker.tsx`
+at intake — now searches `job_client` directly, name OR phone, with
+on-site address/area/landmark fields (P15-4).
+Status: CLOSED — 2026-09-22. `CustomerPicker.tsx` deleted; job intake's
+client search now queries `job_client` exclusively, confirmed by grep
+(zero remaining `ipc.customer.get`/`CustomerPicker` references anywhere
+in `apps/client/src/pages/jobs/`).
 
 ### BUG-COMMISSION-MULTI: Multi-technician commission is not split — LOW
 
@@ -4141,6 +4147,7 @@ Status: UNFIXED — waiting for [phase / migration / decision]
 | Q11     | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                           | P0-8 verification                                                                                       | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Q12     | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it? | Phase 4 cash-book design                                                                                | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
 | Q-P15-1 | Should job clients live in a new `party_type='job_client'` row on the existing `party` table, or a wholly separate `job_client` table? (see BUG-JOBCLIENT-1)         | Phase 15 scope/design                                                                                   | 2026-09-20 | **Separate `job_client` table** — owner decision, 2026-09-20. `party_type='job_client'` rejected in favour of a dedicated table. Phase 15 starts with the `job_client` table migration, a new search IPC, an address field, and the on-site job type.                                                                                                                                                                                                                                                               |
+| Q-H3    | Where does the delivery modal's labour-charge dropdown source its charges (name, rate), and where will they be added/edited?                                         | Job delivery UX (H3, 2026-09-22)                                                                        | 2026-09-22 | **`service_charge` table**, read via `job:listServiceCharges` → `ServiceChargeOption` (`id, name, businessUnitId, retailChargePaisa`) — confirmed by reading both the query and the DTO; `retailChargePaisa` is already populated, no gap found, no bug logged. Dropdown now shows `"[name] — Rs [rate]"` (`Money.format`). **Adding/editing charges is out of scope until the Settings phase** — no `service_charge` create/update IPC or UI exists yet; this is a read-only reference list today.                 |
 
 ### P0-8 baseline (derived, not assumed)
 

@@ -43,12 +43,13 @@ describe('migrate', () => {
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
+      '0016_job_client.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 50 tables and 11 views — the 49-table baseline (through 0014), +1 for job_technician (0015); job.cancellation_reason is a column add, not a new table', () => {
+  it('applies exactly 51 tables and 11 views — the 50-table baseline (through 0015), +1 for job_client (0016); job.job_client_id is a column add, not a new table', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -57,7 +58,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(50);
+    expect(tables).toHaveLength(51);
     expect(views).toHaveLength(11);
   });
 
@@ -95,6 +96,7 @@ describe('migrate', () => {
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
+      '0016_job_client.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -123,6 +125,7 @@ describe('migrate', () => {
       { version: 13, name: '0013_item_code_reformat.sql' },
       { version: 14, name: '0014_purchase_order_grn.sql' },
       { version: 15, name: '0015_job_technician.sql' },
+      { version: 16, name: '0016_job_client.sql' },
     ]);
   });
 
@@ -133,6 +136,52 @@ describe('migrate', () => {
     db.close();
 
     expect(() => migrate(dbPath, migrationsDir, backupDir)).toThrow(/has changed on disk/);
+  });
+
+  it('applies 0016 to a fresh database — job_client table exists with OD-2 columns, job.job_client_id exists and is nullable', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const jobClientColumns = db.prepare(`PRAGMA table_info(job_client)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    const jobColumns = db.prepare(`PRAGMA table_info(job)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    db.close();
+
+    const jobClientColumnNames = jobClientColumns.map((c) => c.name);
+    expect(jobClientColumnNames).toEqual([
+      'id',
+      'tenant_id',
+      'name',
+      'phone',
+      'phone_2',
+      'address',
+      'area',
+      'landmark',
+      'notes',
+      'created_at',
+    ]);
+    for (const nullableColumn of ['phone', 'phone_2', 'address', 'area', 'landmark', 'notes']) {
+      const column = jobClientColumns.find((c) => c.name === nullableColumn);
+      expect(column?.notnull).toBe(0);
+    }
+    // 'id' is the TEXT PRIMARY KEY — SQLite does not set notnull=1 on a
+    // non-INTEGER primary key column unless NOT NULL is also declared
+    // (confirmed live: PRAGMA table_info reports notnull=0 here, same as
+    // every other TEXT PRIMARY KEY in this schema, e.g. job.id).
+    for (const requiredColumn of ['tenant_id', 'name', 'created_at']) {
+      const column = jobClientColumns.find((c) => c.name === requiredColumn);
+      expect(column?.notnull).toBe(1);
+    }
+
+    const jobClientIdColumn = jobColumns.find((c) => c.name === 'job_client_id');
+    expect(jobClientIdColumn).toBeDefined();
+    expect(jobClientIdColumn?.notnull).toBe(0);
+    // job.customer_id (0001_init.sql) is untouched — never dropped, per OD-3.
+    expect(jobColumns.find((c) => c.name === 'customer_id')).toBeDefined();
   });
 
   it('applies 0004 to a fresh database — bill_reference/due_date/bill_notes exist and are nullable', () => {
@@ -196,6 +245,7 @@ describe('migrate', () => {
       '0013_item_code_reformat.sql',
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
+      '0016_job_client.sql',
     ]);
 
     db = new Database(dbPath);

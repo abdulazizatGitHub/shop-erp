@@ -5,6 +5,7 @@ import type {
   CashBookRowDto,
   CreateCustomerInput,
   CreateItemInput,
+  CreateJobClientInput,
   CreateJobInput,
   CreatePaymentInput,
   CreateGrnInput,
@@ -41,9 +42,11 @@ import type {
   ItemPricesDto,
   ItemSearchInput,
   ItemTopSellingInput,
+  JobClientDto,
   JobDto,
   JobIdInput,
   JobSearchInput,
+  SearchJobClientsInput,
   JobStatusTransitionInput,
   JobSummaryDto,
   JobStatusHistoryDto,
@@ -514,6 +517,11 @@ export interface ElectronApi {
     readonly listStatusHistory: (id: string) => Promise<readonly JobStatusHistoryDto[]>;
     readonly cancelJob: (input: CancelJobInput) => Promise<JobDto>;
     readonly updateDiagnosis: (input: UpdateJobDiagnosisInput) => Promise<JobDto>;
+  };
+  readonly jobClient: {
+    readonly search: (input: SearchJobClientsInput) => Promise<readonly JobClientDto[]>;
+    readonly create: (input: CreateJobClientInput) => Promise<JobClientDto>;
+    readonly getById: (id: string) => Promise<JobClientDto | null>;
   };
   readonly uom: {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;
