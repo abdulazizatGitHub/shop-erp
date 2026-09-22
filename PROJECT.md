@@ -4153,25 +4153,169 @@ Status: UNFIXED — waiting for [phase / migration / decision]
 
 ---
 
+## Settings Backlog
+
+The Settings tab currently has 4 cards: Shop Identity,
+Discount Presets, Receipt Paper Size, Backup/Restore.
+All four work correctly.
+
+The following configuration areas are identified but
+not yet built. They are grouped by priority.
+
+### Type A — Unblock broken or incomplete features (Phase 16)
+
+S-A1: Service charge management (CRITICAL)
+The shop cannot add, edit, or disable service charge
+types (labour charges in the delivery modal) without
+a developer touching the database directly.
+service_charge table exists (0002_business_units.sql)
+with 12 columns including retail_charge, commission_
+amount, commission_bp, is_active. No write path exists
+anywhere — lookup.repository.ts and job-delivery.
+repository.ts both read-only. Phase 16 must add:
+list, create, update, toggle-active for service_charge.
+Dependent on: nothing (schema already exists).
+
+S-A2: Appliance brand list management (HIGH)
+Brand dropdown in job intake is a hardcoded constant
+(BRAND_OPTIONS in JobApplianceFields.tsx). The brand
+table exists in the schema (0001_init.sql) with zero
+seeded rows and no IPC channel. Phase 16 must add:
+list, create, toggle-active for brand. The hardcoded
+constant must be replaced with a DB-driven dropdown.
+Dependent on: new brand IPC channel.
+
+S-A3: Multi-technician commission fix (HIGH)
+BUG-COMMISSION-MULTI: job-delivery.handler.ts reads
+job.assignedTo (single technician) for commission.
+With multi-tech assignment (Phase 14), the second
+technician earns no commission. Commission rate is
+stored as party.commission_bp per technician (not a
+shop-wide setting). Fix is backend-only: change
+recordCommissionIfEligible to iterate job_technician
+rows instead of reading job.assignedTo alone.
+This does NOT require a new Settings UI — the rate
+is already configured at staff creation. Phase 16
+must fix the delivery handler logic only.
+Dependent on: nothing (job_technician table exists
+from Phase 14, party.commission_bp exists from Phase 7).
+
+S-A4: Shop identity visible in Settings (LOW — already
+90% done)
+ShopIdentityCard.tsx already exists and works.
+Confirm it renders correctly and the owner can update
+shop name before go-live. No code change expected.
+
+### Type B — Nice-to-have configuration (Phase 17+)
+
+S-B1: Items settings
+Reorder points, low-stock alerts, default UoM.
+Depends on: reorder_point column (not yet in schema).
+
+S-B2: Customer settings
+Default price level, credit limit defaults.
+Current behaviour is acceptable — deferred.
+
+S-B3: Supplier settings
+Default payment terms.
+Current behaviour is acceptable — deferred.
+
+S-B4: Purchase Order settings
+Default warehouse, approval workflow.
+Current behaviour is acceptable — deferred.
+
+S-B5: Report settings
+Rows per page, date format, default date range.
+ROWS_PER_PAGE is currently hardcoded at 10 in each
+report file. Deferred to a report configuration phase.
+
+S-B6: Staff settings
+Default attendance status, wage calculation rules.
+Current behaviour is acceptable — deferred.
+
+S-B7: Expense settings
+Default categories, allocation rules.
+Current behaviour is acceptable — deferred.
+
+S-B8: Attendance settings
+Working days, shift times.
+No schema support yet — deferred.
+
+S-B9: Custody settings
+Reconciliation frequency, shortage policy.
+ADR-0006 governs this — no Settings UI needed yet.
+
+### Type C — Separate phase (not Settings configuration)
+
+S-C1: Receipt and invoice design
+Header/footer layout, logo placement, font choices.
+This is a print template phase, not a Settings tab.
+Requires a template engine decision first.
+
+S-C2: Voucher formats
+Sales voucher, payment receipt, job invoice design.
+Same as S-C1 — separate phase.
+
+S-C3: Security and user management
+Roles, permissions, PIN login.
+ADR-0009 (permissions are code). Full user management
+is a separate phase with its own schema work.
+
+S-C4: Policies
+Return policy, refund rules, warranty terms.
+Business policy, not system configuration.
+
+### Commission rate storage — important architectural note
+
+commission_bp is stored on party (staff member's own
+row), set at staff creation via AddStaffModal. It is
+NOT a shop-wide Settings value. When the commission
+fix (S-A3) is built, the rate source stays on party —
+only the delivery handler's iteration logic changes.
+If per-service-charge commission configuration is ever
+needed, service_charge.commission_amount and
+.commission_bp columns already exist in the schema
+but are never read by any code today.
+
+### Phase 16 backlog (logged 2026-09-22, not built this phase)
+
+- **Commission approvals access control.** Commission Approvals
+  (Phase 16, P16-3b) is unrestricted by convention — there is no
+  user/role identity in the app yet (ADR-0009; BUG-ADR9). Once the auth
+  phase exists: approvals must become owner-only, and
+  `commission_decision` must record `decided_by` (a user reference).
+  Not built now — no `decided_by` column added in Phase 16.
+- **Go-live clean-start procedure.** All data in every database today,
+  including the production-bound machine's, is test data. Before
+  2026-10-31, the production database must start with no test jobs,
+  ledger rows, staff, or service charges. No back-fill of historical
+  commission is being built (OD-16-9) — this is a related, separate
+  data-hygiene step for go-live, not designed or built in Phase 16.
+
+---
+
 ## 5. Open questions (blocking design — do NOT invent answers)
 
-| #       | Question                                                                                                                                                                                        | Blocks                                                                                                  | Asked      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q1      | Gas sold by whole cylinder, or by weight from a cylinder?                                                                                                                                       | Item UoM conversion                                                                                     | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q2      | Empty cylinders returnable / held on deposit? Who owns them?                                                                                                                                    | Container tracking                                                                                      | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q3      | Wholesale price: fixed amount / % off retail / negotiated?                                                                                                                                      | Pricing engine                                                                                          | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q4      | Which items genuinely need serial tracking?                                                                                                                                                     | Billing speed                                                                                           | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q5      | Fridge warranty work — who pays for parts?                                                                                                                                                      | Payer model                                                                                             | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q6      | Approximate SKU count (300–500 assumed)                                                                                                                                                         | Import effort                                                                                           | 2026-08-08 | ~300–500                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Q7      | Thermal printer model                                                                                                                                                                           | Print driver                                                                                            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q8      | PC specification                                                                                                                                                                                | Electron perf; also Phase 4 P4-5 pull-the-plug test (needs the actual shop machine, flagged 2026-08-29) | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q9      | Should Repair carry a cost of goods for parts consumed (internal transfer price)?                                                                                                               | Unit P&L shape                                                                                          | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q10     | Allocation method per expense category (rent, electricity, bike fuel)                                                                                                                           | Overhead reporting                                                                                      | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q11     | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                                                      | P0-8 verification                                                                                       | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Q12     | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it?                            | Phase 4 cash-book design                                                                                | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
-| Q-P15-1 | Should job clients live in a new `party_type='job_client'` row on the existing `party` table, or a wholly separate `job_client` table? (see BUG-JOBCLIENT-1)                                    | Phase 15 scope/design                                                                                   | 2026-09-20 | **Separate `job_client` table** — owner decision, 2026-09-20. `party_type='job_client'` rejected in favour of a dedicated table. Phase 15 starts with the `job_client` table migration, a new search IPC, an address field, and the on-site job type.                                                                                                                                                                                                                                                               |
-| Q-H3    | Where does the delivery modal's labour-charge dropdown source its charges (name, rate), and where will they be added/edited?                                                                    | Job delivery UX (H3, 2026-09-22)                                                                        | 2026-09-22 | **`service_charge` table**, read via `job:listServiceCharges` → `ServiceChargeOption` (`id, name, businessUnitId, retailChargePaisa`) — confirmed by reading both the query and the DTO; `retailChargePaisa` is already populated, no gap found, no bug logged. Dropdown now shows `"[name] — Rs [rate]"` (`Money.format`). **Adding/editing charges is out of scope until the Settings phase** — no `service_charge` create/update IPC or UI exists yet; this is a read-only reference list today.                 |
-| Q-VOID  | A job created by mistake (wrong customer, duplicate) currently requires Cancel as the corrective action. Cancel leaves a record with reason "Created in error". Is a softer Void status needed? | Job lifecycle UX (I2/I3, 2026-09-22)                                                                    | 2026-09-22 | **OPEN — deferred.** If the owner finds cancelled-in-error jobs polluting reports, a Void status (excluded from all reports) can be added in a future phase. Cancel is sufficient for now (see ADR-0014).                                                                                                                                                                                                                                                                                                           |
+| #           | Question                                                                                                                                                                                                                                          | Blocks                                                                                                  | Asked      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1          | Gas sold by whole cylinder, or by weight from a cylinder?                                                                                                                                                                                         | Item UoM conversion                                                                                     | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q2          | Empty cylinders returnable / held on deposit? Who owns them?                                                                                                                                                                                      | Container tracking                                                                                      | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q3          | Wholesale price: fixed amount / % off retail / negotiated?                                                                                                                                                                                        | Pricing engine                                                                                          | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q4          | Which items genuinely need serial tracking?                                                                                                                                                                                                       | Billing speed                                                                                           | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q5          | Fridge warranty work — who pays for parts?                                                                                                                                                                                                        | Payer model                                                                                             | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q6          | Approximate SKU count (300–500 assumed)                                                                                                                                                                                                           | Import effort                                                                                           | 2026-08-08 | ~300–500                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q7          | Thermal printer model                                                                                                                                                                                                                             | Print driver                                                                                            | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q8          | PC specification                                                                                                                                                                                                                                  | Electron perf; also Phase 4 P4-5 pull-the-plug test (needs the actual shop machine, flagged 2026-08-29) | 2026-08-08 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q9          | Should Repair carry a cost of goods for parts consumed (internal transfer price)?                                                                                                                                                                 | Unit P&L shape                                                                                          | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q10         | Allocation method per expense category (rent, electricity, bike fuel)                                                                                                                                                                             | Overhead reporting                                                                                      | 2026-08-09 | OPEN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q11         | Expected table count after migrations 0001–0003 apply (P0-8 exit criterion needs a number)                                                                                                                                                        | P0-8 verification                                                                                       | 2026-08-09 | **42 tables, 11 views** (2026-08-10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q12         | Cash purchases post no `party_ledger` row (Phase 2 Decision 1). What table does a cash purchase's outflow post to, so Phase 4's cash-book report (P4-3) can find it?                                                                              | Phase 4 cash-book design                                                                                | 2026-08-24 | **No new table/ledger row in Phase 2.** `party_ledger` is party-debt tracking, not a cash-drawer ledger — confirmed no `cash_movement`/`cash_ledger` table exists in the schema and none is being added. Phase 4's cash-book view reads directly from `purchase WHERE payment_mode = 'cash'` (confirmed column exists, `packages/db/src/migrations/0001_init.sql:366`) and the equivalent on `sale`/`expense` once those exist, unioned in a view. This is a note for Phase 4 to build, not built now. (2026-08-24) |
+| Q-P15-1     | Should job clients live in a new `party_type='job_client'` row on the existing `party` table, or a wholly separate `job_client` table? (see BUG-JOBCLIENT-1)                                                                                      | Phase 15 scope/design                                                                                   | 2026-09-20 | **Separate `job_client` table** — owner decision, 2026-09-20. `party_type='job_client'` rejected in favour of a dedicated table. Phase 15 starts with the `job_client` table migration, a new search IPC, an address field, and the on-site job type.                                                                                                                                                                                                                                                               |
+| Q-H3        | Where does the delivery modal's labour-charge dropdown source its charges (name, rate), and where will they be added/edited?                                                                                                                      | Job delivery UX (H3, 2026-09-22)                                                                        | 2026-09-22 | **`service_charge` table**, read via `job:listServiceCharges` → `ServiceChargeOption` (`id, name, businessUnitId, retailChargePaisa`) — confirmed by reading both the query and the DTO; `retailChargePaisa` is already populated, no gap found, no bug logged. Dropdown now shows `"[name] — Rs [rate]"` (`Money.format`). **Adding/editing charges is out of scope until the Settings phase** — no `service_charge` create/update IPC or UI exists yet; this is a read-only reference list today.                 |
+| Q-VOID      | A job created by mistake (wrong customer, duplicate) currently requires Cancel as the corrective action. Cancel leaves a record with reason "Created in error". Is a softer Void status needed?                                                   | Job lifecycle UX (I2/I3, 2026-09-22)                                                                    | 2026-09-22 | **OPEN — deferred.** If the owner finds cancelled-in-error jobs polluting reports, a Void status (excluded from all reports) can be added in a future phase. Cancel is sufficient for now (see ADR-0014).                                                                                                                                                                                                                                                                                                           |
+| Q-VOID-COMM | If a delivered job is ever voided (depends on Q-VOID shipping), what happens to its commission claims — undecided ones, and ones already approved and paid?                                                                                       | Phase 16 commission claims (ADR-0015)                                                                   | 2026-09-22 | OPEN — not designed in Phase 16. Voiding does not exist yet (Q-VOID is itself deferred), so this has no live consequence today; revisit if/when Q-VOID is built.                                                                                                                                                                                                                                                                                                                                                    |
+| Q-ZEROBILL  | The delivery modal allows "Deliver & Invoice" with zero parts and zero labour lines (Rs 0 total) — see `JobDeliveryModal.tsx`'s guard, which blocks only when _both_ are empty. Is this legitimate (warranty/free-check jobs) or a missing guard? | Delivery modal validation (OD-16-10, 2026-09-22)                                                        | 2026-09-22 | OPEN — owner to decide. Not changed in Phase 16 per explicit instruction (OD-16-10).                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Q-ADR14     | PROGRESS.md's Session 75 (2026-09-22) recorded "Logged ADR-0014 in PROJECT.md §6" for the job-hard-delete decision, but no `docs/decisions/ADR-0014-*.md` file existed until this entry was found during Phase 16 planning.                       | Doc consistency                                                                                         | 2026-09-22 | **RESOLVED 2026-09-22** — `docs/decisions/ADR-0014-no-hard-delete-jobs.md` written, content taken strictly from the PROGRESS.md Session 75 / PROJECT.md §6 record (no new decisions). Commission-claims ADR takes **ADR-0015** to avoid any collision.                                                                                                                                                                                                                                                              |
 
 ### P0-8 baseline (derived, not assumed)
 

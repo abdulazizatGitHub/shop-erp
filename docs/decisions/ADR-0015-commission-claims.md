@@ -1,0 +1,119 @@
+# ADR-0015: Commission is an owner-approved claim, not an automatic posting
+
+**Status:** Accepted · **Date:** 2026-09-22
+
+## Decision
+
+Phase 7's automatic commission model is retired. `party.commission_bp`
+(per-technician, basis points) is no longer read by any code path; the
+column stays (never edit an applied migration) and existing
+Phase-7-era `party_ledger` commission rows are untouched. Commission is
+now configured **per service charge**
+(`service_charge.commission_amount` / `commission_bp`): none, a fixed
+paisa amount, or basis points of the labour line's charged amount.
+
+Delivering a job with a commission-eligible labour line no longer posts
+money. It writes one immutable `commission_claim` row **inside the same
+transaction as the delivery itself** (`deliverJob`), snapshotting the
+job, the sale line, the service charge, a suggested paisa amount, and a
+suggested recipient. A claim is not a `party_ledger` entry — it is a
+proposal.
+
+The owner reviews pending claims (Commission Approvals) and either:
+
+- **Approves**, naming one or more recipients (each an integer paisa
+  amount > 0, each a technician present in the job's technician
+  assignment history — active or previously removed) — this writes one
+  `commission_decision` row and one `party_ledger` row per recipient, in
+  one transaction; or
+- **Rejects**, with a required non-empty reason.
+
+Both are immutable. A claim can be decided exactly once — enforced by
+`UNIQUE(commission_decision.claim_id)`, with a core-layer "already
+decided" check as the first line of defence and the constraint as the
+backstop, not the only guard. Corrections are reversing `party_ledger`
+rows, per ADR-0004 — never edits to a decision.
+
+## Why Phase 7's model was retired
+
+Phase 7 (`party.commission_bp`, `recordCommissionIfEligible`) paid
+whichever single technician happened to be `job.assignedTo` — the first
+technician ever assigned to the job (P14-1's "set once" rule) — a fixed
+percentage of the job's labour total, automatically, in a transaction
+separate from and after the delivery itself. This broke the moment
+Phase 14 shipped multi-technician assignment: a second or third
+technician on a delivered job earned nothing (`BUG-COMMISSION-MULTI`,
+logged LOW since it was a missing feature, not a wrong number).
+
+Fixing it mechanically — iterating `job_technician` and paying every
+active technician the job's `commission_bp` — was considered and
+rejected by the owner during Phase 16 planning. The shop's real
+business rule is not mechanical: technicians are paid mainly by daily
+wage; commission applies only to specific kinds of work (today: AC
+installation); and the owner — not a formula — decides who earns it and
+how much, usually the senior technician on the job. A fixed
+per-technician rate has no way to express "the owner decides," and
+`party.commission_bp` has no way to express "this only applies to AC
+installation, not fridge repair." `service_charge.commission_amount` /
+`commission_bp` already existed in the schema, unused since Phase 7
+(`PHASE_7.md` §5, Conflict 3, Decision A — noted at the time as a
+plausible future direction), and map directly onto "commission depends
+on what kind of job this is," which is the real rule.
+
+Claims exist as a distinct, immutable step between delivery and money
+because the two moments have different failure and correctness
+requirements. Delivery must always succeed once its own preconditions
+are met — it is the moment stock, revenue, and the customer's invoice
+become real, and it must never be blocked or delayed by a commission
+decision the owner hasn't made yet. Approval must never be silently
+lost — a claim, once created, is durable, queryable state the owner can
+act on whenever they get to it, not a value computed transiently and
+discarded if nobody was looking at the time.
+
+## A deliberate reversal of Phase 7's transaction behaviour
+
+Phase 7 explicitly recorded commission in **a second, separate
+transaction, after** `deliverJob()` committed, and a commission failure
+was caught and logged, never rethrown — a delivery was never rolled back
+because commission recording failed (`PHASE_7.md` §8d). That was correct
+for Phase 7's model, where commission was money leaving the shop
+automatically and delivery was strictly more important than getting
+that posting right.
+
+Under this ADR, a commission **claim** is not money — it is a record
+inside the delivery's own transaction, no different in kind from the
+`sale_line` rows it describes. If a claim insert fails, the entire
+delivery now rolls back: no `sale`, no `sale_line`, no stock movement,
+no claim survive. This is the opposite of Phase 7's behaviour, and
+deliberately so — a claim silently lost after a successful delivery
+would be worse than a slightly larger delivery transaction, since a lost
+claim can never be recreated once the delivery's service-charge
+snapshot data has moved on, whereas a failed delivery can simply be
+retried. `commission.repository.test.ts`'s Phase 7 test `'a commission
+recording failure does not roll back the delivery'` is rewritten to its
+opposite, `'a claim insert failure rolls back the entire delivery'`
+(Phase 16, P16-3a).
+
+## Consequences
+
+- `computeCommission(labourTotalPaisa, commissionBp)`
+  (`packages/core/src/payroll/commission.service.ts`) is retired,
+  replaced by a pure claim-suggestion function taking the service
+  charge's mode/amount/bp and the line's charged quantity/total —
+  called from `job-delivery.repository.ts` exactly as
+  `computeLineTotalPaisa` already is (a `packages/core` pure function
+  imported by `packages/db`, never a service invoked from a
+  repository — layering unchanged).
+- The wage report (`wage-report.repository.ts`) needed no query
+  restructuring: its existing `party_ledger.entry_date`-scoped
+  correlated subquery already attributes commission to the month it was
+  _recorded_, and recording now happens at approval time — the query's
+  existing meaning becomes exactly "approval-date commission" for free.
+- Reads are aggregations, per ADR-0004: a rejected claim is not deleted,
+  an approved claim's decision is not edited, and "how much has this
+  technician earned" is always `SUM(party_ledger.amount) WHERE
+entry_type='commission'`, unchanged in shape from Phase 7.
+- Commission Approvals is, for now, unrestricted — there is no
+  user/role layer yet (ADR-0009; `BUG-ADR9`). Logged as backlog for the
+  auth phase: owner-only access, and a `decided_by` column on
+  `commission_decision`.
