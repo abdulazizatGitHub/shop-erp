@@ -282,40 +282,38 @@ commissionAmountPaisa: 50000}` via the new create channel, then reading
     created against the same labour line (DB-enforced).
   - Quantity-milli 2000 case (pure-function unit test, since the live
     delivery path always uses `quantityMilli = 1000` for labour today):
-    fixed commission 50000 paisa at `quantity_milli = 2000` →
-    `FLOOR(50000 × 2000 / 1000) = 100000`.
+    fixed commission 50000 paisa at `quantity_milli = 2000`. Expected:
+    `FLOOR(50000 * 2000 / 1000) = 100000`.
   - Charge "Compressor Replacement Labour," 1000 bp, charged (with an
-    operator price override) at 400000 paisa → `FLOOR(400000 × 1000 /
-
-10000. = 40000`.
-
-- Charge with `commissionMode = none` → zero claim rows for that line.
-- Suggested recipient: job has technicians A (assigned first, then
-  removed before delivery) and B (assigned after A, still active at
-  delivery) → suggested recipient is **B** (earliest-assigned
-  technician still active at delivery), not `job.assignedTo` (which
-  still points at A, per P14-1's "set once" rule) and not A.
-- Approve a claim as 30000 + 20000 to two technicians both present in
-  the job's assignment history (one active, one previously removed) →
-  exactly two `party_ledger` commission rows (`amount = -30000`,
-  `amount = -20000`, `entryType = 'commission'`, `entryDate` =
-  decision date), sum 50000, one `commission_decision` row, two
-  `commission_decision_recipient` rows. A second approval attempt on
-  the same claim is rejected by a core "already decided" check (clear
-  error) with the `UNIQUE(claim_id)` constraint as the backstop — test
-  asserts both the error and that no new rows were written.
-- Reject with an empty reason is rejected at the Zod boundary; nothing
-  written.
-- A recipient not in the job's assignment history is rejected by core
-  before any write; nothing written.
-- **Rewritten test**: a claim-insert failure (e.g. a constraint
-  violation) rolls back the **entire delivery** — no `sale`, no
-  `sale_line`, no stock movement, no claim survive — since claim
-  creation now happens inside `deliverJob`'s existing transaction
-  (C-1/C-5), the exact opposite of Phase 7's "commission failure never
-  rolls back delivery" behaviour, which is being deliberately retired.
-- `npm run verify` passes; final test count reported exactly (see §5
-  for the per-task delta).
+    operator price override) at 400000 paisa. Expected:
+    `FLOOR(400000 * 1000 / 10000) = 40000`.
+  - Charge with `commissionMode = none` → zero claim rows for that line.
+  - Suggested recipient: job has technicians A (assigned first, then
+    removed before delivery) and B (assigned after A, still active at
+    delivery) → suggested recipient is **B** (earliest-assigned
+    technician still active at delivery), not `job.assignedTo` (which
+    still points at A, per P14-1's "set once" rule) and not A.
+  - Approve a claim as 30000 + 20000 to two technicians both present in
+    the job's assignment history (one active, one previously removed) →
+    exactly two `party_ledger` commission rows (`amount = -30000`,
+    `amount = -20000`, `entryType = 'commission'`, `entryDate` =
+    decision date), sum 50000, one `commission_decision` row, two
+    `commission_decision_recipient` rows. A second approval attempt on
+    the same claim is rejected by a core "already decided" check (clear
+    error) with the `UNIQUE(claim_id)` constraint as the backstop — test
+    asserts both the error and that no new rows were written.
+  - Reject with an empty reason is rejected at the Zod boundary; nothing
+    written.
+  - A recipient not in the job's assignment history is rejected by core
+    before any write; nothing written.
+  - **Rewritten test**: a claim-insert failure (e.g. a constraint
+    violation) rolls back the **entire delivery** — no `sale`, no
+    `sale_line`, no stock movement, no claim survive — since claim
+    creation now happens inside `deliverJob`'s existing transaction
+    (C-1/C-5), the exact opposite of Phase 7's "commission failure never
+    rolls back delivery" behaviour, which is being deliberately retired.
+  - `npm run verify` passes; final test count reported exactly (see §5
+    for the per-task delta).
 - **P16-3b**: UI action — approve the seeded pending claim, confirm it
   leaves the pending list, confirm the wage report for that
   technician/month increases by the approved amount, confirm the
