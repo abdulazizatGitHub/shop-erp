@@ -54,13 +54,16 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
 - **P16-3 — Commission claims and approvals.** Replaces Phase 7's
   automatic commission entirely. See §2a (owner decisions) for the full
   model. Delivered in three commits:
-  - **P16-3a** — migrations, pure claim-calculation function in
+  - **P16-3a** — migrations (`commission_claim`, `commission_decision`
+    with `attempt_no`, `commission_decision_recipient`,
+    `commission_decision_reversal`), pure claim-calculation function in
     `packages/core`, delivery-transaction claim inserts, approve/reject
-    core logic + repository, retirement of the `party.commission_bp`
-    read path, rewritten Phase 7 tests, ADR-0015.
-  - **P16-3b** — Commission Approvals tab (Job Settings page), wage
-    report change (approval-date attribution, pending-total in the
-    report header).
+    core logic + repository, the GAP-1 decision-reversal path
+    (OD-16-3a), retirement of the `party.commission_bp` read path,
+    rewritten Phase 7 tests, ADR-0015.
+  - **P16-3b** — Commission Approvals tab (Job Settings page, including
+    the "Reverse" action), wage report change (approval-date
+    attribution, pending-total in the report header).
   - **P16-3c** — technician removal guard: `unassign_reason`, new core
     `unassignTechnician` function enforcing a required reason and a
     status lock, replacing the handler's direct repository call.
@@ -113,8 +116,37 @@ assignment history (active or removed) — to pay someone else they must
 first be assigned to the job. Reject: requires a non-empty reason.
 Approval writes the decision and all `party_ledger` commission rows in
 one transaction. Decisions are immutable; corrections are reversing
-`party_ledger` rows. A claim can be decided exactly once (DB-enforced).
-Unrestricted by convention until the auth phase (logged as backlog).
+`party_ledger` rows. Unrestricted by convention until the auth phase
+(logged as backlog).
+
+**OD-16-3a — Decision correction path (GAP-1, added 2026-09-22).**
+`UNIQUE(claim_id)` alone would make a wrong approval or rejection
+uncorrectable in-app — a real gap, since the owner reviewing dozens of
+claims will approve one wrong occasionally. Replaced with:
+
+- `commission_decision` gains `attempt_no INTEGER NOT NULL`;
+  `UNIQUE(claim_id, attempt_no)` replaces `UNIQUE(claim_id)`.
+- New table `commission_decision_reversal` (`id`, `tenant_id`,
+  `decision_id` FK **UNIQUE**, `reason` TEXT NOT NULL — non-blank,
+  trimmed, enforced in core — `reversed_at`, `created_at`).
+- **Reversing an approved decision**: one transaction writes the
+  reversal row plus one reversing `party_ledger` row per original
+  recipient row (`amount = +original`, opposite sign, same
+  `source_type`/`source_id` convention as the original — the standard
+  reversal-discovery pattern, `DATABASE_RULES.md` §3). **Reversing a
+  rejected decision**: reversal row only, no ledger rows.
+- Core allows a new decision on a claim only if the claim has no
+  decision yet, or its latest decision has a reversal row.
+  `attempt_no` = count of existing decisions for that claim + 1.
+  Concurrent approval attempts collide on
+  `UNIQUE(claim_id, attempt_no)` — the DB backstop, not the only guard.
+- **Pending** (for the Approvals list and the pending-count badges) =
+  a claim with no decision, or whose latest decision has a reversal
+  row.
+- UI: decided claims show a "Reverse" action requiring a reason. Kept
+  minimal — no edit-in-place, no partial reversal of one recipient out
+  of several; reversing undoes the whole decision, and a fresh
+  approval (attempt 2) replaces it.
 
 **OD-16-4 — Commission month.** Commission counts in the wage report by
 the _approval_ date (`party_ledger.entry_date` = decision date), not the
@@ -184,8 +216,10 @@ in `PROJECT.md` §4, not fixed this phase.
 "Job Settings," links to a new `JobSettingsPage.tsx` with three tabs:
 **Service Charges | Brands | Commission Approvals**. The Job Settings
 tile and the Commission Approvals tab each show a read-only pending-claim
-count badge (no new tables — `COUNT(*)` on `commission_claim LEFT JOIN
-commission_decision` where the decision is absent).
+count badge — no new tables beyond those in OD-16-3a: a claim counts as
+pending if it has no `commission_decision` row, or if its latest
+decision (highest `attempt_no`) has a matching
+`commission_decision_reversal` row.
 
 ## 2c. Brand table sharing (C-6 finding, resolved)
 
@@ -257,21 +291,40 @@ pattern).
 
 - **P16-1**: creating a service charge `{name: 'AC Installation (test)',
 retailChargePaisa: 300000, commissionMode: 'fixed',
-commissionAmountPaisa: 50000}` via the new create channel, then reading
-  it back via the admin list, returns exactly those values. Toggling
-  `isActive=0` removes it from `lookup.repository.ts`'s
+commissionAmountPaisa: 50000}` via the new create channel, then
+  reading it back via the admin list, returns exactly those values.
+  Toggling `isActive=0` removes it from `lookup.repository.ts`'s
   `listServiceCharges` (delivery dropdown) but keeps it in the admin
-  list. Verified: named repository tests + one hand-run query.
-- **P16-2**: after bootstrap, `brand` has ≥ 18 non-deleted rows (17
-  starter names + Waves) with no case-insensitive duplicates, all
-  `is_active = 1`; creating `"gree"` when `"Gree"` exists (active or
-  soft-deleted) is rejected; running the bootstrap a second time inserts
-  nothing new. Deactivating "Haier" (`is_active = 0`) removes it from
-  the job-intake dropdown (`brand:list` filtered for that use) but a
-  subsequent parts CSV import row with brand text "Haier" still resolves
-  to the same `brand.id` and the row is accepted, not rejected — no
-  second "Haier" row exists afterward. Verified: named repository tests
-  (bootstrap idempotency, uniqueness-including-deleted, is_active
+  list. Creating a second charge named `"ac installation (test)"`
+  (case-insensitive match against the first) is rejected. Commission
+  mode is not a stored column — it is derived from
+  `commission_amount`/`commission_bp` being set or `NULL`, validated at
+  both the Zod boundary and in core: `none` = both `NULL`; `fixed` =
+  `commission_amount > 0` and `commission_bp IS NULL`; `bp` =
+  `commission_bp` between 1 and 10000 inclusive and
+  `commission_amount IS NULL`; both set (or an out-of-range value) is
+  rejected by both Zod and a core check — Zod alone cannot express
+  "exactly one of two fields," so this is deliberately checked twice.
+  **Editing a service charge's retail price after a delivery already
+  used it never changes that delivery**: create a charge, deliver a job
+  against it, then edit the charge's `retailChargePaisa` — the already-
+  delivered `sale_line.description` and `sale_line.unitPrice` are
+  unchanged (named test, confirms the SQ-6 snapshot finding from plan
+  discussion holds under a real edit, not just by code inspection).
+  Verified: named repository tests + one hand-run query.
+- **P16-2**: a fresh DB, after bootstrap, has **exactly 18** brand rows
+  (not merely "at least"): Dawlance, Haier, PEL, Orient, Gree, Kenwood,
+  TCL, Samsung, LG, Ecostar, Panasonic, Changhong Ruba, Homage, Nasgas,
+  Westpoint, Daikin, Mitsubishi, Waves — all `is_active = 1`, no
+  case-insensitive duplicates. Creating `"gree"` when `"Gree"` exists
+  (active or soft-deleted) is rejected. Running the bootstrap a second
+  time inserts nothing new (still exactly 18). Deactivating "Haier"
+  (`is_active = 0`) removes it from the job-intake dropdown (`brand:list`
+  filtered for that use) but a subsequent parts CSV import row with
+  brand text "Haier" still resolves to the same `brand.id` and the row
+  is accepted, not rejected — no second "Haier" row exists afterward.
+  Verified: named repository tests (bootstrap idempotency — exact count
+  asserted, not a lower bound; uniqueness-including-deleted; is_active
   toggle) + one named import-repository test reusing the existing CSV
   import test fixtures + hand-run queries.
 - **P16-3a** (all hand-calculated):
@@ -287,25 +340,64 @@ commissionAmountPaisa: 50000}` via the new create channel, then reading
   - Charge "Compressor Replacement Labour," 1000 bp, charged (with an
     operator price override) at 400000 paisa. Expected:
     `FLOOR(400000 * 1000 / 10000) = 40000`.
+  - FLOOR exercised with a non-round remainder: bp 1234 on a charged
+    line of 99999 paisa. `99999 * 1234 = 123398766`;
+    `123398766 / 10000 = 12339.8766` → `FLOOR = 12339`. Suggested amount
+    must be exactly `12339`, not `12340` (confirms truncation, not
+    rounding).
   - Charge with `commissionMode = none` → zero claim rows for that line.
   - Suggested recipient: job has technicians A (assigned first, then
     removed before delivery) and B (assigned after A, still active at
     delivery) → suggested recipient is **B** (earliest-assigned
     technician still active at delivery), not `job.assignedTo` (which
     still points at A, per P14-1's "set once" rule) and not A.
+  - Suggested recipient is **`NULL`** when no technician is active on
+    the job at delivery time (e.g. the sole assigned technician was
+    removed and never replaced) — the claim is still created (money
+    isn't lost), just with no suggestion; the owner must pick a
+    recipient manually at approval.
   - Approve a claim as 30000 + 20000 to two technicians both present in
     the job's assignment history (one active, one previously removed) →
     exactly two `party_ledger` commission rows (`amount = -30000`,
     `amount = -20000`, `entryType = 'commission'`, `entryDate` =
-    decision date), sum 50000, one `commission_decision` row, two
-    `commission_decision_recipient` rows. A second approval attempt on
-    the same claim is rejected by a core "already decided" check (clear
-    error) with the `UNIQUE(claim_id)` constraint as the backstop — test
-    asserts both the error and that no new rows were written.
-  - Reject with an empty reason is rejected at the Zod boundary; nothing
-    written.
+    decision date), sum 50000, one `commission_decision` row
+    (`attemptNo = 1`), two `commission_decision_recipient` rows.
+  - Approval validation (all rejected before any write): the same
+    technician listed twice among recipients; any recipient
+    `amountPaisa <= 0`; a reject reason that is whitespace-only (e.g.
+    `"   "`) — trimmed length must be `> 0`, so whitespace counts as
+    empty, not as a value.
   - A recipient not in the job's assignment history is rejected by core
     before any write; nothing written.
+  - **GAP-1 correction path** (OD-16-3a):
+    - Approve a claim for 50000 to technician X, then reverse that
+      decision with a reason → one `commission_decision_reversal` row;
+      one reversing `party_ledger` row (`amount = +50000`,
+      `entryType = 'commission'`, same `sourceType`/`sourceId` as the
+      original) → net `party_ledger` sum for that decision's source is
+      `0`. The claim is pending again.
+    - Re-approve the same (now-pending) claim for 50000 to a
+      **different** technician Y → new `commission_decision` row,
+      `attemptNo = 2`; Y is paid `-50000`; X's net across both decisions
+      is `0` (the original `-50000` plus the `+50000` reversal).
+    - Reversing the same decision a second time is rejected by core
+      (a decision already has a reversal), with
+      `UNIQUE(commission_decision_reversal.decision_id)` as the DB
+      backstop — test asserts both the rejection and that no second
+      reversal row exists.
+    - Reversing a **rejected** decision (not an approved one) writes
+      only the reversal row, zero `party_ledger` rows, and the claim
+      becomes pending again — verified by a named test distinct from
+      the approved-decision reversal test above.
+    - Two decisions attempted concurrently on the same claim (both
+      believing it's pending) collide on
+      `UNIQUE(claim_id, attempt_no)` — one succeeds, one fails with a
+      clear DB-constraint error, never two live decisions on one claim.
+  - **Month attribution** (OD-16-4): a job delivered 2026-09-30 whose
+    claim is approved 2026-10-02 is counted in the **October** wage
+    report (the approval month), not September — the delivery month
+    contributes nothing to that technician's commission total, even
+    though the claim itself was created in September.
   - **Rewritten test**: a claim-insert failure (e.g. a constraint
     violation) rolls back the **entire delivery** — no `sale`, no
     `sale_line`, no stock movement, no claim survive — since claim
@@ -318,11 +410,16 @@ commissionAmountPaisa: 50000}` via the new create channel, then reading
   leaves the pending list, confirm the wage report for that
   technician/month increases by the approved amount, confirm the
   report's pending-commission header total decreases by the claim's
-  suggested amount (not per-technician).
+  suggested amount (not per-technician). Reverse a decided claim from
+  the UI (reason required) and confirm it reappears in the pending list.
 - **P16-3c**: `job:unassignTechnician` with no reason → Zod rejection.
   Called (directly, bypassing the UI) on a job at status `ready`,
   `delivered`, or `cancelled` → core-service rejection, named test for
-  each of the three statuses.
+  each of the three statuses. **Positive case**: called on a job at
+  status `in_progress` with a non-empty reason → succeeds,
+  `unassign_reason` is stored on the `job_technician` row exactly as
+  given — one named test alongside the three rejection cases, not just
+  rejection coverage.
 - **P16-4**: owner manually confirms Shop Identity persists across
   restart and prints on an invoice. Not agent-verifiable — checklist
   only:
@@ -343,8 +440,10 @@ Baseline: 649/649 (commit f9cc7b8).
 (pre-computed)'` → becomes a claim-approval test asserting the same
    ledger row shape, sourced from a decision instead of a direct write.
 2. `'recordCommission with commissionPaisa = 0 throws, inserts nothing'`
-   → becomes `'approving with amountPaisa = 0 is rejected, inserts
-nothing'` (amount > 0 is now a core check per C-2).
+   → becomes `'approving with amountPaisa <= 0 is rejected, inserts
+nothing'` (amount > 0 is now a core check per C-2), joined by sibling
+   tests for a duplicate technician among recipients and a
+   whitespace-only reject reason (OD-16-3a additional criteria).
 3. `'PARTS-unit lines do not contribute to commission — only the REPAIR
 labour line counts'` → unchanged in spirit; asserts no claim is ever
    created for a `line_kind = 'part'` line.
@@ -363,16 +462,27 @@ function (fixed/bp × the milli-quantity and override cases above).
 
 **Net new tests this phase** (estimate, finalized per task as built):
 
-- P16-1: ~6 (create/edit/toggle/uniqueness/list-excludes-inactive ×
-  repository + 1 UI test)
-- P16-2: ~6 (create/toggle/case-insensitive-uniqueness/bootstrap ×
-  repository + 1 UI test)
-- P16-3a: ~12 (5 rewritten above, ~7 net new: pure-function unit tests,
-  multi-recipient approval, double-decision rejection, bad-recipient
-  rejection, empty-reason rejection, rollback-on-failure)
-- P16-3b: ~4 (approvals list, approve flow, wage-report pending total,
-  wage-report per-technician approval-date attribution)
-- P16-3c: ~4 (missing-reason rejection, one test per locked status ×3)
+- P16-1: ~10 (create/edit/toggle/uniqueness/list-excludes-inactive ×
+  repository, commission-mode derivation validation — none/fixed/bp/
+  both-set-rejected, duplicate-name-case-insensitive rejection,
+  edit-price-after-delivery-leaves-past-invoice-unchanged, + 1 UI test)
+- P16-2: ~7 (create/toggle/case-insensitive-uniqueness-including-deleted/
+  bootstrap-exact-count-18/bootstrap-idempotent-rerun × repository,
+  1 named CSV-import-still-matches-deactivated-brand test, + 1 UI test)
+- P16-3a: ~23 (5 rewritten above; net new: pure-function unit tests for
+  fixed/bp/quantity-milli-2000/FLOOR-1234-on-99999, `commissionMode =
+none` → zero claims, NULL-suggested-recipient, multi-recipient
+  approval, duplicate-recipient rejection, amount<=0 rejection,
+  whitespace-reason rejection, bad-recipient-not-in-history rejection,
+  month-attribution (Sept delivery / Oct approval), rollback-on-failure;
+  GAP-1 (OD-16-3a): reverse-approved-decision-nets-zero, reapprove-as-
+  attempt-2-to-different-technician, double-reversal-rejected,
+  reverse-a-rejected-decision-no-ledger-rows, concurrent-attempt
+  collision-on-unique-constraint)
+- P16-3b: ~5 (approvals list, approve flow, wage-report pending total,
+  wage-report per-technician approval-date attribution, reverse-from-UI)
+- P16-3c: ~5 (missing-reason rejection, one test per locked status ×3,
+  one positive case — `in_progress` + reason succeeds)
 - P16-4: 0 (manual checklist only)
 
 Each task's commit states the exact before/after count from its own

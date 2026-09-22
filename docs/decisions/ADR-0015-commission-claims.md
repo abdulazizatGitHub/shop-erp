@@ -28,11 +28,32 @@ The owner reviews pending claims (Commission Approvals) and either:
   one transaction; or
 - **Rejects**, with a required non-empty reason.
 
-Both are immutable. A claim can be decided exactly once — enforced by
-`UNIQUE(commission_decision.claim_id)`, with a core-layer "already
-decided" check as the first line of defence and the constraint as the
-backstop, not the only guard. Corrections are reversing `party_ledger`
-rows, per ADR-0004 — never edits to a decision.
+Both are immutable — a decision, once made, is never edited or deleted.
+A claim has at most one _active_ decision at a time, tracked by
+`commission_decision.attempt_no` and enforced by
+`UNIQUE(claim_id, attempt_no)`, with a core-layer "already decided"
+check (does this claim have a decision with no reversal?) as the first
+line of defence and the constraint as the backstop for concurrent
+attempts, not the only guard.
+
+**Decisions are correctable (added 2026-09-22, GAP-1).** The first
+version of this ADR made `UNIQUE(claim_id)` the whole story — one claim,
+one decision, forever. That is wrong in practice: an owner reviewing a
+stack of claims will occasionally approve the wrong one, approve the
+wrong amount, or reject one that should have been approved, and an
+uncorrectable mistake in money owed to a named technician is worse than
+the automatic model this ADR replaces. A decision can be **reversed**
+with a required reason, writing an immutable `commission_decision_reversal`
+row (`UNIQUE(decision_id)` — a decision can be reversed at most once).
+Reversing an approved decision writes one reversing `party_ledger` row
+per original recipient (`amount` sign flipped, same `source_type`/
+`source_id` as the original — the standard reversal-discovery pattern,
+ADR-0004/`DATABASE_RULES.md` §3); reversing a rejected decision writes
+no ledger rows at all. A claim whose latest decision has been reversed
+is pending again and can receive a new decision at `attempt_no + 1` —
+correction is "decide again," never "edit the old decision." Corrections
+remain reversing rows throughout, per ADR-0004 — nothing is ever edited
+or deleted, on the claim side or the ledger side.
 
 ## Why Phase 7's model was retired
 
