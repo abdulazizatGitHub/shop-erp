@@ -1,7 +1,7 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** PLANNED (docs approved 2026-09-22; implementation not started)
-**Started:** —
+**Status:** IN PROGRESS (P16-1 done, 665/665 tests; P16-2 next)
+**Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
 
@@ -275,14 +275,14 @@ resolves to the same `brand.id` and imports successfully; no second
 
 ## 3. Tasks
 
-| ID     | Task                                                | Depends on                             | Status      | Commit |
-| ------ | --------------------------------------------------- | -------------------------------------- | ----------- | ------ |
-| P16-1  | Service charge management                           | —                                      | NOT STARTED | —      |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1 (shares Job Settings page shell) | NOT STARTED | —      |
-| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                                  | NOT STARTED | —      |
-| P16-3b | Commission Approvals tab + wage report change       | P16-3a                                 | NOT STARTED | —      |
-| P16-3c | Technician removal guard                            | —                                      | NOT STARTED | —      |
-| P16-4  | Shop identity verify (owner smoke test)             | —                                      | NOT STARTED | —      |
+| ID     | Task                                                | Depends on                             | Status      | Commit  |
+| ------ | --------------------------------------------------- | -------------------------------------- | ----------- | ------- |
+| P16-1  | Service charge management                           | —                                      | DONE        | 55f0438 |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1 (shares Job Settings page shell) | NOT STARTED | —       |
+| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                                  | NOT STARTED | —       |
+| P16-3b | Commission Approvals tab + wage report change       | P16-3a                                 | NOT STARTED | —       |
+| P16-3c | Technician removal guard                            | —                                      | NOT STARTED | —       |
+| P16-4  | Shop identity verify (owner smoke test)             | —                                      | NOT STARTED | —       |
 
 Order: P16-1 → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One task at a
 time; verified and reviewed before the next begins.
