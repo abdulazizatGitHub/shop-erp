@@ -53,6 +53,7 @@ export async function getJobQuery(
       'job.cancellationReason',
       'job.diagnosis',
       'job.updatedAt',
+      'job.notes',
       'sale.docNo as invoiceDocNo',
       'jobClient.name as jobClientName',
       'jobClient.phone as jobClientPhone',

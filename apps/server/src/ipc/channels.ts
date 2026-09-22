@@ -95,6 +95,7 @@ export const channels = {
     listStatusHistory: 'job:listStatusHistory',
     cancelJob: 'job:cancelJob',
     updateDiagnosis: 'job:updateDiagnosis',
+    updateDetails: 'job:updateDetails',
   },
   jobClient: {
     search: 'jobClient:search',

@@ -100,6 +100,7 @@ export {
   CancellationReason,
   CancelJobInput,
   UpdateJobDiagnosisInput,
+  UpdateJobDetailsInput,
   TechnicianCustodyInput,
 } from './job/job.js';
 

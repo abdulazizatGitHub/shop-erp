@@ -102,6 +102,8 @@ export const JobDto = z.object({
   diagnosedFault: z.string().nullable(),
   /** P14-8 — fallback timestamp for the synthesised diagnosis History event. */
   updatedAt: z.string(),
+  /** I4 — job.notes, read-only until now (write-only since creation/cancel-append). */
+  notes: z.string().nullable(),
 });
 export type JobDto = z.infer<typeof JobDto>;
 
@@ -130,6 +132,27 @@ export const UpdateJobDiagnosisInput = z.object({
   promisedDate: z.string().nullable().optional(),
 });
 export type UpdateJobDiagnosisInput = z.infer<typeof UpdateJobDiagnosisInput>;
+
+/**
+ * I4 — partial resolution of BUG-17: a narrow job:update covering only
+ * fields that need no stock/ledger write (READ-2's confirmed set), same
+ * undefined-means-skip pattern as UpdateJobDiagnosisInput above. No
+ * status field, no money field, no saleId, no cancellation — those stay
+ * on their own dedicated endpoints. Guarded server-side against
+ * delivered/cancelled jobs (job-details.repository.ts).
+ */
+export const UpdateJobDetailsInput = z.object({
+  jobId: z.string().uuid(),
+  jobClientId: z.string().uuid().nullable().optional(),
+  applianceType: z.string().trim().min(1).nullable().optional(),
+  applianceBrand: z.string().trim().min(1).nullable().optional(),
+  applianceModel: z.string().trim().min(1).nullable().optional(),
+  applianceSerial: z.string().trim().min(1).nullable().optional(),
+  reportedFault: z.string().trim().min(1).nullable().optional(),
+  promisedDate: z.string().min(1).nullable().optional(),
+  notes: z.string().trim().min(1).nullable().optional(),
+});
+export type UpdateJobDetailsInput = z.infer<typeof UpdateJobDetailsInput>;
 
 /** OD-2 — fixed list, not free text. Stored in job.cancellation_reason (migration 0015). */
 export const CancellationReason = z.enum([

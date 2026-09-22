@@ -8,6 +8,7 @@ import { CancelJobModal } from './CancelJobModal.js';
 import { CANCELLATION_REASON_LABELS } from './cancellation-reason-labels.js';
 import { DiagnosedFaultSection } from './DiagnosedFaultSection.js';
 import { JobActivitySection } from './JobActivitySection.js';
+import { JobApplianceEditSection } from './JobApplianceEditSection.js';
 import { JobDeliveryModal } from './JobDeliveryModal.js';
 import { JobDetailHeader } from './JobDetailHeader.js';
 import { partIssuedTransitionTarget } from './job-status-machine.js';
@@ -195,6 +196,12 @@ export function JobDetailPage({
            * text block sitting directly on the grey page background. */}
           <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
             <DiagnosedFaultSection job={job} onJobChanged={setJob} />
+          </div>
+
+          {/* I4/BUG-17 (partial) — same card-with-shadow treatment as
+           * every other section on this page. */}
+          <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
+            <JobApplianceEditSection job={job} onJobChanged={setJob} />
           </div>
 
           {/* V5 — same card-with-shadow treatment as the Customers list/

@@ -42,6 +42,7 @@ export const JOB_RECORD_COLUMNS = [
   'cancellationReason',
   'diagnosis',
   'updatedAt',
+  'notes',
 ] as const;
 
 export type JobRow = Pick<JobTable, (typeof JOB_RECORD_COLUMNS)[number]>;
@@ -82,6 +83,7 @@ export function toJobRecord(
     cancellationReason: row.cancellationReason,
     diagnosedFault: row.diagnosis,
     updatedAt: row.updatedAt,
+    notes: row.notes,
   };
 }
 

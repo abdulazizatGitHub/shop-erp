@@ -45,13 +45,19 @@ export function JobsTableRow({
       <TableCell>{job.docNo}</TableCell>
       <TableCell>
         <span className="inline-flex items-center gap-1">
-          {stale && (
-            <Clock
-              size={14}
-              className="text-warning"
-              aria-label="Stale — no promised date, over 14 days since intake"
-            />
-          )}
+          {/* I1 — fixed-width icon slot, always rendered (empty when not
+           * stale), so job.receivedDate always starts at the same x
+           * offset instead of the column reflowing when the icon is
+           * conditionally absent. */}
+          <span className="inline-block w-4">
+            {stale && (
+              <Clock
+                size={14}
+                className="text-warning"
+                aria-label="Stale — no promised date, over 14 days since intake"
+              />
+            )}
+          </span>
           {job.receivedDate}
         </span>
       </TableCell>

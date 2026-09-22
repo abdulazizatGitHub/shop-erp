@@ -41,6 +41,130 @@
 
 ---
 
+## [2026-09-22] Session 75 — I1–I4: date-column fix, no-delete ADR, Q-VOID, job:updateDetails (BUG-17 partial)
+
+**Goal:** Fix a layout bug in the jobs list DATE column, record two
+design decisions around job deletion/voiding, and partially resolve
+BUG-17 with a narrow, guarded `job:updateDetails` IPC covering the job
+fields that are safe to edit post-intake (no stock/ledger write).
+
+**Done, one task at a time, `npm run build --workspace=@shop/client`
+after each renderer task:**
+
+- **I1** — `JobsTableRow.tsx`'s DATE cell: the stale amber clock was a
+  conditionally-rendered sibling inside an `inline-flex ... gap-1` row,
+  so the date text shifted left whenever the icon was absent (the same
+  latent issue exists in the PROMISED DATE/overdue-dot cell — flagged,
+  not fixed, out of I1's scope). Fixed with a fixed-width (`w-4`) icon
+  slot that always renders, empty or not, so `job.receivedDate` always
+  starts at the same x offset.
+- **I2** — Logged **ADR-0014** in `PROJECT.md` §6: hard delete of job
+  records will not be built; Cancel (with reason) is the correct
+  pre-delivery closure action, preserving the audit trail. Docs-only, no
+  build required.
+- **I3** — Logged **Q-VOID** in `PROJECT.md` §5: a future Void status
+  (excluded from reports) is deferred unless the owner finds
+  cancelled-in-error jobs actually polluting reports; Cancel is
+  sufficient for now.
+- **I4 (BUG-17 partial)** — Read first, per instruction: confirmed the
+  P14-4 baseline of 3 `UPDATE job` sites (delivery/cancel/technician) is
+  now **4** — `job-diagnosis.repository.ts`'s `updateJobDiagnosisAndDate`
+  (P14-6) was built after that baseline and was missing from the
+  original count. Confirmed via `JobDto`/`JobRecord` that all 7
+  requested editable fields need no stock/ledger write — **except
+  `notes`, which turned out not to be exposed on either type at all**
+  (write-only since creation/cancel-append); widened both (the same kind
+  of read-only widening as P15-5's `job_status_history.note`) so the new
+  Notes editor has something to read back. New backend:
+  `job-details.repository.port.ts`/`.service.ts` (core),
+  `job-details.repository.ts` (db, `KyselyJobDetailsRepository`,
+  undefined-means-skip pattern mirrored exactly from
+  `job-diagnosis.repository.ts`, guarded — throws "Cannot edit a
+  delivered or cancelled job." and writes nothing if the job's current
+  _derived_ status is terminal), `job-details.handler.ts` +
+  `job:updateDetails` channel, full preload/electron-api.d.ts wiring.
+  5 repository tests (exceeds the 3 minimum): reportedFault update,
+  delivered-job guard (throws, writes nothing), cancelled-job guard,
+  two-fields-at-once with every other column verified unchanged, and
+  omitted-vs-explicit-null distinction. Renderer: read
+  `DiagnosedFaultSection.tsx`'s actual save/dirty pattern before
+  building — it is an always-editable-when-open textarea with a Save
+  button gated on dirty, **not** a click-to-reveal toggle with an
+  explicit Cancel button as the task's own prose described; replicated
+  the real pattern (not the prose) per the explicit "do not invent a new
+  pattern" instruction, adding only a minimal Cancel link as a
+  reasonable low-risk extension. Reported fault (now editable, alongside
+  the existing Diagnosed fault field in the same component), Appliance
+  type + Brand (new `JobApplianceEditSection.tsx`, reusing
+  `JobApplianceFields.tsx`'s dropdowns — exported its `BRAND_OPTIONS`
+  rather than duplicating the list), and Notes (new `JobNotesSection.tsx`)
+  are now inline-editable for non-delivered/non-cancelled jobs. An
+  unlinked job can link an _existing_ client via `JobClientPicker`
+  embedded inline in `JobClientSection.tsx` — creating a brand-new
+  client through this flow, and changing an already-linked client, are
+  both explicitly out of scope, logged in `PROJECT.md`'s BUG-17 update.
+  Promised date deliberately left untouched — still served by the
+  existing `job:updateDiagnosis` path, not duplicated.
+
+**Verified:**
+
+- `npm run build --workspace=@shop/client`: exit 0 after I1 and after
+  I4's renderer half.
+- `npm run typecheck`/`npm run lint`: clean at every checkpoint.
+- Backend: isolated `job-details.repository.test.ts` run — 5/5 pass —
+  before folding into the full suite.
+- `npm run verify`: 644 (H1–H3 baseline) → 649 (I4 backend, +5 tests) →
+  **649/649, exit 0 final** (I1–I3 needed no new tests; I4's renderer
+  half added no new renderer tests, relying on the existing
+  `DiagnosedFaultSection`/`JobCreateForm` coverage plus the fresh
+  `npm run build` checks — count still strictly greater than the 644
+  floor).
+- Line counts, every touched/new file, all ≤300:
+  `job-details.repository.port.ts` 31, `job-details.service.ts` 10,
+  `job-details.repository.ts` 130, `job-details.repository.test.ts` 150,
+  `job-details.handler.ts` 34, `DiagnosedFaultSection.tsx` 168,
+  `JobApplianceEditSection.tsx` 125, `JobApplianceFields.tsx` 97,
+  `JobNotesSection.tsx` 89, `JobClientSection.tsx` 174,
+  `JobPropertyPanel.tsx` 88, `JobDetailPage.tsx` 285,
+  `JobsTableRow.tsx` 109. **`job.repository.ts` confirmed untouched
+  throughout I1–I4 — still exactly 299 lines**, per the standing
+  instruction not to add to it without extracting first.
+- `git status --short` at every checkpoint: only the expected files.
+
+**Not done / deferred:** `job.returnPart` and `job.addAccessory`
+(BUG-17's other two stubs) remain entirely unbuilt — separate scope from
+this narrow details-edit. Credit notes / any post-delivery correction
+path remain unplanned. Creating a new job_client via the inline
+"Link client" flow, and re-linking an already-linked client, both logged
+as future items rather than built.
+
+**Bugs found:** one real gap found and fixed in-session (not deferred,
+since the feature being built needed it): `JobDto`/`JobRecord` never
+exposed `job.notes` for reading at all. BUG-17 marked PARTIALLY RESOLVED
+in `PROJECT.md`.
+
+**Decisions taken:** ADR-0014 (no hard delete, Cancel is correct) and
+Q-VOID (Void status deferred) — both owner-specified this session, not
+inferred.
+
+**Blocked on:** nothing.
+
+**Next session should:** scope Phase 16 (`docs/PHASES.md` still has no
+Phase 16 section). `job.repository.ts` remains at 299/300 lines —
+extract before adding to it.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated (ADR-0014, Q-VOID, BUG-17 partial resolution)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (notes gap, fixed in-session)
+- [x] Test suite passing (649/649)
+
+---
+
 ## [2026-09-22] Session 74 — H1–H3: jobs list Actions icon, wider New Job modal, labour rate display
 
 **Goal:** Three small, renderer-only targeted fixes ahead of Phase 16

@@ -33,6 +33,7 @@ const BASE_JOB: JobDto = {
   cancellationReason: null,
   diagnosedFault: 'Compressor relay burnt out',
   updatedAt: '2026-09-03T09:00:00.000Z',
+  notes: null,
 };
 
 describe('buildHistoryEvents', () => {

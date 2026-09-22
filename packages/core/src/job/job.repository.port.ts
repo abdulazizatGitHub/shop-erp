@@ -57,6 +57,8 @@ export interface JobRecord {
   /** P14-8 — fallback timestamp for the synthesised diagnosis event when
    * no 'diagnosed' job_status_history row exists (edge case). */
   readonly updatedAt: string;
+  /** I4 — job.notes, read-only until now (write-only since creation/cancel-append). */
+  readonly notes: string | null;
 }
 
 /** P14-8 — one job_status_history row, read-only. */

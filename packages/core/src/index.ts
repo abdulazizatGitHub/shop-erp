@@ -228,6 +228,12 @@ export type {
 export { updateJobDiagnosis } from './job/job-diagnosis.service.js';
 
 export type {
+  UpdateJobDetailsInput,
+  JobDetailsRepositoryPort,
+} from './job/job-details.repository.port.js';
+export { updateJobDetails } from './job/job-details.service.js';
+
+export type {
   NewJobClientInput,
   JobClientRecord,
   JobClientSearchQuery,

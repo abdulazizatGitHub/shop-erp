@@ -1,6 +1,7 @@
 import type { JobDto } from '@shop/contracts';
 import { MoneyDisplay } from '@shop/ui';
 import { JobClientSection } from './JobClientSection.js';
+import { JobNotesSection } from './JobNotesSection.js';
 import { PromisedDateField } from './PromisedDateField.js';
 import { TechnicianAssignmentPanel } from './TechnicianAssignmentPanel.js';
 
@@ -44,7 +45,7 @@ export function JobPropertyPanel({
     // border kept as-is (additive change, not a full re-style).
     <div className="w-72 flex-shrink-0 rounded-xl border border-gray-200 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
       <section className={SECTION_CLASSES}>
-        <JobClientSection jobClientId={job.jobClientId} jobClientName={job.jobClientName} />
+        <JobClientSection job={job} onJobChanged={onJobChanged} />
       </section>
 
       <section className={SECTION_CLASSES}>
@@ -77,6 +78,10 @@ export function JobPropertyPanel({
       <section className={SECTION_CLASSES}>
         <p className={LABEL_CLASSES}>Job Type</p>
         <p className={VALUE_CLASSES}>{JOB_TYPE_LABELS[job.jobType] ?? job.jobType}</p>
+      </section>
+
+      <section className={SECTION_CLASSES}>
+        <JobNotesSection job={job} onJobChanged={onJobChanged} />
       </section>
     </div>
   );

@@ -54,6 +54,7 @@ import type {
   UnassignTechnicianInput,
   CancelJobInput,
   UpdateJobDiagnosisInput,
+  UpdateJobDetailsInput,
   TechnicianCustodyInput,
   PaymentDto,
   PaymentReceiptDataDto,
@@ -517,6 +518,7 @@ export interface ElectronApi {
     readonly listStatusHistory: (id: string) => Promise<readonly JobStatusHistoryDto[]>;
     readonly cancelJob: (input: CancelJobInput) => Promise<JobDto>;
     readonly updateDiagnosis: (input: UpdateJobDiagnosisInput) => Promise<JobDto>;
+    readonly updateDetails: (input: UpdateJobDetailsInput) => Promise<JobDto>;
   };
   readonly jobClient: {
     readonly search: (input: SearchJobClientsInput) => Promise<readonly JobClientDto[]>;

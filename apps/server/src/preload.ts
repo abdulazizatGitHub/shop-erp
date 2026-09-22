@@ -53,6 +53,7 @@ import type {
   UnassignTechnicianInput,
   CancelJobInput,
   UpdateJobDiagnosisInput,
+  UpdateJobDetailsInput,
   TechnicianCustodyInput,
   PartyAnyDto,
   PartySearchAnyInput,
@@ -415,6 +416,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.job.cancelJob, input) as Promise<JobDto>,
     updateDiagnosis: (input: UpdateJobDiagnosisInput): Promise<JobDto> =>
       ipcRenderer.invoke(channels.job.updateDiagnosis, input) as Promise<JobDto>,
+    updateDetails: (input: UpdateJobDetailsInput): Promise<JobDto> =>
+      ipcRenderer.invoke(channels.job.updateDetails, input) as Promise<JobDto>,
   },
   jobClient: {
     search: (input: SearchJobClientsInput): Promise<readonly JobClientDto[]> =>

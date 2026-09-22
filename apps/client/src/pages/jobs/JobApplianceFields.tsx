@@ -10,7 +10,7 @@ const APPLIANCE_TYPES = ['AC', 'Fridge', 'Oven', 'Other'] as const;
  * job:listBrands read against an empty table. "Other" always reveals a
  * free-text input so no real brand is ever blocked.
  */
-const BRAND_OPTIONS = [
+export const BRAND_OPTIONS = [
   'Dawlance',
   'Gree',
   'Haier',

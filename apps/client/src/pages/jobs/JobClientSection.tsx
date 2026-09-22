@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import type { JobClientDto } from '@shop/contracts';
+import type { JobClientDto, JobDto } from '@shop/contracts';
 import { ipc } from '../../lib/ipc.js';
+import { JobClientPicker } from './JobClientPicker.js';
 
 const LABEL_CLASSES = 'mb-1 text-xs font-medium uppercase tracking-wider text-gray-400';
 const VALUE_CLASSES = 'text-sm font-medium text-gray-900';
 
 export interface JobClientSectionProps {
-  readonly jobClientId: string | null;
-  readonly jobClientName: string | null;
+  readonly job: JobDto;
+  readonly onJobChanged: (updated: JobDto) => void;
 }
 
 /**
@@ -21,14 +22,25 @@ export interface JobClientSectionProps {
  * Fetches the full job_client record lazily, on click, not on job-card
  * load (jobClientId/jobClientName alone are enough for the collapsed
  * row, already denormalized onto JobDto by P15-3).
+ *
+ * I4/BUG-17 (partial) — when no client is linked yet, an editable job
+ * can link an EXISTING client via JobClientPicker (same intake
+ * component, reused inline — not the full JobCreateForm). Creating a
+ * brand-new client through this inline flow, and changing an
+ * already-linked client, are both explicitly out of scope (logged as a
+ * future item) — the picker's own "Create new client" row is a no-op
+ * here, same as it always was before an explicit selection.
  */
-export function JobClientSection({
-  jobClientId,
-  jobClientName,
-}: JobClientSectionProps): React.JSX.Element {
+export function JobClientSection({ job, onJobChanged }: JobClientSectionProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<JobClientDto | null>(null);
   const [loading, setLoading] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkName, setLinkName] = useState('');
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const isEditable = job.status !== 'delivered' && job.status !== 'cancelled';
 
   function handleToggle(): void {
     if (expanded) {
@@ -36,10 +48,10 @@ export function JobClientSection({
       return;
     }
     setExpanded(true);
-    if (detail || !jobClientId) return;
+    if (detail || !job.jobClientId) return;
     setLoading(true);
     ipc.jobClient
-      .getById(jobClientId)
+      .getById(job.jobClientId)
       .then(setDetail)
       .catch(() => {
         // Row just won't show further detail; the name itself already rendered.
@@ -49,11 +61,68 @@ export function JobClientSection({
       });
   }
 
-  if (!jobClientId) {
+  async function handleLink(client: JobClientDto): Promise<void> {
+    setSaving(true);
+    setLinkError(null);
+    try {
+      const updated = await ipc.job.updateDetails({ jobId: job.id, jobClientId: client.id });
+      onJobChanged(updated);
+      setLinking(false);
+      setLinkName('');
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : 'Failed to link client');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!job.jobClientId) {
     return (
       <>
         <p className={LABEL_CLASSES}>Client</p>
-        <p className="text-sm text-gray-400">No client recorded.</p>
+        {linking ? (
+          <div className="flex flex-col gap-2">
+            <JobClientPicker
+              name={linkName}
+              onNameChange={setLinkName}
+              selected={null}
+              onSelect={(client) => {
+                void handleLink(client);
+              }}
+              onClearSelection={() => {
+                setLinkName('');
+              }}
+            />
+            {saving && <p className="text-xs text-gray-400">Linking…</p>}
+            {linkError && <p className="text-xs text-red-600">{linkError}</p>}
+            <button
+              type="button"
+              className="text-xs text-gray-400 underline hover:text-gray-600"
+              onClick={() => {
+                setLinking(false);
+                setLinkName('');
+                setLinkError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="mb-1 text-sm text-gray-400">No client recorded.</p>
+            {isEditable && (
+              <button
+                type="button"
+                className="text-xs text-blue-600 underline hover:text-blue-800"
+                onClick={() => {
+                  setLinking(true);
+                }}
+              >
+                Link client
+              </button>
+            )}
+          </>
+        )}
       </>
     );
   }
@@ -66,7 +135,7 @@ export function JobClientSection({
         onClick={handleToggle}
         className={`${VALUE_CLASSES} text-left underline decoration-dotted hover:text-blue-700`}
       >
-        {jobClientName ?? '…'}
+        {job.jobClientName ?? '…'}
       </button>
 
       {expanded && (

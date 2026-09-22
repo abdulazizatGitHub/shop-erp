@@ -54,6 +54,7 @@ class FakeJobRepository implements JobRepositoryPort {
     cancellationReason: null,
     diagnosedFault: null,
     updatedAt: '2026-09-05T00:00:00.000Z',
+    notes: null,
   };
 
   getJob(): Promise<JobRecord | null> {

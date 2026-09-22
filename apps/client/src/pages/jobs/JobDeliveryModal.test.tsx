@@ -55,6 +55,7 @@ const JOB: JobDto = {
   cancellationReason: null,
   diagnosedFault: null,
   updatedAt: '2026-09-20T00:00:00.000Z',
+  notes: null,
 };
 
 function addCharge(name: string): void {
