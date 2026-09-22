@@ -41,6 +41,12 @@
 
 ---
 
+## [2026-09-22] Session 76 — Settings backlog audit + Phase 16 draft
+
+Settings backlog documented in PROJECT.md per owner discussion. No code written.
+
+---
+
 ## [2026-09-22] Session 75 — I1–I4: date-column fix, no-delete ADR, Q-VOID, job:updateDetails (BUG-17 partial)
 
 **Goal:** Fix a layout bug in the jobs list DATE column, record two

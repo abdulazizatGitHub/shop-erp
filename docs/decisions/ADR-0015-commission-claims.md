@@ -125,11 +125,21 @@ opposite, `'a claim insert failure rolls back the entire delivery'`
   `computeLineTotalPaisa` already is (a `packages/core` pure function
   imported by `packages/db`, never a service invoked from a
   repository — layering unchanged).
-- The wage report (`wage-report.repository.ts`) needed no query
-  restructuring: its existing `party_ledger.entry_date`-scoped
-  correlated subquery already attributes commission to the month it was
-  _recorded_, and recording now happens at approval time — the query's
-  existing meaning becomes exactly "approval-date commission" for free.
+- The wage report (`wage-report.repository.ts`) needed no change to
+  its `party_ledger.entry_date`-scoped correlated subquery's _filter_ —
+  it already attributes commission to the month it was recorded, and
+  recording now happens at approval time, so the query's existing
+  meaning becomes exactly "approval-date commission" for free.
+  **A structural change IS required, though (found 2026-09-22,
+  FIX-1):** the query's `commissionPaisa` column and the commission
+  term inside `netPaisa` both wrap the subquery in `ABS(...)`, which
+  was safe under Phase 7 (every commission row was negative, no
+  exceptions existed) but is wrong once reversals exist — a month
+  containing only a reversal (`amount = +X`, a positive row) would
+  display as `+X` commission _earned_ instead of `-X` commission
+  _clawed back_. Fixed by dropping `ABS` and negating instead:
+  `-COALESCE(SUM(pl.amount), 0)`. See `PHASE_16.md` P16-3b for the
+  hand-calculated cases.
 - Reads are aggregations, per ADR-0004: a rejected claim is not deleted,
   an approved claim's decision is not edited, and "how much has this
   technician earned" is always `SUM(party_ledger.amount) WHERE

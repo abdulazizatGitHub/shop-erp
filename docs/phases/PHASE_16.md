@@ -63,7 +63,15 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
     rewritten Phase 7 tests, ADR-0015.
   - **P16-3b** — Commission Approvals tab (Job Settings page, including
     the "Reverse" action), wage report change (approval-date
-    attribution, pending-total in the report header).
+    attribution, pending-total in the report header). **A structural
+    change to `wage-report.repository.ts` is required here, not just a
+    filter check (FIX-1, found 2026-09-22):** the `commissionPaisa`
+    column and `netPaisa`'s commission term both wrap the correlated
+    subquery in `ABS(...)`, correct under Phase 7 (every commission
+    row was negative) but wrong once reversals exist — a
+    reversal-only month would show as commission _earned_ instead of
+    _clawed back_. Both must change from `COALESCE(ABS((...)), 0)` to
+    `-COALESCE((...), 0)` (drop `ABS`, negate instead).
   - **P16-3c** — technician removal guard: `unassign_reason`, new core
     `unassignTechnician` function enforcing a required reason and a
     status lock, replacing the handler's direct repository call.
@@ -131,10 +139,13 @@ claims will approve one wrong occasionally. Replaced with:
   trimmed, enforced in core — `reversed_at`, `created_at`).
 - **Reversing an approved decision**: one transaction writes the
   reversal row plus one reversing `party_ledger` row per original
-  recipient row (`amount = +original`, opposite sign, same
-  `source_type`/`source_id` convention as the original — the standard
-  reversal-discovery pattern, `DATABASE_RULES.md` §3). **Reversing a
-  rejected decision**: reversal row only, no ledger rows.
+  recipient row (`amount = +original`, opposite sign,
+  `entry_date` = the reversal date — not the original decision's date,
+  same reasoning as OD-16-4: the ledger dates every row by when that
+  financial event actually happened — same `source_type`/`source_id`
+  convention as the original — the standard reversal-discovery pattern,
+  `DATABASE_RULES.md` §3). **Reversing a rejected decision**: reversal
+  row only, no ledger rows.
 - Core allows a new decision on a claim only if the claim has no
   decision yet, or its latest decision has a reversal row.
   `attempt_no` = count of existing decisions for that claim + 1.
@@ -389,10 +400,22 @@ commissionAmountPaisa: 50000}` via the new create channel, then
       only the reversal row, zero `party_ledger` rows, and the claim
       becomes pending again — verified by a named test distinct from
       the approved-decision reversal test above.
-    - Two decisions attempted concurrently on the same claim (both
-      believing it's pending) collide on
-      `UNIQUE(claim_id, attempt_no)` — one succeeds, one fails with a
-      clear DB-constraint error, never two live decisions on one claim.
+    - **Multi-recipient reversal** (FIX-2, added 2026-09-22): reverse
+      the 30000 + 20000 two-recipient approval from the earlier
+      criterion → exactly two reversing `party_ledger` rows
+      (`amount = +30000`, `amount = +20000`), each technician's net for
+      that decision's source is `0`, claim pending again.
+    - **Repository-level constraint test** (FIX-3, reworded 2026-09-22
+      — `better-sqlite3` is synchronous and single-writer inside one
+      process, so genuine concurrent writes cannot occur here; this is
+      a direct constraint test, not a concurrency simulation): inserting
+      two `commission_decision` rows with the same
+      `(claim_id, attempt_no)` fails on the second insert with a
+      `UNIQUE` constraint violation — asserted directly against the
+      repository, not through the core "already decided" check (which
+      should normally prevent this from ever being attempted; this
+      test proves the DB-level backstop holds even if that check is
+      bypassed or has a bug).
   - **Month attribution** (OD-16-4): a job delivered 2026-09-30 whose
     claim is approved 2026-10-02 is counted in the **October** wage
     report (the approval month), not September — the delivery month
@@ -412,6 +435,22 @@ commissionAmountPaisa: 50000}` via the new create channel, then
   report's pending-commission header total decreases by the claim's
   suggested amount (not per-technician). Reverse a decided claim from
   the UI (reason required) and confirm it reappears in the pending list.
+  **Wage-report sign fix (FIX-1), hand-calculated:**
+  - Technician X approved for 50000 paisa on 2026-09-28, reversed on
+    2026-10-02. September wage report: X's `commissionPaisa = 50000`.
+    October wage report: X's `commissionPaisa = -50000`, and
+    `netPaisa` is reduced by 50000 versus a month with no ledger
+    activity — the clawback actually lowers what the shop owes X that
+    month.
+  - Approve and reverse within the **same** month → that month's
+    `commissionPaisa = 0` for that technician (the `-50000` and
+    `+50000` rows both fall in the same `strftime('%Y-%m', entry_date)`
+    bucket and net to zero).
+  - Every existing Phase 7 `wage-report.repository.test.ts` test still
+    passes unchanged after dropping `ABS` and negating instead —
+    confirmed by hand: for any pre-reversal, approval-only month,
+    `-COALESCE(SUM(amount), 0)` and `ABS(...)` produce the identical
+    result, since every row in that scenario is already negative.
 - **P16-3c**: `job:unassignTechnician` with no reason → Zod rejection.
   Called (directly, bypassing the UI) on a job at status `ready`,
   `delivered`, or `cancelled` → core-service rejection, named test for
@@ -469,18 +508,22 @@ function (fixed/bp × the milli-quantity and override cases above).
 - P16-2: ~7 (create/toggle/case-insensitive-uniqueness-including-deleted/
   bootstrap-exact-count-18/bootstrap-idempotent-rerun × repository,
   1 named CSV-import-still-matches-deactivated-brand test, + 1 UI test)
-- P16-3a: ~23 (5 rewritten above; net new: pure-function unit tests for
+- P16-3a: ~25 (5 rewritten above; net new: pure-function unit tests for
   fixed/bp/quantity-milli-2000/FLOOR-1234-on-99999, `commissionMode =
 none` → zero claims, NULL-suggested-recipient, multi-recipient
   approval, duplicate-recipient rejection, amount<=0 rejection,
   whitespace-reason rejection, bad-recipient-not-in-history rejection,
   month-attribution (Sept delivery / Oct approval), rollback-on-failure;
-  GAP-1 (OD-16-3a): reverse-approved-decision-nets-zero, reapprove-as-
-  attempt-2-to-different-technician, double-reversal-rejected,
-  reverse-a-rejected-decision-no-ledger-rows, concurrent-attempt
-  collision-on-unique-constraint)
-- P16-3b: ~5 (approvals list, approve flow, wage-report pending total,
-  wage-report per-technician approval-date attribution, reverse-from-UI)
+  GAP-1 (OD-16-3a): reverse-approved-decision-nets-zero,
+  reverse-multi-recipient-decision (FIX-2), reapprove-as-attempt-2-to-
+  different-technician, double-reversal-rejected,
+  reverse-a-rejected-decision-no-ledger-rows,
+  duplicate-attempt-no-unique-constraint-violation (FIX-3))
+- P16-3b: ~8 (approvals list, approve flow, wage-report pending total,
+  wage-report per-technician approval-date attribution, reverse-from-UI,
+  plus 3 for FIX-1: reversal-month-shows-negative-commission,
+  approve-and-reverse-same-month-nets-zero,
+  existing-Phase-7-wage-report-tests-unaffected)
 - P16-3c: ~5 (missing-reason rejection, one test per locked status ×3,
   one positive case — `in_progress` + reason succeeds)
 - P16-4: 0 (manual checklist only)
