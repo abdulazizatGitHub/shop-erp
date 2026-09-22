@@ -55,6 +55,10 @@ import type {
   UpdateJobDiagnosisInput,
   UpdateJobDetailsInput,
   TechnicianCustodyInput,
+  CreateServiceChargeInput,
+  UpdateServiceChargeInput,
+  ToggleServiceChargeInput,
+  ServiceChargeAdminDto,
   PartyAnyDto,
   PartySearchAnyInput,
   PaymentDto,
@@ -418,6 +422,16 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.job.updateDiagnosis, input) as Promise<JobDto>,
     updateDetails: (input: UpdateJobDetailsInput): Promise<JobDto> =>
       ipcRenderer.invoke(channels.job.updateDetails, input) as Promise<JobDto>,
+    listServiceChargesAdmin: (): Promise<readonly ServiceChargeAdminDto[]> =>
+      ipcRenderer.invoke(channels.job.listServiceChargesAdmin) as Promise<
+        readonly ServiceChargeAdminDto[]
+      >,
+    createServiceCharge: (input: CreateServiceChargeInput): Promise<ServiceChargeAdminDto> =>
+      ipcRenderer.invoke(channels.job.createServiceCharge, input) as Promise<ServiceChargeAdminDto>,
+    updateServiceCharge: (input: UpdateServiceChargeInput): Promise<ServiceChargeAdminDto> =>
+      ipcRenderer.invoke(channels.job.updateServiceCharge, input) as Promise<ServiceChargeAdminDto>,
+    toggleServiceCharge: (input: ToggleServiceChargeInput): Promise<ServiceChargeAdminDto> =>
+      ipcRenderer.invoke(channels.job.toggleServiceCharge, input) as Promise<ServiceChargeAdminDto>,
   },
   jobClient: {
     search: (input: SearchJobClientsInput): Promise<readonly JobClientDto[]> =>

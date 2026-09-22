@@ -218,6 +218,21 @@ export type {
   JobTechnicianRepositoryPort,
 } from './job/job-technician.repository.port.js';
 
+export type {
+  CommissionMode,
+  NewServiceChargeInput,
+  UpdateServiceChargeFields,
+  ServiceChargeRecord,
+  ServiceChargeRepositoryPort,
+} from './job/service-charge.repository.port.js';
+export {
+  assertCommissionModeConsistent,
+  createServiceCharge,
+  updateServiceCharge,
+  toggleServiceCharge,
+  listServiceChargesAdmin,
+} from './job/service-charge.service.js';
+
 export type { CancelJobInput, JobCancelRepositoryPort } from './job/job-cancel.repository.port.js';
 export { cancelJob } from './job/job-cancel.service.js';
 

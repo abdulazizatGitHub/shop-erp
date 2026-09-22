@@ -56,6 +56,10 @@ import type {
   UpdateJobDiagnosisInput,
   UpdateJobDetailsInput,
   TechnicianCustodyInput,
+  CreateServiceChargeInput,
+  UpdateServiceChargeInput,
+  ToggleServiceChargeInput,
+  ServiceChargeAdminDto,
   PaymentDto,
   PaymentReceiptDataDto,
   PurchaseIdInput,
@@ -519,6 +523,16 @@ export interface ElectronApi {
     readonly cancelJob: (input: CancelJobInput) => Promise<JobDto>;
     readonly updateDiagnosis: (input: UpdateJobDiagnosisInput) => Promise<JobDto>;
     readonly updateDetails: (input: UpdateJobDetailsInput) => Promise<JobDto>;
+    readonly listServiceChargesAdmin: () => Promise<readonly ServiceChargeAdminDto[]>;
+    readonly createServiceCharge: (
+      input: CreateServiceChargeInput,
+    ) => Promise<ServiceChargeAdminDto>;
+    readonly updateServiceCharge: (
+      input: UpdateServiceChargeInput,
+    ) => Promise<ServiceChargeAdminDto>;
+    readonly toggleServiceCharge: (
+      input: ToggleServiceChargeInput,
+    ) => Promise<ServiceChargeAdminDto>;
   };
   readonly jobClient: {
     readonly search: (input: SearchJobClientsInput) => Promise<readonly JobClientDto[]>;

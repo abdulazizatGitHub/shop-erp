@@ -96,6 +96,10 @@ export const channels = {
     cancelJob: 'job:cancelJob',
     updateDiagnosis: 'job:updateDiagnosis',
     updateDetails: 'job:updateDetails',
+    listServiceChargesAdmin: 'job:listServiceChargesAdmin',
+    createServiceCharge: 'job:createServiceCharge',
+    updateServiceCharge: 'job:updateServiceCharge',
+    toggleServiceCharge: 'job:toggleServiceCharge',
   },
   jobClient: {
     search: 'jobClient:search',

@@ -38,6 +38,7 @@ export { KyselyJobDetailsRepository } from './repositories/job-details.repositor
 export { KyselyJobClientRepository } from './repositories/job-client.repository.js';
 export { KyselyJobPartRepository } from './repositories/job-part.repository.js';
 export { KyselyJobDeliveryRepository } from './repositories/job-delivery.repository.js';
+export { KyselyServiceChargeRepository } from './repositories/service-charge.repository.js';
 export { KyselyInternalTransferRepository } from './repositories/internal-transfer.repository.js';
 export { KyselyCustodyRepository } from './repositories/custody.repository.js';
 export {
