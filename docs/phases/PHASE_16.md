@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 done, 665/665 tests; P16-2 next)
+**Status:** IN PROGRESS (P16-1 + P16-1b done, 690/690 tests; P16-2 next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -22,18 +22,34 @@ commission model entirely — it does not extend it.
 
 ### In scope
 
-- **P16-1 — Service charge management.** New "Job Settings" section
-  (reached via a tile on `SettingsPage.tsx`, opening `JobSettingsPage.tsx`
-  with tabs — see §2b). Service Charges tab: list all `service_charge`
-  rows (active + inactive), create, edit, toggle active. Fields: name,
-  retail charge (Rs in UI, paisa in DB), job type (optional), commission
-  mode (none / fixed paisa / basis points) + value. Inactive charges are
-  excluded from `lookup.repository.ts`'s `listServiceCharges` (already
-  filters `isActive=1` — this is the delivery modal's dropdown source)
-  but still visible in the new admin list. No delete. Dev-only seed
-  (never runs against a packaged/production build).
+- **P16-1 — Service charge management.** Service Charges section: list
+  all `service_charge` rows (active + inactive), create, edit, toggle
+  active. Fields: name, retail charge (Rs in UI, paisa in DB), job type
+  (optional), commission mode (none / fixed paisa / basis points) +
+  value. Inactive charges are excluded from `lookup.repository.ts`'s
+  `listServiceCharges` (already filters `isActive=1` — this is the
+  delivery modal's dropdown source) but still visible in the new admin
+  list. No delete. Dev-only seed (never runs against a
+  packaged/production build). Originally reached via a "Job Settings"
+  tile → separate tabbed page (see the superseded §2b design below) —
+  that navigation is replaced by P16-1b; the Service Charges content
+  itself (`ServiceChargesTab.tsx`/`ServiceChargeModal.tsx`) is unchanged.
 
-- **P16-2 — Brand management.** Brands tab in the same Job Settings page.
+- **P16-1b — Settings shell redesign (OD-16-11, added 2026-09-23).**
+  Owner rejected the stacked-cards layout and the Job Settings
+  tile → separate page → tabs structure. Replaces §2b's navigation
+  design — see the new §2b below for the full shell (grouped left
+  sub-nav + routed right content pane, one `/settings/*` route per
+  section, explicit per-section Save, unsaved-changes guard on sub-nav
+  clicks). Presentation-only: no IPC/contract/migration change: every
+  section's storage calls are the exact ones that existed before this
+  task (Shop/Invoices & Receipts still call `setShopIdentity`/
+  `setReceiptPaperSize`; Discounts and Backup & Restore are unchanged),
+  confirmed by re-reading each existing card's save logic before
+  relocating it, per this task's own "STOP and report if a move needs a
+  storage change" rule — no stop was needed.
+
+- **P16-2 — Brand management.** Brands section in the Settings shell.
   List all non-deleted brands, create, toggle active/inactive. `brand`
   is a single table shared with `item.brandId` (confirmed in use by the
   CSV item importer, `import.repository.ts` — see §2c). New migration
@@ -61,7 +77,7 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
     core logic + repository, the GAP-1 decision-reversal path
     (OD-16-3a), retirement of the `party.commission_bp` read path,
     rewritten Phase 7 tests, ADR-0015.
-  - **P16-3b** — Commission Approvals tab (Job Settings page, including
+  - **P16-3b** — Commission Approvals section (Settings shell, including
     the "Reverse" action), wage report change (approval-date
     attribution, pending-total in the report header). **A structural
     change to `wage-report.repository.ts` is required here, not just a
@@ -81,7 +97,8 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
 
 ### Explicitly out of scope
 
-- Any Settings area beyond the new Job Settings tile/page
+- Any Settings section beyond the ones listed under P16-1b's SECTIONS
+  (General/Sales/Jobs/Data)
 - Receipt/invoice design or template changes
 - User management, permissions, PIN login, `decided_by` tracking
 - Report configuration beyond the P16-3b wage-report change
@@ -219,18 +236,111 @@ ADR-0015 once P16-3a is verified.
 **OD-16-10 — Zero-bill delivery.** Unchanged; logged as an open question
 in `PROJECT.md` §4, not fixed this phase.
 
+**OD-16-11 — Settings shell redesign (owner, 2026-09-23).** The
+stacked-cards `SettingsPage.tsx` layout and the P16-1/§2b-original "Job
+Settings" tile → separate page → tabs structure are rejected. Brought
+into Phase 16 as task **P16-1b**. Reference: two screenshots of another
+product's settings screen (layout pattern only — not its pharmacy
+content, not its green colour scheme; Shop ERP's own colours, fonts,
+and `@shop/ui` components throughout). Full design in the (superseded)
+§2b below, replaced by §2b as currently written.
+
 ---
 
-## 2b. Navigation
+## 2b. Navigation (P16-1b, supersedes the original P16-1 design above)
 
-`SettingsPage.tsx` keeps its existing 4 cards unchanged. A 5th tile,
-"Job Settings," links to a new `JobSettingsPage.tsx` with three tabs:
-**Service Charges | Brands | Commission Approvals**. The Job Settings
-tile and the Commission Approvals tab each show a read-only pending-claim
-count badge — no new tables beyond those in OD-16-3a: a claim counts as
-pending if it has no `commission_decision` row, or if its latest
-decision (highest `attempt_no`) has a matching
-`commission_decision_reversal` row.
+One Settings shell, not a card stack. Page title ("Settings") + a
+one-line subtitle, then a single bordered/shadowed panel split into a
+grouped left sub-nav and a routed right content pane.
+
+**Routing.** `react-router-dom` (already a dependency, unused
+elsewhere in this app) is added at the root via one `HashRouter`
+(`apps/client/src/main.tsx`, wrapping `<App/>`) — `HashRouter`, not
+`BrowserRouter`, because the packaged renderer is loaded via
+`win.loadFile()` (`file://`), which has no real path-based routing.
+Confirmed safe to add: grepped `apps/client` and `apps/server` for
+`window.location`/`location.hash`/`href="#"`/any `loadURL`/`loadFile`
+call with a hash or query — found none; a single `BrowserWindow` is
+ever created, loaded with a bare path/URL. `App.tsx`'s own top-level
+`tab` state (the main sidebar) is **unchanged** — only `SettingsPage.tsx`
+internally uses `<Routes>`, for absolute paths under `/settings/*`.
+`/settings` redirects to `/settings/shop`. Each section is its own
+route, so the hash persists across leaving/re-entering the Settings tab
+(deep-link-equivalent) and the browser back button works for it.
+
+**Sections and routes:**
+
+| Path                                  | Group   | Title                         |
+| ------------------------------------- | ------- | ----------------------------- |
+| `/settings`                           | —       | redirects to `/settings/shop` |
+| `/settings/shop`                      | General | Shop                          |
+| `/settings/invoices`                  | General | Invoices & Receipts           |
+| `/settings/sales/discounts`           | Sales   | Discounts                     |
+| `/settings/jobs/service-charges`      | Jobs    | Service Charges               |
+| `/settings/jobs/brands`               | Jobs    | Brands                        |
+| `/settings/jobs/commission-approvals` | Jobs    | Commission Approvals          |
+| `/settings/backup`                    | Data    | Backup & Restore              |
+
+The Commission Approvals nav item is reserved to show a pending-claim
+count badge once P16-3b lands (`settingsNav.config.ts`'s `SettingsNavItem.badge`
+field exists now, unused — no new tables needed, same pending
+definition as OD-16-3a: no `commission_decision` row, or the latest
+decision has a matching `commission_decision_reversal` row).
+
+**Sections are relocated content, not rewrites**, except where noted:
+`ShopIdentityCard.tsx` splits into `ShopSettingsSection.tsx` (name/
+phone/address/email) and the text-field half of
+`InvoiceReceiptsSettingsSection.tsx` (invoice header/footer, statement
+footer); `DiscountPresetsCard.tsx` → `DiscountsSettingsSection.tsx`
+(Card wrapper stripped; dirty-tracking added — the original had none,
+needed so the unsaved-changes guard works there too);
+`ReceiptSettingsCard.tsx`'s paper-size picker folds into
+`InvoiceReceiptsSettingsSection.tsx` (see the correction below —
+its instant-save behaviour is retired, not relocated as-is);
+`BackupRestoreCard.tsx` → `BackupSettingsSection.tsx` (Card wrapper
+stripped only — no form, so no dirty-tracking needed).
+`ServiceChargesTab.tsx`/`ServiceChargeModal.tsx`/`BrandsTab.tsx`/
+`CommissionApprovalsTab.tsx` (P16-1's job/ folder) are unchanged,
+just relocated to new routes. `JobSettingsPage.tsx` and
+`JobSettingsCard.tsx` are deleted.
+
+**Invoices & Receipts correction (owner, 2026-09-23):** the original
+plan proposed two independent Save buttons in this section (invoice
+text fields + a separate paper-size save), mirroring the reference
+image's nested-save precedent. Rejected: `ReceiptSettingsCard.tsx`'s
+A4/A5 buttons saved **instantly** on click
+(`changePaperSize` → `setReceiptPaperSize` immediately) — two buttons
+in one section would have mixed instant-save and explicit-save inside
+what the RULES require to be one explicit-Save section. Paper size is
+now a normal form field (`form.paperSize`): part of the section's
+dirty computation, sent only when the section's single Save button is
+clicked. Save calls the same two existing IPC methods
+(`setShopIdentity`, `setReceiptPaperSize`) in sequence — no new
+bundling logic beyond that. Either call can fail independently; the
+error names which half failed, and only that half's fields stay dirty
+(the `saved` snapshot advances to match what was actually written for
+the succeeded half). Resending the succeeded half on a retry is
+accepted, not treated as a bug.
+
+**Save-time identity fetch (owner correction, 2026-09-23):** both
+Shop and Invoices & Receipts call `getShopIdentity()` again at the
+moment Save is clicked — not just at mount — and overlay only that
+section's edited fields onto the **freshly-fetched** object before
+calling `setShopIdentity`. Same 7-field DTO, same two existing IPC
+methods as before P16-1b (`getShopIdentity`/`setShopIdentity`,
+confirmed by re-reading `shop-identity.repository.ts`: each of the 7
+fields is its own row in the generic `setting` table, upserted
+independently — a full-object round trip needs no schema change).
+
+**Unsaved-changes guard.** A `SettingsDirtyContext` (dirty boolean +
+setter) is provided once at the top of `SettingsPage.tsx`; each
+form-bearing section reports its own dirty state into it.
+`SettingsNav.tsx` intercepts a sub-nav click only when dirty, showing a
+discard/stay `ConfirmDialog` instead of navigating immediately.
+**Scoped to sub-nav clicks only** (owner-accepted, 2026-09-23) — it
+does not intercept leaving Settings via the main sidebar (`App.tsx`'s
+own `tab` state) or the browser back button; logged in `PROJECT.md`'s
+Phase 16 backlog: "revisit when main navigation moves to the router."
 
 ## 2c. Brand table sharing (C-6 finding, resolved)
 
@@ -275,17 +385,18 @@ resolves to the same `brand.id` and imports successfully; no second
 
 ## 3. Tasks
 
-| ID     | Task                                                | Depends on                             | Status      | Commit  |
-| ------ | --------------------------------------------------- | -------------------------------------- | ----------- | ------- |
-| P16-1  | Service charge management                           | —                                      | DONE        | 55f0438 |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1 (shares Job Settings page shell) | NOT STARTED | —       |
-| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                                  | NOT STARTED | —       |
-| P16-3b | Commission Approvals tab + wage report change       | P16-3a                                 | NOT STARTED | —       |
-| P16-3c | Technician removal guard                            | —                                      | NOT STARTED | —       |
-| P16-4  | Shop identity verify (owner smoke test)             | —                                      | NOT STARTED | —       |
+| ID     | Task                                                | Depends on                         | Status      | Commit  |
+| ------ | --------------------------------------------------- | ---------------------------------- | ----------- | ------- |
+| P16-1  | Service charge management                           | —                                  | DONE        | 55f0438 |
+| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | NOT STARTED | —       |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | NOT STARTED | —       |
+| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | NOT STARTED | —       |
+| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED | —       |
+| P16-3c | Technician removal guard                            | —                                  | NOT STARTED | —       |
+| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED | —       |
 
-Order: P16-1 → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One task at a
-time; verified and reviewed before the next begins.
+Order: P16-1 → P16-1b → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One
+task at a time; verified and reviewed before the next begins.
 
 ---
 
@@ -323,6 +434,31 @@ commissionAmountPaisa: 50000}` via the new create channel, then
   unchanged (named test, confirms the SQ-6 snapshot finding from plan
   discussion holds under a real edit, not just by code inspection).
   Verified: named repository tests + one hand-run query.
+- **P16-1b**: `/settings` navigates to `/settings/shop` (redirect).
+  Clicking each of the 7 sub-nav items routes to its section and shows
+  that section's title (`heading`, role-queried). The active nav item
+  carries `aria-current="page"`; the previously-active one does not,
+  after switching. Switching sections with a clean form navigates
+  immediately, no dialog. Switching with a dirty form shows "Discard
+  unsaved changes?" — Stay keeps the edit and the current section; a
+  second attempt + Discard navigates and the edit is gone. After a
+  successful save, switching sections shows no dialog (dirty correctly
+  cleared). A failed save keeps the form dirty (error shown, edited
+  value still in the field, switching away still prompts). Shop and
+  Invoices & Receipts: saving calls `getShopIdentity()` a **second**
+  time at Save (not just at mount) and `setShopIdentity()` with that
+  fresh fetch's untouched fields overlaid with only this section's
+  edits — proven by mocking `getShopIdentity` to return different
+  values on its first (mount) and second (save) call and asserting the
+  second call's values win. Invoices & Receipts: Save calls
+  `setShopIdentity` and `setReceiptPaperSize` in sequence; changing
+  A4/A5 alone marks the section dirty without calling
+  `setReceiptPaperSize` until Save is clicked; if `setReceiptPaperSize`
+  fails while `setShopIdentity` succeeds, the error names paper size
+  specifically and the section stays dirty (resending the already-saved
+  text half on retry is accepted, not a bug). Verified: named tests in
+  `SettingsPage.test.tsx`, `ShopSettingsSection.test.tsx`,
+  `InvoiceReceiptsSettingsSection.test.tsx`.
 - **P16-2**: a fresh DB, after bootstrap, has **exactly 18** brand rows
   (not merely "at least"): Dawlance, Haier, PEL, Orient, Gree, Kenwood,
   TCL, Samsung, LG, Ecostar, Panasonic, Changhong Ruba, Homage, Nasgas,
@@ -472,6 +608,23 @@ commissionAmountPaisa: 50000}` via the new create channel, then
 ## 5. Rewritten/added tests and expected count delta
 
 Baseline: 649/649 (commit f9cc7b8).
+
+**Actual counts landed so far** (not estimates — each is this task's own
+verified `npm run verify` count):
+
+- P16-1 (`55f0438`): 649 → 665 (+16: contracts Zod validation ×4, core
+  `assertCommissionModeConsistent` ×5, repository CRUD/uniqueness/
+  snapshot-survives-edit ×6, 1 UI smoke test).
+- P16-1 review fix (`361c658`): 665 → 672 (+7: `Money.fromPercent`/
+  `fromRupees` conversion tests ×3, `ServiceChargeModal` conversion
+  tests ×4).
+- P16-1b: 672 → 690 (+18: `SettingsPage.test.tsx` ×13 — redirect, 7×
+  routing, active-highlight, clean-switch-no-dialog, dirty-switch-
+  confirm/stay/discard, no-dialog-after-successful-save, failed-save-
+  stays-dirty; `ShopSettingsSection.test.tsx` ×2 — save-time fresh-fetch
+  overlay, failed-save-stays-dirty; `InvoiceReceiptsSettingsSection.test.tsx`
+  ×3 — sequential save of both IPC calls, A4/A5-dirty-without-instant-
+  save, paper-size-failure-names-itself-and-stays-dirty).
 
 **Rewritten (not deleted) from Phase 7** — `commission.repository.test.ts`:
 

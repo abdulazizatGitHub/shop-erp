@@ -4291,6 +4291,13 @@ but are never read by any code today.
   ledger rows, staff, or service charges. No back-fill of historical
   commission is being built (OD-16-9) — this is a related, separate
   data-hygiene step for go-live, not designed or built in Phase 16.
+- **Settings unsaved-changes guard does not cover leaving Settings via
+  the main sidebar** (App.tsx tab state) — revisit when main navigation
+  moves to the router. Logged 2026-09-23 (P16-1b, OD-16-11): the guard
+  only intercepts sub-nav clicks inside `SettingsNav.tsx`; switching the
+  main app's top-level tab (Sales/Items/Jobs/...) while a Settings
+  section has unsaved changes discards them silently, and the browser
+  back button is not intercepted either.
 
 ---
 

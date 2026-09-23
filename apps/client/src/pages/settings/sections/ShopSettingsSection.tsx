@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { ShopIdentityDto } from '@shop/contracts';
-import { Alert, Button, Card, TextInput } from '@shop/ui';
-import { ipc } from '../../lib/ipc.js';
+import { Alert, Button, TextInput } from '@shop/ui';
+import { ipc } from '../../../lib/ipc.js';
+import { blankToNull } from '../formHelpers.js';
+import { useSettingsDirty } from '../SettingsDirtyContext.js';
 
 interface FormState {
   readonly shopName: string;
   readonly shopPhone: string;
   readonly shopAddress: string;
   readonly shopEmail: string;
-  readonly invoiceHeaderText: string;
-  readonly invoiceFooterText: string;
-  readonly statementFooterText: string;
 }
 
 function toForm(identity: ShopIdentityDto): FormState {
@@ -19,20 +18,20 @@ function toForm(identity: ShopIdentityDto): FormState {
     shopPhone: identity.shopPhone ?? '',
     shopAddress: identity.shopAddress ?? '',
     shopEmail: identity.shopEmail ?? '',
-    invoiceHeaderText: identity.invoiceHeaderText ?? '',
-    invoiceFooterText: identity.invoiceFooterText ?? '',
-    statementFooterText: identity.statementFooterText ?? '',
   };
 }
 
-/** '' on a text input means "not entered" — same blankToNull pattern as AddSupplierModal.tsx. */
-function blankToNull(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
-/** CL-0a. Extracted out of SettingsPage.tsx to keep it under the 300-line file cap. */
-export function ShopIdentityCard(): React.JSX.Element {
+/**
+ * P16-1b — split out of ShopIdentityCard.tsx (now just these 4 fields;
+ * invoice/statement text moved to InvoiceReceiptsSettingsSection.tsx).
+ * Same underlying setShopIdentity call and 7-field DTO as before — no
+ * storage change. At Save time, fetches the identity fresh (not the
+ * mount-time copy) and overlays only this section's 4 fields onto it, so
+ * a concurrent edit to the other section's fields is never clobbered by a
+ * stale snapshot.
+ */
+export function ShopSettingsSection(): React.JSX.Element {
+  const { setDirty } = useSettingsDirty();
   const [saved, setSaved] = useState<FormState | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +51,18 @@ export function ShopIdentityCard(): React.JSX.Element {
       });
   }, []);
 
+  const loading = form === null;
+  const dirty = form !== null && saved !== null && JSON.stringify(form) !== JSON.stringify(saved);
+
+  useEffect(() => {
+    setDirty(dirty);
+  }, [dirty, setDirty]);
+
   function update(field: keyof FormState, value: string): void {
     setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
-  function save(): void {
+  async function save(): Promise<void> {
     if (!form) return;
     const trimmedName = form.shopName.trim();
     if (trimmedName.length === 0) {
@@ -66,35 +72,30 @@ export function ShopIdentityCard(): React.JSX.Element {
     setSaving(true);
     setMessage(null);
     setError(null);
-    ipc.setting
-      .setShopIdentity({
+    try {
+      const current = await ipc.setting.getShopIdentity();
+      await ipc.setting.setShopIdentity({
         shopName: trimmedName,
         shopPhone: blankToNull(form.shopPhone),
         shopAddress: blankToNull(form.shopAddress),
         shopEmail: blankToNull(form.shopEmail),
-        invoiceHeaderText: blankToNull(form.invoiceHeaderText),
-        invoiceFooterText: blankToNull(form.invoiceFooterText),
-        statementFooterText: blankToNull(form.statementFooterText),
-      })
-      .then(() => {
-        const next = { ...form, shopName: trimmedName };
-        setSaved(next);
-        setForm(next);
-        setMessage('Shop identity saved.');
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Failed to save setting');
-      })
-      .finally(() => {
-        setSaving(false);
+        invoiceHeaderText: current.invoiceHeaderText,
+        invoiceFooterText: current.invoiceFooterText,
+        statementFooterText: current.statementFooterText,
       });
+      const next = { ...form, shopName: trimmedName };
+      setSaved(next);
+      setForm(next);
+      setMessage('Shop settings saved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save setting');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const loading = form === null;
-  const dirty = form !== null && saved !== null && JSON.stringify(form) !== JSON.stringify(saved);
-
   return (
-    <Card title="Shop identity">
+    <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
       {message && <Alert variant="success">{message}</Alert>}
       <div className="grid grid-cols-2 gap-4">
@@ -130,36 +131,18 @@ export function ShopIdentityCard(): React.JSX.Element {
             update('shopEmail', e.target.value);
           }}
         />
-        <TextInput
-          label="Invoice header text"
-          value={form?.invoiceHeaderText ?? ''}
-          disabled={loading || saving}
-          onChange={(e) => {
-            update('invoiceHeaderText', e.target.value);
-          }}
-        />
-        <TextInput
-          label="Invoice footer text"
-          value={form?.invoiceFooterText ?? ''}
-          disabled={loading || saving}
-          onChange={(e) => {
-            update('invoiceFooterText', e.target.value);
-          }}
-        />
-        <TextInput
-          label="Statement footer text"
-          value={form?.statementFooterText ?? ''}
-          disabled={loading || saving}
-          onChange={(e) => {
-            update('statementFooterText', e.target.value);
-          }}
-        />
       </div>
       <div className="mt-4 flex justify-end">
-        <Button variant="primary" disabled={loading || saving || !dirty} onClick={save}>
+        <Button
+          variant="primary"
+          disabled={loading || saving || !dirty}
+          onClick={() => {
+            void save();
+          }}
+        >
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }
