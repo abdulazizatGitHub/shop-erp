@@ -388,7 +388,7 @@ resolves to the same `brand.id` and imports successfully; no second
 | ID     | Task                                                | Depends on                         | Status      | Commit  |
 | ------ | --------------------------------------------------- | ---------------------------------- | ----------- | ------- |
 | P16-1  | Service charge management                           | —                                  | DONE        | 55f0438 |
-| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | NOT STARTED | —       |
+| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE        | 320e602 |
 | P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | NOT STARTED | —       |
 | P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | NOT STARTED | —       |
 | P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED | —       |
