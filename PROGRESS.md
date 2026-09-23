@@ -41,6 +41,81 @@
 
 ---
 
+## [2026-09-23] Session 78 — Phase 16 P16-1b: Settings shell redesign (OD-16-11)
+
+**Goal:** Replace the P16-1 stacked-cards Settings layout and the "Job
+Settings" tile → separate page → tabs structure with the owner's
+requested shell design (two reference screenshots, layout pattern only)
+— grouped left sub-nav + routed right content pane, one `/settings/*`
+route per section, per `docs/phases/PHASE_16.md` §2b.
+
+**Done:**
+
+- `apps/client/src/main.tsx` — added one `HashRouter` at the root (only
+  `SettingsPage.tsx` uses routes; `App.tsx`'s own `tab` state/main
+  sidebar untouched). Confirmed safe first: grepped `apps/client` and
+  `apps/server` for `window.location`/`location.hash`/`href="#"`/any
+  hash-or-query `loadURL`/`loadFile` — none found, single `BrowserWindow`.
+- `apps/client/src/pages/settings/SettingsPage.tsx` rewritten as the
+  shell (title+subtitle, `SettingsNav` + `<Routes>`); new
+  `SettingsNav.tsx`, `SettingsSectionFrame.tsx`, `SettingsDirtyContext.ts`,
+  `settingsNav.config.ts`, `formHelpers.ts`.
+- Relocated, not rewritten: `ShopIdentityCard.tsx` → `sections/ShopSettingsSection.tsx`
+  (4 fields) + the text-field half of `sections/InvoiceReceiptsSettingsSection.tsx`
+  (new); `DiscountPresetsCard.tsx` → `sections/DiscountsSettingsSection.tsx`
+  (dirty-tracking added, the original had none); `ReceiptSettingsCard.tsx`'s
+  A4/A5 picker folded into `InvoiceReceiptsSettingsSection.tsx` as a
+  normal dirty-tracked field (instant-save retired — owner correction:
+  the original two-independent-Save-buttons plan would have mixed
+  instant-save and explicit-save in one section); `BackupRestoreCard.tsx`
+  → `sections/BackupSettingsSection.tsx` unchanged. `JobSettingsPage.tsx`/
+  `JobSettingsCard.tsx` deleted. `job/` (P16-1's ServiceChargesTab etc.)
+  unchanged, just relocated to new routes.
+- Owner corrections applied during the session: (1) ONE Save for
+  Invoices & Receipts, not two; (2) both Shop and Invoices & Receipts
+  re-fetch `getShopIdentity()` fresh at Save time and overlay only their
+  own edited fields onto that fresh copy, not the mount-time snapshot.
+- `PROJECT.md` — logged the unsaved-changes guard's scope gap (sub-nav
+  clicks only, not the main sidebar or browser back) as Phase 16
+  backlog.
+
+**Verified:**
+
+- `npm run verify` — 690/690, exit 0 (hit the documented better-sqlite3
+  ABI-mismatch pattern twice mid-session — `npm rebuild better-sqlite3`
+  after killing stray processes, unrelated to this code).
+- 18 new tests, all named in `docs/phases/PHASE_16.md` §5 and the
+  commit message: `SettingsPage.test.tsx` ×13, `ShopSettingsSection.test.tsx`
+  ×2, `InvoiceReceiptsSettingsSection.test.tsx` ×3.
+- No storage/IPC/contract/migration change — confirmed by re-reading
+  `shop-identity.repository.ts` before relocating any field (each of
+  the 7 identity fields is its own row in `setting`).
+
+**Not done / deferred:** P16-2 (brand management) — next task.
+
+**Bugs found:** none.
+
+**Decisions taken:** OD-16-11 (Settings shell redesign, owner,
+2026-09-23) — recorded in `docs/phases/PHASE_16.md` §2a.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-2 (brand management + `is_active`
+migration `0017`), per `docs/phases/PHASE_16.md` §2/§2c.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (unsaved-changes guard scope
+      gap logged as backlog)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-23] Session 77 — Phase 16 P16-1: service charge management
 
 **Goal:** Build the Job Settings > Service Charges admin (list
