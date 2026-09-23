@@ -6,6 +6,7 @@ import type {
   UpdateServiceChargeInput,
 } from '@shop/contracts';
 import { Alert, Button, Modal, Select, TextInput } from '@shop/ui';
+import { Money } from '@shop/shared';
 import { ipc } from '../../../lib/ipc.js';
 
 interface FormState {
@@ -36,16 +37,20 @@ function toForm(charge: ServiceChargeAdminDto): FormState {
   return {
     name: charge.name,
     jobType: charge.jobType ?? '',
-    retailRupees: String(charge.retailChargePaisa / 100),
+    retailRupees: String(Money.toRupees(Money.of(charge.retailChargePaisa))),
     wholesaleRupees:
-      charge.wholesaleChargePaisa === null ? '' : String(charge.wholesaleChargePaisa / 100),
+      charge.wholesaleChargePaisa === null
+        ? ''
+        : String(Money.toRupees(Money.of(charge.wholesaleChargePaisa))),
     typicalMinutes: charge.typicalMinutes === null ? '' : String(charge.typicalMinutes),
     notes: charge.notes ?? '',
     commissionMode: charge.commissionMode,
-    // basis points -> whole-number percent, same x100 convention AddStaffModal.tsx uses for commissionBp.
     commissionAmountRupees:
-      charge.commissionAmountPaisa === null ? '' : String(charge.commissionAmountPaisa / 100),
-    commissionPercent: charge.commissionBp === null ? '' : String(charge.commissionBp / 100),
+      charge.commissionAmountPaisa === null
+        ? ''
+        : String(Money.toRupees(Money.of(charge.commissionAmountPaisa))),
+    commissionPercent:
+      charge.commissionBp === null ? '' : String(Money.toPercent(charge.commissionBp)),
   };
 }
 
@@ -97,49 +102,65 @@ export function ServiceChargeModal({
       return;
     }
 
-    const retailRupees = Number(form.retailRupees);
-    if (!Number.isFinite(retailRupees) || retailRupees <= 0) {
-      setError('Retail charge must be a positive number');
+    let retailChargePaisa: number;
+    try {
+      retailChargePaisa = Money.fromRupees(form.retailRupees);
+    } catch {
+      setError('Retail charge must be a valid amount');
+      return;
+    }
+    if (retailChargePaisa <= 0) {
+      setError('Retail charge must be greater than zero');
       return;
     }
 
     let wholesaleChargePaisa: number | null = null;
     if (form.wholesaleRupees.trim().length > 0) {
-      const wholesaleRupees = Number(form.wholesaleRupees);
-      if (!Number.isFinite(wholesaleRupees) || wholesaleRupees <= 0) {
-        setError('Wholesale charge must be a positive number, or left blank');
+      try {
+        wholesaleChargePaisa = Money.fromRupees(form.wholesaleRupees);
+      } catch {
+        setError('Wholesale charge must be a valid amount, or left blank');
         return;
       }
-      wholesaleChargePaisa = Math.round(wholesaleRupees * 100);
+      if (wholesaleChargePaisa <= 0) {
+        setError('Wholesale charge must be greater than zero, or left blank');
+        return;
+      }
     }
 
     let typicalMinutes: number | null = null;
     if (form.typicalMinutes.trim().length > 0) {
       const minutes = Number(form.typicalMinutes);
-      if (!Number.isFinite(minutes) || minutes <= 0) {
-        setError('Typical minutes must be a positive number, or left blank');
+      if (!Number.isFinite(minutes) || !Number.isInteger(minutes) || minutes <= 0) {
+        setError('Typical minutes must be a positive whole number, or left blank');
         return;
       }
-      typicalMinutes = Math.round(minutes);
+      typicalMinutes = minutes;
     }
 
     let commissionAmountPaisa: number | null = null;
     let commissionBp: number | null = null;
     if (form.commissionMode === 'fixed') {
-      const amountRupees = Number(form.commissionAmountRupees);
-      if (!Number.isFinite(amountRupees) || amountRupees <= 0) {
-        setError('Fixed commission amount must be a positive number');
+      try {
+        commissionAmountPaisa = Money.fromRupees(form.commissionAmountRupees);
+      } catch {
+        setError('Fixed commission amount must be a valid amount');
         return;
       }
-      commissionAmountPaisa = Math.round(amountRupees * 100);
+      if (commissionAmountPaisa <= 0) {
+        setError('Fixed commission amount must be greater than zero');
+        return;
+      }
     } else if (form.commissionMode === 'bp') {
-      const percent = Number(form.commissionPercent);
-      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-        setError('Commission percent must be between 0 and 100');
+      try {
+        commissionBp = Money.fromPercent(form.commissionPercent);
+      } catch {
+        setError(
+          'Commission percent must be a valid percentage in whole basis points (e.g. 12.34%, not 12.345%)',
+        );
         return;
       }
-      commissionBp = Math.round(percent * 100);
-      if (commissionBp > 10000) {
+      if (commissionBp <= 0 || commissionBp > 10000) {
         setError('Commission percent must be between 0 and 100');
         return;
       }
@@ -148,7 +169,7 @@ export function ServiceChargeModal({
     const shared = {
       name,
       jobType: blankToNull(form.jobType),
-      retailChargePaisa: Math.round(retailRupees * 100),
+      retailChargePaisa,
       wholesaleChargePaisa,
       typicalMinutes,
       notes: blankToNull(form.notes),

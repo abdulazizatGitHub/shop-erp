@@ -41,6 +41,52 @@
 
 ---
 
+## [2026-09-23] Session 77 — Phase 16 P16-1: service charge management
+
+**Goal:** Build the Job Settings > Service Charges admin (list
+active+inactive, create, edit, toggle-active, commission mode
+none/fixed/bp) per `docs/phases/PHASE_16.md` §2a OD-16-1 and §4's
+hand-calculated exit criteria — the first implementation task of
+Phase 16.
+
+**Done:**
+
+- `packages/contracts/src/job/service-charge.ts` — `CreateServiceChargeInput`/`UpdateServiceChargeInput` (Zod `superRefine` enforcing commission-mode/amount/bp consistency), `ToggleServiceChargeInput`, `ServiceChargeAdminDto`.
+- `packages/core/src/job/service-charge.{repository.port,service}.ts` — `assertCommissionModeConsistent` (the core-layer half of "Zod + core" double validation), thin `createServiceCharge`/`updateServiceCharge`/`toggleServiceCharge`/`listServiceChargesAdmin` services.
+- `packages/db/src/repositories/service-charge.repository.ts` — `KyselyServiceChargeRepository`: case-insensitive name uniqueness checked in application code (never a DB collation), resolves `businessUnitId` by REPAIR's code, never touches `sale_line` (a delivered invoice's snapshot survives a later price edit — confirmed by test).
+- `apps/server/src/ipc/handlers/service-charge.handler.ts` + 4 new `job:*` channels + `main.ts`/`preload.ts`/`electron-api.d.ts` wiring.
+- `apps/client/src/pages/settings/{JobSettingsCard,JobSettingsPage}.tsx` + `job/{ServiceChargesTab,ServiceChargeModal,BrandsTab,CommissionApprovalsTab}.tsx` — `SettingsPage.tsx` keeps its 4 existing cards unchanged, gains a 5th "Job settings" tile navigating (local component state, no router in this app) to a 3-tab page; Brands/Commission Approvals are placeholders for P16-2/P16-3b.
+- `scripts/seed-service-charges.ts` — dev-only seed (OD-16-7's 7-charge minimum set, fixed + bp commission both covered), same pattern as `scripts/seed-test-data.ts` (manual `npx tsx` invocation, writes through the real core service + repository, refuses to run against a non-empty `service_charge` table). Never imported by the shipped app; not wired into any npm script.
+- `Money.fromPercent`/`Money.toPercent` added to `packages/shared/src/money.ts` (review finding: `ServiceChargeModal.tsx` was doing ad-hoc `Number(...) * 100` instead of the shared conversion helpers, and silently rounded a percent that didn't resolve to a whole basis point, e.g. "12.345%" — fixed to use `Money.fromRupees`/`Money.fromPercent`, which reject instead of rounding).
+
+**Verified:**
+
+- `npm run verify` — 665/665 → after the review-fix commit, re-verified again (see that commit's own count).
+- Hand-run queries (pasted in the P16-1 turn): create with `{commissionMode:'fixed', commissionAmountPaisa:50000}` reads back exactly; toggle removes from the delivery dropdown but keeps in the admin list; duplicate case-insensitive name rejected with zero extra rows (`SELECT COUNT(*) FROM service_charge` = 1).
+- `Money.fromRupees('1999.50') === 199950`; `Money.fromPercent('12.34') === 1234`; `Money.fromPercent('12.345')` and `Money.fromPercent('abc')` both throw `RangeError` (reviewed-fix commit).
+
+**Not done / deferred:** P16-2 (brand management) — next task, not started this session.
+
+**Bugs found:** none (the ad-hoc-conversion/silent-rounding issue was caught and fixed in review before this entry was written, not left as a logged bug).
+
+**Decisions taken:** none new — implements OD-16-1/OD-16-6/OD-16-7 as already decided.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-2 (brand management + `is_active` migration `0017`), per `docs/phases/PHASE_16.md` §2/§2c.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (Phase 16 backlog already logged in the prior docs session; no new bug to add)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-22] Session 76 — Settings backlog audit + Phase 16 draft
 
 Settings backlog documented in PROJECT.md per owner discussion. No code written.

@@ -13,6 +13,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from '@shop/ui';
+import { Money } from '@shop/shared';
 import { ipc } from '../../../lib/ipc.js';
 import { ServiceChargeModal } from './ServiceChargeModal.js';
 
@@ -21,8 +22,8 @@ const COMMISSION_LABEL: Record<
   (c: ServiceChargeAdminDto) => string
 > = {
   none: () => 'None',
-  fixed: (c) => `Rs ${((c.commissionAmountPaisa ?? 0) / 100).toLocaleString('en-PK')} fixed`,
-  bp: (c) => `${((c.commissionBp ?? 0) / 100).toLocaleString('en-PK')}%`,
+  fixed: (c) => `${Money.format(Money.of(c.commissionAmountPaisa ?? 0))} fixed`,
+  bp: (c) => `${Money.toPercent(c.commissionBp ?? 0).toLocaleString('en-PK')}%`,
 };
 
 /** P16-1 — Job Settings > Service Charges. Active and inactive both list here; only active ones appear in the delivery modal (lookup.repository.ts's listServiceCharges). */

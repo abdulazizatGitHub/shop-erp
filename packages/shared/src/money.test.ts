@@ -18,6 +18,24 @@ describe('Money', () => {
     // Rs 1,250.50 = 125050 paisa
     expect(Money.fromRupees('1,250.50')).toBe(125050);
     expect(Money.fromRupees(34500.5)).toBe(3450050);
+    // Rs 1,999.50 = 199950 paisa (P16-1 ServiceChargeModal exit criterion)
+    expect(Money.fromRupees('1999.50')).toBe(199950);
+  });
+
+  it('parses a whole-or-fractional percent into basis points', () => {
+    // 12.34% = 1234 bp (P16-1 ServiceChargeModal exit criterion)
+    expect(Money.fromPercent('12.34')).toBe(1234);
+    expect(Money.fromPercent(10)).toBe(1000);
+    expect(Money.fromPercent('0.01')).toBe(1);
+  });
+
+  it('rejects a percent that does not resolve to a whole basis-point value', () => {
+    // 12.345% = 1234.5 bp — not representable, must be rejected, not rounded
+    expect(() => Money.fromPercent('12.345')).toThrow(RangeError);
+  });
+
+  it('rejects an unparseable percent', () => {
+    expect(() => Money.fromPercent('abc')).toThrow(RangeError);
   });
 
   it('rejects non-integer paisa', () => {

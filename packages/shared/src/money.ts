@@ -68,6 +68,36 @@ export const Money = {
     return roundHalfUp((paisa * basisPoints) / 10_000) as Paisa;
   },
 
+  /**
+   * Parse user input in whole-or-fractional percent ("12.34") into basis
+   * points (1234). Unlike fromRupees, this does NOT round away a
+   * sub-basis-point remainder — basis points are already this rate's
+   * smallest representable unit (a "0.005%" input has no bp value), so a
+   * percent that doesn't resolve to an exact integer number of basis
+   * points is a rejected input, not a silently-rounded one. Throws
+   * RangeError on unparseable input or a non-integer bp result.
+   */
+  fromPercent(percent: number | string): number {
+    const n = typeof percent === 'string' ? Number(percent.replace(/[,\s]/g, '')) : percent;
+    if (!Number.isFinite(n)) throw new RangeError(`Invalid percent amount: ${String(percent)}`);
+    const bp = n * 100;
+    const rounded = Math.round(bp);
+    // Tolerance, not an exact-integer check — n*100 in floating point
+    // (e.g. 12.34 * 100 === 1233.9999999999998) must still be accepted;
+    // a genuine sub-basis-point remainder (12.345 -> 1234.5) must not.
+    if (Math.abs(bp - rounded) > 1e-6) {
+      throw new RangeError(
+        `Percent does not resolve to a whole basis-point value: ${String(percent)}`,
+      );
+    }
+    return rounded;
+  },
+
+  /** Inverse of fromPercent — basis points to a whole-or-fractional percent, for display. */
+  toPercent(basisPoints: number): number {
+    return basisPoints / 100;
+  },
+
   negate(paisa: Paisa): Paisa {
     return Money.subtract(Money.ZERO, paisa);
   },
