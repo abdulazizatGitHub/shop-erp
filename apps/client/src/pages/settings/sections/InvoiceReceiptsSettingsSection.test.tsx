@@ -14,7 +14,20 @@ vi.mock('../../../lib/ipc.js', () => ({
 }));
 
 import { ipc } from '../../../lib/ipc.js';
+import { SettingsSectionFrame } from '../SettingsSectionFrame.js';
 import { InvoiceReceiptsSettingsSection } from './InvoiceReceiptsSettingsSection.js';
+
+// FIX-B (P16-1b review): Save now renders in SettingsSectionFrame's shared
+// bottom action bar (via useSectionActions), not inline in the section's
+// own JSX — so the section must be rendered inside a frame here, matching
+// how SettingsPage.tsx actually composes it.
+function renderInFrame(): ReturnType<typeof render> {
+  return render(
+    <SettingsSectionFrame title="Invoices & Receipts" description="">
+      <InvoiceReceiptsSettingsSection />
+    </SettingsSectionFrame>,
+  );
+}
 
 const getShopIdentity = vi.mocked(ipc.setting.getShopIdentity);
 const setShopIdentity = vi.mocked(ipc.setting.setShopIdentity);
@@ -43,7 +56,7 @@ describe('InvoiceReceiptsSettingsSection — ONE Save (owner correction), paper 
     setShopIdentity.mockResolvedValue(undefined);
     setReceiptPaperSize.mockResolvedValue(undefined);
 
-    render(<InvoiceReceiptsSettingsSection />);
+    renderInFrame();
     await screen.findByDisplayValue('Old header');
 
     fireEvent.change(screen.getByLabelText('Invoice header text'), {
@@ -64,7 +77,7 @@ describe('InvoiceReceiptsSettingsSection — ONE Save (owner correction), paper 
     getShopIdentity.mockResolvedValue(IDENTITY);
     getReceiptPaperSize.mockResolvedValue('A4');
 
-    render(<InvoiceReceiptsSettingsSection />);
+    renderInFrame();
     await screen.findByDisplayValue('Old header');
 
     const saveButton = screen.getByText('Save');
@@ -82,7 +95,7 @@ describe('InvoiceReceiptsSettingsSection — ONE Save (owner correction), paper 
     setShopIdentity.mockResolvedValue(undefined);
     setReceiptPaperSize.mockRejectedValueOnce(new Error('disk full'));
 
-    render(<InvoiceReceiptsSettingsSection />);
+    renderInFrame();
     await screen.findByDisplayValue('Old header');
 
     fireEvent.click(screen.getByText('A5'));

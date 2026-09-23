@@ -4,6 +4,7 @@ import { Alert, Button, TextInput } from '@shop/ui';
 import { ipc } from '../../../lib/ipc.js';
 import { blankToNull } from '../formHelpers.js';
 import { useSettingsDirty } from '../SettingsDirtyContext.js';
+import { useSectionActions } from '../SettingsSectionFrame.js';
 
 interface FormState {
   readonly shopName: string;
@@ -94,6 +95,18 @@ export function ShopSettingsSection(): React.JSX.Element {
     }
   }
 
+  useSectionActions(
+    <Button
+      variant="primary"
+      disabled={loading || saving || !dirty}
+      onClick={() => {
+        void save();
+      }}
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </Button>,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
@@ -131,17 +144,6 @@ export function ShopSettingsSection(): React.JSX.Element {
             update('shopEmail', e.target.value);
           }}
         />
-      </div>
-      <div className="mt-4 flex justify-end">
-        <Button
-          variant="primary"
-          disabled={loading || saving || !dirty}
-          onClick={() => {
-            void save();
-          }}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
       </div>
     </div>
   );

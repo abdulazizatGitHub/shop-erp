@@ -12,7 +12,20 @@ vi.mock('../../../lib/ipc.js', () => ({
 }));
 
 import { ipc } from '../../../lib/ipc.js';
+import { SettingsSectionFrame } from '../SettingsSectionFrame.js';
 import { ShopSettingsSection } from './ShopSettingsSection.js';
+
+// FIX-B (P16-1b review): Save now renders in SettingsSectionFrame's shared
+// bottom action bar (via useSectionActions), not inline in the section's
+// own JSX — so the section must be rendered inside a frame here, matching
+// how SettingsPage.tsx actually composes it.
+function renderInFrame(): ReturnType<typeof render> {
+  return render(
+    <SettingsSectionFrame title="Shop" description="">
+      <ShopSettingsSection />
+    </SettingsSectionFrame>,
+  );
+}
 
 const getShopIdentity = vi.mocked(ipc.setting.getShopIdentity);
 const setShopIdentity = vi.mocked(ipc.setting.setShopIdentity);
@@ -48,7 +61,7 @@ describe('ShopSettingsSection — save-time fresh fetch + overlay (owner correct
       .mockResolvedValueOnce(FRESH_AT_SAVE_IDENTITY);
     setShopIdentity.mockResolvedValue(undefined);
 
-    render(<ShopSettingsSection />);
+    renderInFrame();
     await screen.findByDisplayValue('Old Name');
 
     fireEvent.change(screen.getByLabelText('Shop name (printed on every document)'), {
@@ -74,7 +87,7 @@ describe('ShopSettingsSection — save-time fresh fetch + overlay (owner correct
     getShopIdentity.mockResolvedValue(MOUNT_IDENTITY);
     setShopIdentity.mockRejectedValueOnce(new Error('DB is busy'));
 
-    render(<ShopSettingsSection />);
+    renderInFrame();
     await screen.findByDisplayValue('Old Name');
 
     fireEvent.change(screen.getByLabelText('Shop name (printed on every document)'), {

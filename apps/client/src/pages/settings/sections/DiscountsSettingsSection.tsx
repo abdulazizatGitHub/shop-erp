@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button } from '@shop/ui';
 import { ipc } from '../../../lib/ipc.js';
 import { useSettingsDirty } from '../SettingsDirtyContext.js';
+import { useSectionActions } from '../SettingsSectionFrame.js';
 
 /** Splits a comma-separated preset draft into trimmed, non-empty, positive-numeric strings. Invalid tokens are dropped, not rejected — matches the light validation style of the wholesale-discount card this replaces. */
 function parsePresetCsv(csv: string): readonly string[] {
@@ -111,6 +112,12 @@ export function DiscountsSettingsSection(): React.JSX.Element {
       });
   }
 
+  useSectionActions(
+    <Button variant="primary" disabled={loading || saving || !dirty} onClick={save}>
+      {saving ? 'Saving…' : 'Save'}
+    </Button>,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
@@ -190,12 +197,6 @@ export function DiscountsSettingsSection(): React.JSX.Element {
           }}
           className="w-full rounded-md border border-line bg-surface-input px-3 py-2 text-sm disabled:opacity-50"
         />
-      </div>
-
-      <div className="mt-4 flex justify-end">
-        <Button variant="primary" disabled={loading || saving || !dirty} onClick={save}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
       </div>
     </div>
   );

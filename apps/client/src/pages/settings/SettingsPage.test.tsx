@@ -90,6 +90,28 @@ describe('SettingsPage — P16-1b routing (OD-16-11)', () => {
     });
   });
 
+  it('FIX-A: starting at "/" (App.tsx switching the main sidebar tab never touches the hash) redirects to /settings/shop, Shop active', async () => {
+    renderAt('/');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Shop' })).toBeTruthy();
+    });
+    expect(screen.getByRole('link', { name: /^Shop/ }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('FIX-A: starting at an unrecognized /settings/* path redirects to /settings/shop', async () => {
+    renderAt('/settings/nonsense');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Shop' })).toBeTruthy();
+    });
+  });
+
+  it('FIX-A: starting at a valid deep-linked section (e.g. /settings/backup) renders it directly, no redirect', async () => {
+    renderAt('/settings/backup');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Backup & Restore' })).toBeTruthy();
+    });
+  });
+
   it.each([
     ['Shop', 'Shop'],
     ['Invoices & Receipts', 'Invoices & Receipts'],

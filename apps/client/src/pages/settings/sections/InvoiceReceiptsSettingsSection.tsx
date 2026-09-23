@@ -5,6 +5,7 @@ import { Alert, Button, TextInput } from '@shop/ui';
 import { ipc } from '../../../lib/ipc.js';
 import { blankToNull } from '../formHelpers.js';
 import { useSettingsDirty } from '../SettingsDirtyContext.js';
+import { useSectionActions } from '../SettingsSectionFrame.js';
 
 interface FormState {
   readonly invoiceHeaderText: string;
@@ -132,6 +133,18 @@ export function InvoiceReceiptsSettingsSection(): React.JSX.Element {
     setMessage('Invoices & receipts settings saved.');
   }
 
+  useSectionActions(
+    <Button
+      variant="primary"
+      disabled={loading || saving || !dirty}
+      onClick={() => {
+        void save();
+      }}
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </Button>,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {error && <Alert variant="danger">{error}</Alert>}
@@ -186,17 +199,6 @@ export function InvoiceReceiptsSettingsSection(): React.JSX.Element {
             A5
           </Button>
         </div>
-      </div>
-      <div className="mt-4 flex justify-end">
-        <Button
-          variant="primary"
-          disabled={loading || saving || !dirty}
-          onClick={() => {
-            void save();
-          }}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
       </div>
     </div>
   );

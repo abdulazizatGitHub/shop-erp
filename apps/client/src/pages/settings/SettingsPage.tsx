@@ -35,7 +35,6 @@ export function SettingsPage(): React.JSX.Element {
         <div className="flex overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
           <SettingsNav />
           <Routes>
-            <Route path="/settings" element={<Navigate to="/settings/shop" replace />} />
             <Route
               path="/settings/shop"
               element={
@@ -114,6 +113,15 @@ export function SettingsPage(): React.JSX.Element {
                 </SettingsSectionFrame>
               }
             />
+            {/* FIX-A (P16-1b review): App.tsx's main-sidebar tab switch never
+                touches the hash, so Settings can mount at "/" or any other
+                non-/settings path — not just the literal "/settings" this
+                used to redirect. A wildcard route (lowest React Router
+                specificity — ranked after every route above regardless of
+                declaration order, so it only matches when none of them did)
+                catches every one of those, not just the exact "/settings"
+                case the tests happened to start from. */}
+            <Route path="*" element={<Navigate to="/settings/shop" replace />} />
           </Routes>
         </div>
       </div>
