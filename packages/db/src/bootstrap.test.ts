@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('seed', () => {
-  it('inserts the tenant, three business units, one price level, ten uoms, one warehouse, six expense categories', () => {
+  it('inserts the tenant, three business units, one price level, ten uoms, one warehouse, six expense categories, eighteen brands', () => {
     const db = new Database(dbPath);
     const result = seed(db, TENANT_ID);
     db.close();
@@ -35,6 +35,7 @@ describe('seed', () => {
       uomsInserted: 10,
       warehousesInserted: 1,
       expenseCategoriesInserted: 6,
+      brandsInserted: 18,
     });
   });
 
@@ -51,7 +52,62 @@ describe('seed', () => {
       uomsInserted: 0,
       warehousesInserted: 0,
       expenseCategoriesInserted: 0,
+      brandsInserted: 0,
     });
+  });
+
+  it('P16-2/OD-16-7: seeds exactly 18 brands, all is_active=1, no case-insensitive duplicates', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const rows = db
+      .prepare(`SELECT name, is_active AS isActive FROM brand WHERE tenant_id = ? ORDER BY name`)
+      .all(TENANT_ID) as { name: string; isActive: number }[];
+    db.close();
+
+    expect(rows).toHaveLength(18);
+    expect(rows.every((r) => r.isActive === 1)).toBe(true);
+    const names = rows.map((r) => r.name).sort();
+    expect(names).toEqual(
+      [
+        'Changhong Ruba',
+        'Daikin',
+        'Dawlance',
+        'Ecostar',
+        'Gree',
+        'Haier',
+        'Homage',
+        'Kenwood',
+        'LG',
+        'Mitsubishi',
+        'Nasgas',
+        'Orient',
+        'PEL',
+        'Panasonic',
+        'Samsung',
+        'TCL',
+        'Waves',
+        'Westpoint',
+      ].sort(),
+    );
+    const normalized = new Set(names.map((n) => n.toLowerCase()));
+    expect(normalized.size).toBe(18);
+  });
+
+  it('P16-2/OD-16-7: does not re-create a soft-deleted starter brand on re-seed', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    db.prepare(`UPDATE brand SET deleted_at = ? WHERE tenant_id = ? AND name = 'Haier'`).run(
+      new Date().toISOString(),
+      TENANT_ID,
+    );
+    const second = seed(db, TENANT_ID);
+    const haierRows = db
+      .prepare(`SELECT id FROM brand WHERE tenant_id = ? AND name = 'Haier'`)
+      .all(TENANT_ID);
+    db.close();
+
+    expect(second.brandsInserted).toBe(0);
+    expect(haierRows).toHaveLength(1);
   });
 
   it('seeds exactly one default "Shop" warehouse', () => {

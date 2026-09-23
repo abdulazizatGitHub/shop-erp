@@ -8,6 +8,7 @@ export interface SeedResult {
   readonly uomsInserted: number;
   readonly warehousesInserted: number;
   readonly expenseCategoriesInserted: number;
+  readonly brandsInserted: number;
 }
 
 interface BusinessUnitSeed {
@@ -211,6 +212,54 @@ function seedExpenseCategories(db: Database.Database, tenantId: string): number 
   return inserted;
 }
 
+// Phase 16, P16-2/OD-16-7 — starter appliance brands. Per-name check
+// (case-insensitive, including soft-deleted rows), not a global-empty
+// gate: safe to re-run every startup without ever attempting a duplicate
+// insert against UNIQUE(tenant_id, name), and never re-creates a brand
+// the owner has deliberately deleted. 17 real-world brands plus the one
+// name from the old hardcoded BRAND_OPTIONS constant not already in that
+// list (Waves) — 18 total (docs/phases/PHASE_16.md §4 P16-2 exit
+// criterion: exactly 18 on a fresh DB, not "at least").
+const STARTER_BRANDS: readonly string[] = [
+  'Dawlance',
+  'Haier',
+  'PEL',
+  'Orient',
+  'Gree',
+  'Kenwood',
+  'TCL',
+  'Samsung',
+  'LG',
+  'Ecostar',
+  'Panasonic',
+  'Changhong Ruba',
+  'Homage',
+  'Nasgas',
+  'Westpoint',
+  'Daikin',
+  'Mitsubishi',
+  'Waves',
+];
+
+function seedBrands(db: Database.Database, tenantId: string): number {
+  const existingRows = db.prepare(`SELECT name FROM brand WHERE tenant_id = ?`).all(tenantId) as {
+    name: string;
+  }[];
+  const existingNormalized = new Set(existingRows.map((r) => r.name.trim().toLowerCase()));
+
+  let inserted = 0;
+  for (const name of STARTER_BRANDS) {
+    const normalized = name.trim().toLowerCase();
+    if (existingNormalized.has(normalized)) continue;
+    db.prepare(
+      `INSERT INTO brand (id, tenant_id, name, deleted_at, is_active) VALUES (?, ?, ?, NULL, 1)`,
+    ).run(newId(), tenantId, name);
+    existingNormalized.add(normalized);
+    inserted += 1;
+  }
+  return inserted;
+}
+
 function seedWarehouse(db: Database.Database, tenantId: string): number {
   const existing = db
     .prepare(`SELECT id FROM warehouse WHERE tenant_id = ? AND name = ?`)
@@ -240,6 +289,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     uomsInserted: 0,
     warehousesInserted: 0,
     expenseCategoriesInserted: 0,
+    brandsInserted: 0,
   };
 
   const runSeed = db.transaction(() => {
@@ -254,6 +304,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
     seedUomConversions(db, tenantId);
     const warehousesInserted = seedWarehouse(db, tenantId);
     const expenseCategoriesInserted = seedExpenseCategories(db, tenantId);
+    const brandsInserted = seedBrands(db, tenantId);
     result = {
       tenantInserted,
       businessUnitsInserted,
@@ -261,6 +312,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
       uomsInserted,
       warehousesInserted,
       expenseCategoriesInserted,
+      brandsInserted,
     };
   });
   runSeed();

@@ -118,6 +118,7 @@ export interface BrandTable {
   tenantId: string;
   name: string;
   deletedAt: string | null;
+  isActive: number;
 }
 
 export interface SettingTable {

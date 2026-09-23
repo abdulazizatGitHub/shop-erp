@@ -44,6 +44,7 @@ describe('migrate', () => {
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
       '0016_job_client.sql',
+      '0017_brand_is_active.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
@@ -97,6 +98,7 @@ describe('migrate', () => {
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
       '0016_job_client.sql',
+      '0017_brand_is_active.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -126,6 +128,7 @@ describe('migrate', () => {
       { version: 14, name: '0014_purchase_order_grn.sql' },
       { version: 15, name: '0015_job_technician.sql' },
       { version: 16, name: '0016_job_client.sql' },
+      { version: 17, name: '0017_brand_is_active.sql' },
     ]);
   });
 
@@ -230,7 +233,7 @@ describe('migrate', () => {
     ).run(ledgerId, tenantId, partyId, new Date().toISOString());
     db.close();
 
-    // Now migrate onward with the full directory — applies 0004-0012.
+    // Now migrate onward with the full directory — applies 0004-0017.
     const result = migrate(dbPath, migrationsDir, backupDir);
     expect(result.applied).toEqual([
       '0004_party_ledger_bill_metadata.sql',
@@ -246,6 +249,7 @@ describe('migrate', () => {
       '0014_purchase_order_grn.sql',
       '0015_job_technician.sql',
       '0016_job_client.sql',
+      '0017_brand_is_active.sql',
     ]);
 
     db = new Database(dbPath);

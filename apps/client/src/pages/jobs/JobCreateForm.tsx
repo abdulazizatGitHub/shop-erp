@@ -6,6 +6,7 @@ import { JobAddressFields } from './JobAddressFields.js';
 import { JobApplianceFields } from './JobApplianceFields.js';
 import { JobClientPicker } from './JobClientPicker.js';
 import { JobTypeToggle, type JobTypeChoice } from './JobTypeToggle.js';
+import { useActiveBrands } from './useActiveBrands.js';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -40,6 +41,7 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
   const [brandChoice, setBrandChoice] = useState('');
   const [brandOther, setBrandOther] = useState('');
   const brand = brandChoice === 'Other' ? brandOther : brandChoice;
+  const { brands: brandOptions, error: brandsError } = useActiveBrands();
   const [reportedFault, setReportedFault] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -227,6 +229,8 @@ export function JobCreateForm({ onCreated, onCancel }: JobCreateFormProps): Reac
         onBrandChoiceChange={setBrandChoice}
         brandOther={brandOther}
         onBrandOtherChange={setBrandOther}
+        brandOptions={brandOptions}
+        brandsError={brandsError}
       />
 
       <TextInput

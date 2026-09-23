@@ -26,6 +26,11 @@ vi.mock('../../lib/ipc.js', () => ({
     job: {
       listServiceChargesAdmin: vi.fn(),
     },
+    brand: {
+      listAdmin: vi.fn(),
+      create: vi.fn(),
+      toggleActive: vi.fn(),
+    },
   },
 }));
 
@@ -42,6 +47,7 @@ const getDiscountPctEnabled = vi.mocked(ipc.setting.getDiscountPctEnabled);
 const getDiscountPkrPresets = vi.mocked(ipc.setting.getDiscountPkrPresets);
 const getDiscountPctPresets = vi.mocked(ipc.setting.getDiscountPctPresets);
 const listServiceChargesAdmin = vi.mocked(ipc.job.listServiceChargesAdmin);
+const listBrandsAdmin = vi.mocked(ipc.brand.listAdmin);
 
 const IDENTITY = {
   shopName: 'Malakand AC & Fridge',
@@ -64,6 +70,7 @@ function mockEverything(): void {
   getDiscountPkrPresets.mockResolvedValue([]);
   getDiscountPctPresets.mockResolvedValue([]);
   listServiceChargesAdmin.mockResolvedValue([]);
+  listBrandsAdmin.mockResolvedValue([]);
 }
 
 afterEach(() => {

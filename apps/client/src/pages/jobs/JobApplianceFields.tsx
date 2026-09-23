@@ -1,28 +1,6 @@
-import { Select, TextInput } from '@shop/ui';
+import { Alert, Select, TextInput } from '@shop/ui';
 
 const APPLIANCE_TYPES = ['AC', 'Fridge', 'Oven', 'Other'] as const;
-
-/**
- * V1 — the `brand` table (0001_init.sql) exists but has zero seeded rows
- * anywhere in the codebase (confirmed by grep across every migration and
- * bootstrap.ts before writing this) and no IPC channel exposes it yet —
- * a hardcoded fallback list per this task's own instructions, not a new
- * job:listBrands read against an empty table. "Other" always reveals a
- * free-text input so no real brand is ever blocked.
- */
-export const BRAND_OPTIONS = [
-  'Dawlance',
-  'Gree',
-  'Haier',
-  'PEL',
-  'Orient',
-  'Waves',
-  'Samsung',
-  'LG',
-  'Kenwood',
-  'Changhong Ruba',
-  'Other',
-] as const;
 
 export interface JobApplianceFieldsProps {
   readonly applianceType: string;
@@ -31,6 +9,10 @@ export interface JobApplianceFieldsProps {
   readonly onBrandChoiceChange: (value: string) => void;
   readonly brandOther: string;
   readonly onBrandOtherChange: (value: string) => void;
+  /** P16-2 — live, active brand names (useActiveBrands.ts). "Other" is always appended, never fetched. */
+  readonly brandOptions: readonly string[];
+  /** Set when the brand list failed to load — shown inline; the picker still works via "Other". */
+  readonly brandsError?: string | null;
 }
 
 /**
@@ -39,6 +21,11 @@ export interface JobApplianceFieldsProps {
  * ceiling before this task, per P15-3's own flagged debt on
  * job.repository.ts) so the intake form doesn't grow past it. No
  * behaviour change from what JobCreateForm.tsx rendered inline before.
+ *
+ * P16-2 — the brand list is no longer a hardcoded constant; it's fetched
+ * by the caller (useActiveBrands.ts) and passed in as `brandOptions`. If
+ * it failed to load, `brandsError` is shown but the dropdown still works
+ * via "Other" — intake is never blocked on this read.
  */
 export function JobApplianceFields({
   applianceType,
@@ -47,6 +34,8 @@ export function JobApplianceFields({
   onBrandChoiceChange,
   brandOther,
   onBrandOtherChange,
+  brandOptions,
+  brandsError,
 }: JobApplianceFieldsProps): React.JSX.Element {
   return (
     <>
@@ -74,12 +63,16 @@ export function JobApplianceFields({
         }}
       >
         <option value="">—</option>
-        {BRAND_OPTIONS.map((b) => (
+        {brandOptions.map((b) => (
           <option key={b} value={b}>
             {b}
           </option>
         ))}
+        <option value="Other">Other</option>
       </Select>
+      {brandsError && (
+        <Alert variant="danger">Brand list unavailable ({brandsError}) — use "Other" below.</Alert>
+      )}
 
       {brandChoice === 'Other' && (
         <TextInput

@@ -39,6 +39,7 @@ export { KyselyJobClientRepository } from './repositories/job-client.repository.
 export { KyselyJobPartRepository } from './repositories/job-part.repository.js';
 export { KyselyJobDeliveryRepository } from './repositories/job-delivery.repository.js';
 export { KyselyServiceChargeRepository } from './repositories/service-charge.repository.js';
+export { KyselyBrandRepository } from './repositories/brand.repository.js';
 export { KyselyInternalTransferRepository } from './repositories/internal-transfer.repository.js';
 export { KyselyCustodyRepository } from './repositories/custody.repository.js';
 export {
@@ -48,6 +49,7 @@ export {
   listUomConversions,
   listTechnicians,
   listServiceCharges,
+  listActiveBrands,
   listPriceLevels,
   getItemPrices,
 } from './repositories/lookup.repository.js';
@@ -58,6 +60,7 @@ export type {
   UomConversionOption,
   TechnicianOption,
   ServiceChargeOption,
+  BrandOption,
   PriceLevelOption,
   ItemPricePreview,
 } from './repositories/lookup.repository.js';

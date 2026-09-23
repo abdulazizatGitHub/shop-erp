@@ -44,6 +44,11 @@ export interface PriceLevelOption {
   readonly name: string;
 }
 
+export interface BrandOption {
+  readonly id: string;
+  readonly name: string;
+}
+
 /** CL-9. AddCustomerModal's price-level dropdown. Plain reference read — no port/service. */
 export async function listPriceLevels(
   db: Kysely<Database>,
@@ -155,6 +160,28 @@ export async function listServiceCharges(
     businessUnitId: r.businessUnitId,
     retailChargePaisa: r.retailCharge,
   }));
+}
+
+/**
+ * Job-intake brand dropdown (OD-16-6/P16-2). `isActive=1` only —
+ * `deleted_at` is untouched by this filter and by every Phase 16 code
+ * path (§2c): CSV/item brand matching keeps filtering `deleted_at IS
+ * NULL` alone, ignoring `is_active` entirely, so this dropdown and CSV
+ * import can disagree about a given brand on purpose.
+ */
+export async function listActiveBrands(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<readonly BrandOption[]> {
+  const rows = await db
+    .selectFrom('brand')
+    .select(['id', 'name'])
+    .where('tenantId', '=', tenantId)
+    .where('deletedAt', 'is', null)
+    .where('isActive', '=', 1)
+    .orderBy('name')
+    .execute();
+  return rows;
 }
 
 export interface ItemPricePreview {

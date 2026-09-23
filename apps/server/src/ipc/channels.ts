@@ -106,6 +106,12 @@ export const channels = {
     create: 'jobClient:create',
     getById: 'jobClient:getById',
   },
+  brand: {
+    list: 'brand:list',
+    listAdmin: 'brand:listAdmin',
+    create: 'brand:create',
+    toggleActive: 'brand:toggleActive',
+  },
   uom: { listConversions: 'uom:listConversions' },
   report: {
     dailySales: 'report:dailySales',

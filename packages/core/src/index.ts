@@ -233,6 +233,18 @@ export {
   listServiceChargesAdmin,
 } from './job/service-charge.service.js';
 
+export type {
+  NewBrandInput,
+  BrandRecord,
+  BrandRepositoryPort,
+} from './job/brand.repository.port.js';
+export {
+  normalizeBrandName,
+  createBrand,
+  toggleBrandActive,
+  listBrandsAdmin,
+} from './job/brand.service.js';
+
 export type { CancelJobInput, JobCancelRepositoryPort } from './job/job-cancel.repository.port.js';
 export { cancelJob } from './job/job-cancel.service.js';
 

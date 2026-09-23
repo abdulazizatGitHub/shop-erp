@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/ipc.js', () => ({
@@ -15,6 +15,9 @@ vi.mock('../../lib/ipc.js', () => ({
     job: {
       create: vi.fn(),
     },
+    brand: {
+      list: vi.fn().mockResolvedValue([{ id: 'brand-gree', name: 'Gree' }]),
+    },
   },
 }));
 
@@ -24,11 +27,23 @@ import { JobCreateForm } from './JobCreateForm.js';
 const jobCreate = vi.mocked(ipc.job.create);
 const customerCreate = vi.mocked(ipc.customer.create);
 const jobClientSearch = vi.mocked(ipc.jobClient.search);
+const brandList = vi.mocked(ipc.brand.list);
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  brandList.mockResolvedValue([{ id: 'brand-gree', name: 'Gree' }]);
+});
 
-function fillRequiredFieldsExceptPhone(): void {
+async function fillRequiredFieldsExceptPhone(): Promise<void> {
   fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'Test Customer' } });
+  // P16-2 — the brand dropdown is now populated by a live ipc.brand.list()
+  // fetch (useActiveBrands.ts), not a hardcoded constant, so "Gree" isn't
+  // selectable as an <option> until that resolves.
+  await waitFor(() => {
+    expect(
+      screen.getByLabelText<HTMLSelectElement>('Brand').querySelector('option[value="Gree"]'),
+    ).toBeTruthy();
+  });
   fireEvent.change(screen.getByLabelText('Brand'), { target: { value: 'Gree' } });
   fireEvent.change(screen.getByLabelText('Reported fault'), { target: { value: 'Not cooling' } });
 }
@@ -37,7 +52,7 @@ describe('JobCreateForm (P14-2)', () => {
   it('blocks submission and shows an error when the phone field has 10 digits, not 11', async () => {
     render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
 
-    fillRequiredFieldsExceptPhone();
+    await fillRequiredFieldsExceptPhone();
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '0300123456' } });
 
     fireEvent.click(screen.getByText('Create Job'));
@@ -52,11 +67,21 @@ describe('JobCreateForm (P14-2)', () => {
   it('blocks submission and shows an error when the phone field is empty', async () => {
     render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
 
-    fillRequiredFieldsExceptPhone();
+    await fillRequiredFieldsExceptPhone();
     fireEvent.click(screen.getByText('Create Job'));
 
     expect(await screen.findByText('Phone is required')).toBeTruthy();
     expect(jobCreate).not.toHaveBeenCalled();
+  });
+
+  it('P16-2: if the brand list fails to load, intake is never blocked — "Other" is still selectable and an error is shown', async () => {
+    brandList.mockRejectedValueOnce(new Error('IPC timeout'));
+
+    render(<JobCreateForm onCreated={() => {}} onCancel={() => {}} />);
+
+    await screen.findByText(/Brand list unavailable/);
+    fireEvent.change(screen.getByLabelText('Brand'), { target: { value: 'Other' } });
+    expect(screen.getByLabelText('Brand (other)')).toBeTruthy();
   });
 
   it('non-digit characters typed into the phone field are stripped, not rejected at submit', () => {

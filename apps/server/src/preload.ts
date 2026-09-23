@@ -59,6 +59,9 @@ import type {
   UpdateServiceChargeInput,
   ToggleServiceChargeInput,
   ServiceChargeAdminDto,
+  CreateBrandInput,
+  ToggleBrandInput,
+  BrandAdminDto,
   PartyAnyDto,
   PartySearchAnyInput,
   PaymentDto,
@@ -132,6 +135,7 @@ import type {
 } from '@shop/core';
 import type {
   BusinessUnitOption,
+  BrandOption,
   ReceiptPaperSize,
   ServiceChargeOption,
   ItemPriceHistoryRow,
@@ -440,6 +444,16 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.jobClient.create, input) as Promise<JobClientDto>,
     getById: (id: string): Promise<JobClientDto | null> =>
       ipcRenderer.invoke(channels.jobClient.getById, { id }) as Promise<JobClientDto | null>,
+  },
+  brand: {
+    list: (): Promise<readonly BrandOption[]> =>
+      ipcRenderer.invoke(channels.brand.list) as Promise<readonly BrandOption[]>,
+    listAdmin: (): Promise<readonly BrandAdminDto[]> =>
+      ipcRenderer.invoke(channels.brand.listAdmin) as Promise<readonly BrandAdminDto[]>,
+    create: (input: CreateBrandInput): Promise<BrandAdminDto> =>
+      ipcRenderer.invoke(channels.brand.create, input) as Promise<BrandAdminDto>,
+    toggleActive: (input: ToggleBrandInput): Promise<BrandAdminDto> =>
+      ipcRenderer.invoke(channels.brand.toggleActive, input) as Promise<BrandAdminDto>,
   },
   uom: {
     listConversions: (): Promise<readonly UomConversionOption[]> =>

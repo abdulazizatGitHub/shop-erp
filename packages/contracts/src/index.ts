@@ -143,6 +143,8 @@ export {
   ServiceChargeAdminDto,
 } from './job/service-charge.js';
 
+export { CreateBrandInput, ToggleBrandInput, BrandAdminDto } from './job/brand.js';
+
 export {
   PurchaseLineInput,
   CreatePurchaseInput,

@@ -109,6 +109,40 @@ describe('full import pipeline against the real DB', () => {
     expect(count.n).toBe(4);
   });
 
+  it('P16-2: a deactivated brand (is_active=0) still matches on CSV item import — is_active is ignored, only deleted_at matters (§2c)', async () => {
+    const haier = rawDb
+      .prepare(`SELECT id FROM brand WHERE tenant_id = ? AND name = 'Haier'`)
+      .get(TENANT_ID) as { id: string };
+    rawDb
+      .prepare(`UPDATE brand SET is_active = 0 WHERE tenant_id = ? AND name = 'Haier'`)
+      .run(TENANT_ID);
+
+    const csvText =
+      'Item Code,Item Name (English),Item Name (Urdu),Owning Business Unit,Category,' +
+      'Brand / Company,Variant / Spec,Selling Unit,Purchase Unit,Units per Purchase Unit,' +
+      'Track Stock? (Y/N),Has Serial No? (Y/N),Purchase Price (PKR),Retail Price (PKR),' +
+      'Wholesale Price (PKR),Low Stock Alert Qty,Shelf / Location,Notes\n' +
+      'HAIER-AC-01,Haier 1.5 Ton AC,,Spare Parts,,Haier,,Piece,Piece,1,Y,N,80000,95000,90000,2,Shelf E1,';
+    const { rows } = parseCsv(csvText, ITEM_COLUMNS);
+    const lookups = await repo.getItemImportLookups();
+    const results = validateItemRows(rows, lookups);
+    const accepted = results.filter((r) => r.status === 'accepted');
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]?.record.brandId).toBe(haier.id);
+
+    await repo.insertImportedItems(accepted.map((r) => r.record));
+
+    const itemRow = rawDb
+      .prepare(`SELECT brand_id AS brandId FROM item WHERE tenant_id = ? AND item_code = ?`)
+      .get(TENANT_ID, 'HAIER-AC-01') as { brandId: string };
+    expect(itemRow.brandId).toBe(haier.id);
+
+    const brandCount = rawDb
+      .prepare(`SELECT COUNT(*) AS n FROM brand WHERE tenant_id = ? AND name = 'Haier'`)
+      .get(TENANT_ID) as { n: number };
+    expect(brandCount.n).toBe(1);
+  });
+
   it('posts opening stock and matches names case-insensitively, end to end', async () => {
     await importItemsFixture();
     const warehouseId = await repo.getDefaultWarehouseId();

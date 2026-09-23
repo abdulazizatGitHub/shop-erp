@@ -1,0 +1,24 @@
+-- =====================================================================
+--  ADDENDUM 17 - BRAND.IS_ACTIVE
+--  Migration version 17.
+-- =====================================================================
+--
+--  WHY THIS EXISTS
+--  Phase 16, P16-2 (docs/phases/PHASE_16.md §2c, OD-16-6). The job-intake
+--  brand dropdown needs a way to hide a brand without breaking the CSV
+--  item importer's existing brand-name matching (import.repository.ts /
+--  item-import.ts, which filters brand.deleted_at IS NULL) and without
+--  the UNIQUE(tenant_id, name) collision a re-added soft-deleted name
+--  would hit. Reusing deleted_at as "inactive" was considered and
+--  rejected for both reasons (§2c).
+--
+--  is_active governs ONLY the job-intake dropdown. CSV/item brand
+--  matching is untouched — it keeps filtering deleted_at IS NULL only
+--  and ignores is_active entirely. deleted_at itself is not written by
+--  any Phase 16 code path.
+--
+--  Applied inside migration-runner.ts's own transaction wrapper — same
+--  note as every migration from 0006 on: no explicit BEGIN here.
+-- =====================================================================
+
+ALTER TABLE brand ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;

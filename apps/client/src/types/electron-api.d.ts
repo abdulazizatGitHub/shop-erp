@@ -60,6 +60,9 @@ import type {
   UpdateServiceChargeInput,
   ToggleServiceChargeInput,
   ServiceChargeAdminDto,
+  CreateBrandInput,
+  ToggleBrandInput,
+  BrandAdminDto,
   PaymentDto,
   PaymentReceiptDataDto,
   PurchaseIdInput,
@@ -312,6 +315,12 @@ export interface ServiceChargeOption {
   readonly retailChargePaisa: number;
 }
 
+/** Mirrors @shop/db's BrandOption. */
+export interface BrandOption {
+  readonly id: string;
+  readonly name: string;
+}
+
 export interface UomConversionOption {
   readonly id: string;
   readonly fromUomId: string;
@@ -538,6 +547,12 @@ export interface ElectronApi {
     readonly search: (input: SearchJobClientsInput) => Promise<readonly JobClientDto[]>;
     readonly create: (input: CreateJobClientInput) => Promise<JobClientDto>;
     readonly getById: (id: string) => Promise<JobClientDto | null>;
+  };
+  readonly brand: {
+    readonly list: () => Promise<readonly BrandOption[]>;
+    readonly listAdmin: () => Promise<readonly BrandAdminDto[]>;
+    readonly create: (input: CreateBrandInput) => Promise<BrandAdminDto>;
+    readonly toggleActive: (input: ToggleBrandInput) => Promise<BrandAdminDto>;
   };
   readonly uom: {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;
