@@ -413,15 +413,15 @@ resolves to the same `brand.id` and imports successfully; no second
 
 ## 3. Tasks
 
-| ID     | Task                                                | Depends on                         | Status                                                                             | Commit  |
-| ------ | --------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------- | ------- |
-| P16-1  | Service charge management                           | —                                  | DONE                                                                               | 55f0438 |
-| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                                               | 320e602 |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                                               | c0294bf |
-| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | DONE (Checkpoint 1 7eedff6, Checkpoint 1b 0f6ee92, Checkpoint 2 — see PROGRESS.md) | 0f6ee92 |
-| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                                        | —       |
-| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                                        | —       |
-| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                                        | —       |
+| ID     | Task                                                | Depends on                         | Status                                                                   | Commit  |
+| ------ | --------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ | ------- |
+| P16-1  | Service charge management                           | —                                  | DONE                                                                     | 55f0438 |
+| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                                     | 320e602 |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                                     | c0294bf |
+| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | DONE (Checkpoint 1 7eedff6, Checkpoint 1b 0f6ee92, Checkpoint 2 6e480e2) | 6e480e2 |
+| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                              | —       |
+| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                              | —       |
+| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                              | —       |
 
 Order: P16-1 → P16-1b → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One
 task at a time; verified and reviewed before the next begins.
