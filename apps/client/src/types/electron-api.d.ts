@@ -67,6 +67,7 @@ import type {
   RejectClaimInput,
   ReverseDecisionInput,
   PendingClaimSummaryDto,
+  ClaimSummaryDto,
   ClaimDetailDto,
   DecisionRecordDto,
   PaymentDto,
@@ -562,6 +563,7 @@ export interface ElectronApi {
   };
   readonly commission: {
     readonly listPending: () => Promise<readonly PendingClaimSummaryDto[]>;
+    readonly listAll: () => Promise<readonly ClaimSummaryDto[]>;
     readonly getDetail: (claimId: string) => Promise<ClaimDetailDto>;
     readonly approve: (input: ApproveClaimInput) => Promise<DecisionRecordDto>;
     readonly reject: (input: RejectClaimInput) => Promise<DecisionRecordDto>;

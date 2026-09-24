@@ -775,3 +775,90 @@ describe('KyselyCommissionDecisionRepository.listPendingClaims / getClaimDetail'
     await expect(decisionRepo.getClaimDetail('does-not-exist')).rejects.toThrow(/not found/);
   });
 });
+
+describe('KyselyCommissionDecisionRepository.listAllClaims (P16-3b)', () => {
+  it('a fresh claim (no decision) has status "pending" and carries the commission snapshot for the UI basis text', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+
+    const all = await decisionRepo.listAllClaims();
+    const summary = all.find((c) => c.claimId === claimId);
+    expect(summary).toMatchObject({
+      status: 'pending',
+      latestDecisionId: null,
+      latestDecisionTotalPaisa: null,
+      latestDecisionReason: null,
+      commissionMode: 'fixed',
+      commissionAmountPaisa: 50000,
+      commissionBp: null,
+    });
+  });
+
+  it('an approved (not reversed) claim has status "approved" and latestDecisionTotalPaisa = the sum of its recipients', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    assignTechnician(jobId, technicianBId, '2026-09-24T09:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+    const decision = await decisionRepo.approveClaim({
+      claimId,
+      recipients: [
+        { technicianPartyId: technicianAId, amountPaisa: 30000, outsideHistoryReason: null },
+        { technicianPartyId: technicianBId, amountPaisa: 20000, outsideHistoryReason: null },
+      ],
+      decidedAt: '2026-09-25',
+    });
+
+    const all = await decisionRepo.listAllClaims();
+    const summary = all.find((c) => c.claimId === claimId);
+    expect(summary).toMatchObject({
+      status: 'approved',
+      latestDecisionId: decision.id,
+      latestDecisionTotalPaisa: 50000,
+      latestDecisionReason: null,
+    });
+  });
+
+  it('a rejected claim has status "rejected" and latestDecisionReason = the reject reason', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+    const decision = await decisionRepo.rejectClaim({
+      claimId,
+      reason: 'Suggested amount looks wrong',
+      decidedAt: '2026-09-25',
+    });
+
+    const all = await decisionRepo.listAllClaims();
+    const summary = all.find((c) => c.claimId === claimId);
+    expect(summary).toMatchObject({
+      status: 'rejected',
+      latestDecisionId: decision.id,
+      latestDecisionTotalPaisa: null,
+      latestDecisionReason: 'Suggested amount looks wrong',
+    });
+  });
+
+  it('a reversed decision puts the claim back to status "pending" in listAllClaims (same OD-16-3a definition as listPendingClaims)', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+    const decision = await decisionRepo.approveClaim({
+      claimId,
+      recipients: [
+        { technicianPartyId: technicianAId, amountPaisa: 50000, outsideHistoryReason: null },
+      ],
+      decidedAt: '2026-09-25',
+    });
+    await decisionRepo.reverseDecision({
+      decisionId: decision.id,
+      reason: 'Wrong technician',
+      reversedAt: '2026-09-26',
+    });
+
+    const all = await decisionRepo.listAllClaims();
+    const summary = all.find((c) => c.claimId === claimId);
+    expect(summary?.status).toBe('pending');
+    expect(summary?.latestDecisionId).toBeNull();
+  });
+});

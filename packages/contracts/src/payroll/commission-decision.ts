@@ -51,8 +51,19 @@ export const PendingClaimSummaryDto = z.object({
   labourAmountPaisa: z.number().int(),
   suggestedAmountPaisa: z.number().int(),
   suggestedRecipientPartyId: z.string().uuid().nullable(),
+  commissionMode: z.enum(['fixed', 'bp']),
+  commissionAmountPaisa: z.number().int().nullable(),
+  commissionBp: z.number().int().nullable(),
 });
 export type PendingClaimSummaryDto = z.infer<typeof PendingClaimSummaryDto>;
+
+export const ClaimSummaryDto = PendingClaimSummaryDto.extend({
+  status: z.enum(['pending', 'approved', 'rejected']),
+  latestDecisionId: z.string().uuid().nullable(),
+  latestDecisionTotalPaisa: z.number().int().nullable(),
+  latestDecisionReason: z.string().nullable(),
+});
+export type ClaimSummaryDto = z.infer<typeof ClaimSummaryDto>;
 
 export const TechnicianHistoryEntryDto = z.object({
   technicianPartyId: z.string().uuid(),
@@ -90,6 +101,9 @@ export const ClaimDetailDto = z.object({
   labourAmountPaisa: z.number().int(),
   suggestedAmountPaisa: z.number().int(),
   suggestedRecipientPartyId: z.string().uuid().nullable(),
+  commissionMode: z.enum(['fixed', 'bp']),
+  commissionAmountPaisa: z.number().int().nullable(),
+  commissionBp: z.number().int().nullable(),
   technicianHistory: z.array(TechnicianHistoryEntryDto),
   decisions: z.array(DecisionRecordDto),
 });

@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a done, 761/761 tests; P16-3b next)
+**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b done, 799/799 tests; P16-3c next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -419,7 +419,7 @@ resolves to the same `brand.id` and imports successfully; no second
 | P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                                     | 320e602 |
 | P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                                     | c0294bf |
 | P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | DONE (Checkpoint 1 7eedff6, Checkpoint 1b 0f6ee92, Checkpoint 2 6e480e2) | 6e480e2 |
-| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                              | —       |
+| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | DONE                                                                     | —       |
 | P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                              | —       |
 | P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                              | —       |
 
@@ -679,10 +679,27 @@ verified `npm run verify` count):
 - P16-3a Checkpoint 1b (`0f6ee92`): 727 → 729 (+2: `commission-claim.test.ts`
   ×1 new tie-break test (FIX-C3), `migration-runner.test.ts` ×1 new
   0019-column-defaults test).
-- P16-3a Checkpoint 2: 729 → 761 (+32 net — see below for the exact
-  rewritten/deleted/added breakdown; `commission.repository.test.ts`
-  (4 tests) and `commission.service.test.ts` (5 tests) deleted outright,
-  replaced as detailed in "Rewritten (not deleted) from Phase 7" below).
+- P16-3a Checkpoint 2 (`6e480e2`): 729 → 761 (+32 net — see below for the
+  exact rewritten/deleted/added breakdown; `commission.repository.test.ts`
+  (5 tests, corrected — an earlier report of this session miscounted it
+  as 4) and `commission.service.test.ts` (5 tests) deleted outright, 10
+  total, replaced as detailed in "Rewritten from Phase 7" below).
+- P16-3a Checkpoint 2 review fixes, FIX-D1/D2/D3 (`a9f9b7b`): 761 → 785
+  (+24: FIX-D1 ×1 (in-history reason discarded, stored NULL),
+  FIX-D2 ×2 (approve/reverse atomicity, forced via the same test-only
+  SQLite trigger technique as the delivery rollback test), FIX-D3 ×21
+  (`commission-decision.test.ts`, contracts — every commission:* Zod
+  input)).
+- P16-3b: 785 → 799 (+14: `wage-report.repository.test.ts` ×3 (FIX-1 —
+  Sep +50000/Oct -50000 sign fix, same-month nets-to-zero,
+  delivered-Sep-approved-Oct counted in October), `commission-decision.repository.test.ts`
+  ×4 (`listAllClaims` — pending/approved/rejected status, reversed
+  decision returns to pending), `CommissionApprovalsTab.test.tsx` ×2
+  (list + basis text + pending header total, empty state),
+  `ClaimDetailModal.test.tsx` ×3 (approve prefilled in-history recipient,
+  outside-history flag blocks approval until a reason is given, Reverse
+  requires a reason), `SettingsPage.test.tsx` ×2 (pending-count badge
+  shown/not-shown)).
 
 **Rewritten from Phase 7 — actual outcome (Checkpoint 2).** Both
 `commission.repository.test.ts` and `commission.service.test.ts` were
@@ -738,7 +755,7 @@ ground under the new claim model.
   `commission-claim.repository.test.ts` ×6 schema constraints)
 - P16-3a Checkpoint 1b: 2 (tie-break test FIX-C3, 0019 column-defaults
   test)
-- P16-3a Checkpoint 2: net +32 (−9 deleted Phase 7 tests, +6
+- P16-3a Checkpoint 2: net +32 (−10 deleted Phase 7 tests, +6
   `job-delivery.repository.test.ts` new commission-claim-integration
   tests including the inverted rollback test, +19
   `commission-decision.repository.test.ts` — approve/reject/reverse/
@@ -748,11 +765,13 @@ ground under the new claim model.
   multi-recipient-reversal) and OD-16-12 (outside-history-rejected,
   outside-history-with-reason-accepted, non-staff-rejected), +17
   `commission-decision.test.ts` (core) pure-validator unit tests)
-- P16-3b: ~8 (approvals list, approve flow, wage-report pending total,
-  wage-report per-technician approval-date attribution, reverse-from-UI,
-  plus 3 for FIX-1: reversal-month-shows-negative-commission,
-  approve-and-reverse-same-month-nets-zero,
-  existing-Phase-7-wage-report-tests-unaffected)
+- P16-3a Checkpoint 2 review fixes (FIX-D1/D2/D3): +24 (see above)
+- P16-3b: +14 (see above — the ~8 estimate from planning undercounted;
+  the actual UI (list + detail/approve/reject/reverse modal) needed
+  more granular coverage: an outside-history-flag-blocks-approval case
+  the estimate didn't anticipate, plus a dedicated badge-shown/
+  not-shown pair instead of folding the badge into the approve-flow
+  test)
 - P16-3c: ~5 (missing-reason rejection, one test per locked status ×3,
   one positive case — `in_progress` + reason succeeds)
 - P16-4: 0 (manual checklist only)

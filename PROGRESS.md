@@ -41,6 +41,103 @@
 
 ---
 
+## [2026-09-25] Session 83 — Phase 16 P16-3b: Commission Approvals UI + wage-report FIX-1
+
+**Goal:** Build the Commission Approvals section (Settings → JOBS →
+Commission Approvals) replacing its placeholder, and apply the
+wage-report FIX-1 sign fix, per `docs/phases/PHASE_16.md` §2a/§3/§4.
+
+**Done:**
+
+- **Wage-report FIX-1**: `wage-report.repository.ts`'s `commissionPaisa`
+  column and `netPaisa`'s commission term changed from
+  `COALESCE(ABS((...)), 0)` to `-COALESCE((...), 0)` — a reversal-only
+  month now correctly shows as negative ("clawed back") instead of
+  positive ("earned"); a normal approval-only month is unchanged
+  (`-(-X) = X`, same as `ABS(-X) = X`).
+- **`listAllClaims`**: new port method + `KyselyCommissionDecisionRepository`
+  implementation — every claim (not just pending), each with a derived
+  `status` ('pending'/'approved'/'rejected'), `latestDecisionId`,
+  `latestDecisionTotalPaisa` (approved) or `latestDecisionReason`
+  (rejected). `PendingClaimSummary`/`ClaimDetail` both gained the FIX-C2
+  snapshot fields (`commissionMode`/`commissionAmountPaisa`/`commissionBp`)
+  so the UI never re-reads the (possibly since-edited) `service_charge`
+  row for its basis text.
+- **`CommissionApprovalsTab.tsx`**: replaces the P16-3b placeholder —
+  table of every claim (pending and decided), suggested amount shown
+  with its basis ("Rs 500 fixed" / "10% of Rs 4,000"), a pending-count +
+  pending-total-suggested header (not per-technician, per OD-16-3a's
+  own framing). Row click opens `ClaimDetailModal.tsx`: full technician
+  history (including removed, with dates) and the full decision/
+  reversal trail, plus the Approve/Reject (pending) or Reverse (decided)
+  action inline. Approve supports multiple recipients (any active
+  staff, via `ipc.staff.listStaff()`), Rs amounts through
+  `Money.fromRupees`/`sanitizeMoneyInput` (the same shared helper job
+  intake/delivery use), visibly flags a recipient outside the job's
+  technician history and requires a reason before submitting, and shows
+  the total vs. suggested-amount difference. Reject/Reverse each
+  require a non-blank reason (client-side check backed by the
+  server-side `assertNonBlankReason` regardless).
+- **Pending-count badge**: `SettingsNav.tsx` fetches
+  `ipc.commission.listPending().length` once on mount and renders it as
+  a `Badge` next to "Commission Approvals" (only when > 0) —
+  `settingsNav.config.ts`'s static `badge` field stays unused, since the
+  count must be live and the nav renders regardless of which tab is
+  open.
+
+**Verified:**
+
+- `npm run verify`: 799/799, exit 0 (785 + 14).
+- New tests named:
+  - `wage-report.repository.test.ts` +3: `'approved Sep-28, reversed
+Oct-2: September commissionPaisa = +50000, October commissionPaisa =
+-50000, October netPaisa is 50000 lower than a month with no ledger
+activity'`; `'approve and reverse within the SAME month ->
+commissionPaisa = 0...'`; `'delivered Sep-30, approved Oct-2 -> counted
+in October, not September (OD-16-4)'`.
+  - `commission-decision.repository.test.ts` +4 (`listAllClaims`
+    describe block): pending-with-snapshot, approved-with-total,
+    rejected-with-reason, reversed-returns-to-pending.
+  - `CommissionApprovalsTab.test.tsx` (new file) +2: list+basis+header
+    total, empty state.
+  - `ClaimDetailModal.test.tsx` (new file) +3: approve prefilled
+    in-history recipient (no flag), outside-history recipient flags and
+    blocks approval until a reason is given, Reverse requires a reason.
+  - `SettingsPage.test.tsx` +2: badge shown with 1 pending claim, no
+    badge with zero.
+- Hand-verified the exact wage-report sign-fix arithmetic by hand before
+  writing the test (both months' `commissionPaisa` and `netPaisa`
+  derived from the SQL formula, matched the test's `toBe` assertions
+  exactly on the first run).
+
+**Not done / deferred:** P16-3c (technician removal guard,
+`unassign_reason`, migration `0020`) — next task.
+
+**Bugs found:** none new.
+
+**Decisions taken:** none new — implements the already-decided FIX-1
+and the P16-3b UI spec exactly as given.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-3c per `docs/phases/PHASE_16.md`
+§2a OD-16-5/§3/§4 — `unassign_reason` column (migration `0020`), a new
+core `unassignTechnician` function enforcing a required reason and the
+ready/delivered/cancelled status lock, replacing the handler's direct
+repository call.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-24] Session 82 — Phase 16 P16-3a Checkpoint 2 review fixes (FIX-D1/D2/D3)
 
 **Goal:** Three owner review findings on Checkpoint 2 before starting

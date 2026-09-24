@@ -152,6 +152,7 @@ export {
   ReverseDecisionInput,
   GetClaimDetailInput,
   PendingClaimSummaryDto,
+  ClaimSummaryDto,
   TechnicianHistoryEntryDto,
   DecisionRecipientRecordDto,
   DecisionRecordDto,

@@ -31,6 +31,10 @@ vi.mock('../../lib/ipc.js', () => ({
       create: vi.fn(),
       toggleActive: vi.fn(),
     },
+    commission: {
+      listPending: vi.fn(),
+      listAll: vi.fn(),
+    },
   },
 }));
 
@@ -48,6 +52,8 @@ const getDiscountPkrPresets = vi.mocked(ipc.setting.getDiscountPkrPresets);
 const getDiscountPctPresets = vi.mocked(ipc.setting.getDiscountPctPresets);
 const listServiceChargesAdmin = vi.mocked(ipc.job.listServiceChargesAdmin);
 const listBrandsAdmin = vi.mocked(ipc.brand.listAdmin);
+const listPendingClaims = vi.mocked(ipc.commission.listPending);
+const listAllClaims = vi.mocked(ipc.commission.listAll);
 
 const IDENTITY = {
   shopName: 'Malakand AC & Fridge',
@@ -71,6 +77,8 @@ function mockEverything(): void {
   getDiscountPctPresets.mockResolvedValue([]);
   listServiceChargesAdmin.mockResolvedValue([]);
   listBrandsAdmin.mockResolvedValue([]);
+  listPendingClaims.mockResolvedValue([]);
+  listAllClaims.mockResolvedValue([]);
 }
 
 afterEach(() => {
@@ -159,6 +167,43 @@ describe('SettingsPage — P16-1b routing (OD-16-11)', () => {
       );
     });
     expect(screen.getByRole('link', { name: /^Shop/ }).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('P16-3b: the Commission Approvals nav item shows a pending-count badge when there are pending claims', async () => {
+    mockEverything();
+    listPendingClaims.mockResolvedValue([
+      {
+        claimId: 'c1',
+        jobId: 'j1',
+        jobDocNo: 'JOB-0001',
+        customerName: 'Ahmad',
+        serviceChargeName: 'AC Installation',
+        labourAmountPaisa: 300000,
+        suggestedAmountPaisa: 50000,
+        suggestedRecipientPartyId: null,
+        commissionMode: 'fixed',
+        commissionAmountPaisa: 50000,
+        commissionBp: null,
+      },
+    ]);
+    render(
+      <MemoryRouter initialEntries={['/settings/shop']}>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('1')).toBeTruthy();
+    });
+  });
+
+  it('P16-3b: no badge at all when there are zero pending claims', async () => {
+    renderAt('/settings/shop');
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /^Shop/ }).getAttribute('aria-current')).toBe('page');
+    });
+    expect(screen.queryByText('0')).toBeNull();
   });
 
   it('switching with a clean form navigates immediately, no confirm dialog', async () => {

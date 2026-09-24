@@ -87,13 +87,13 @@ export async function getWageMonthReport(
           AND strftime('%Y', pl.entry_date) = ${yearStr}
           AND strftime('%m', pl.entry_date) = ${monthStr}
       ), 0)                                                             AS advancesPaisa,
-      COALESCE(ABS((
+      -COALESCE((
         SELECT SUM(pl.amount) FROM party_ledger pl
         WHERE pl.tenant_id = ${tenantId} AND pl.party_id = p.id
           AND pl.entry_type = 'commission'
           AND strftime('%Y', pl.entry_date) = ${yearStr}
           AND strftime('%m', pl.entry_date) = ${monthStr}
-      )), 0)                                                            AS commissionPaisa,
+      ), 0)                                                              AS commissionPaisa,
       SUM(a.wage_earned)
         - COALESCE((
             SELECT SUM(pl.amount) FROM party_ledger pl
@@ -102,13 +102,13 @@ export async function getWageMonthReport(
               AND strftime('%Y', pl.entry_date) = ${yearStr}
               AND strftime('%m', pl.entry_date) = ${monthStr}
           ), 0)
-        + COALESCE(ABS((
+        - COALESCE((
             SELECT SUM(pl.amount) FROM party_ledger pl
             WHERE pl.tenant_id = ${tenantId} AND pl.party_id = p.id
               AND pl.entry_type = 'commission'
               AND strftime('%Y', pl.entry_date) = ${yearStr}
               AND strftime('%m', pl.entry_date) = ${monthStr}
-          )), 0)                                                        AS netPaisa
+          ), 0)                                                          AS netPaisa
     FROM party p
     JOIN attendance a ON a.staff_id = p.id AND a.tenant_id = p.tenant_id
     WHERE p.tenant_id = ${tenantId}

@@ -66,6 +66,7 @@ import type {
   RejectClaimInput,
   ReverseDecisionInput,
   PendingClaimSummaryDto,
+  ClaimSummaryDto,
   ClaimDetailDto,
   DecisionRecordDto,
   PartyAnyDto,
@@ -466,6 +467,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.commission.listPending) as Promise<
         readonly PendingClaimSummaryDto[]
       >,
+    listAll: (): Promise<readonly ClaimSummaryDto[]> =>
+      ipcRenderer.invoke(channels.commission.listAll) as Promise<readonly ClaimSummaryDto[]>,
     getDetail: (claimId: string): Promise<ClaimDetailDto> =>
       ipcRenderer.invoke(channels.commission.getDetail, { claimId }) as Promise<ClaimDetailDto>,
     approve: (input: ApproveClaimInput): Promise<DecisionRecordDto> =>

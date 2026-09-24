@@ -36,17 +36,27 @@ export interface PendingClaimSummary {
   readonly labourAmountPaisa: number;
   readonly suggestedAmountPaisa: number;
   readonly suggestedRecipientPartyId: string | null;
+  /** The FIX-C2 snapshot — lets the UI show the basis ("Rs 500 fixed" / "10% of Rs 4,000") without re-reading the (possibly since-edited) service_charge row. */
+  readonly commissionMode: 'fixed' | 'bp';
+  readonly commissionAmountPaisa: number | null;
+  readonly commissionBp: number | null;
 }
 
-export interface ClaimDetail {
-  readonly claimId: string;
-  readonly jobId: string;
-  readonly jobDocNo: string;
-  readonly customerName: string;
-  readonly serviceChargeName: string;
-  readonly labourAmountPaisa: number;
-  readonly suggestedAmountPaisa: number;
-  readonly suggestedRecipientPartyId: string | null;
+/**
+ * P16-3b — Commission Approvals must show decided claims too, not only
+ * pending ones (so the owner can find and reverse a past decision).
+ * `status` mirrors OD-16-3a's pending definition inverted: a claim with
+ * no decision, or whose latest decision has a reversal, is 'pending';
+ * otherwise 'approved'/'rejected' per the latest decision.
+ */
+export interface ClaimSummary extends PendingClaimSummary {
+  readonly status: 'pending' | 'approved' | 'rejected';
+  readonly latestDecisionId: string | null;
+  readonly latestDecisionTotalPaisa: number | null;
+  readonly latestDecisionReason: string | null;
+}
+
+export interface ClaimDetail extends PendingClaimSummary {
   readonly technicianHistory: readonly TechnicianHistoryEntry[];
   readonly decisions: readonly DecisionRecord[];
 }
@@ -75,6 +85,8 @@ export interface ReverseDecisionInput {
 
 export interface CommissionDecisionRepositoryPort {
   listPendingClaims(): Promise<readonly PendingClaimSummary[]>;
+  /** Every claim, pending or decided (P16-3b: decided claims stay visible, with a Reverse action). */
+  listAllClaims(): Promise<readonly ClaimSummary[]>;
   getClaimDetail(claimId: string): Promise<ClaimDetail>;
   approveClaim(input: ApproveClaimInput): Promise<DecisionRecord>;
   rejectClaim(input: RejectClaimInput): Promise<DecisionRecord>;

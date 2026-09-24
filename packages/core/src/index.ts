@@ -88,6 +88,7 @@ export type {
   DecisionRecipientRecord,
   DecisionRecord,
   PendingClaimSummary,
+  ClaimSummary,
   ClaimDetail,
   ApproveClaimInput,
   RejectClaimInput,

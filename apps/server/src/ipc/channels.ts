@@ -114,6 +114,7 @@ export const channels = {
   },
   commission: {
     listPending: 'commission:listPending',
+    listAll: 'commission:listAll',
     getDetail: 'commission:getDetail',
     approve: 'commission:approve',
     reject: 'commission:reject',

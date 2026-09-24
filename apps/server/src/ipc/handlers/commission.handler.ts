@@ -5,6 +5,7 @@ import {
   RejectClaimInput,
   ReverseDecisionInput,
   type ClaimDetailDto,
+  type ClaimSummaryDto,
   type DecisionRecordDto,
   type PendingClaimSummaryDto,
 } from '@shop/contracts';
@@ -55,6 +56,23 @@ export function registerCommissionHandlers(deps: CommissionHandlerDeps): void {
           deps.deviceCode,
         );
         return await repo.listPendingClaims();
+      } finally {
+        db.close();
+      }
+    }),
+  );
+
+  ipcMain.handle(
+    channels.commission.listAll,
+    withError(async (): Promise<readonly ClaimSummaryDto[]> => {
+      const db = openDatabase(deps.dbPath);
+      try {
+        const repo = new KyselyCommissionDecisionRepository(
+          createKyselyDb(db),
+          deps.tenantId,
+          deps.deviceCode,
+        );
+        return await repo.listAllClaims();
       } finally {
         db.close();
       }

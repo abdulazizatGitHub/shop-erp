@@ -4,6 +4,7 @@ import {
   validateApprovalRecipients,
   type ApproveClaimInput,
   type ClaimDetail,
+  type ClaimSummary,
   type CommissionDecisionRepositoryPort,
   type DecisionRecipientRecord,
   type DecisionRecord,
@@ -147,8 +148,8 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
     private readonly deviceCode: string,
   ) {}
 
-  async listPendingClaims(): Promise<readonly PendingClaimSummary[]> {
-    const claims = await this.db
+  private async queryClaimSummaryRows(): Promise<readonly PendingClaimSummary[]> {
+    return this.db
       .selectFrom('commissionClaim')
       .innerJoin('job', 'job.id', 'commissionClaim.jobId')
       .innerJoin('party', 'party.id', 'job.customerId')
@@ -162,10 +163,17 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
         'commissionClaim.labourAmountPaisa as labourAmountPaisa',
         'commissionClaim.suggestedAmountPaisa as suggestedAmountPaisa',
         'commissionClaim.suggestedRecipientPartyId as suggestedRecipientPartyId',
+        'commissionClaim.commissionMode as commissionMode',
+        'commissionClaim.commissionAmountPaisa as commissionAmountPaisa',
+        'commissionClaim.commissionBp as commissionBp',
       ])
       .where('commissionClaim.tenantId', '=', this.tenantId)
       .orderBy('commissionClaim.createdAt', 'asc')
-      .execute();
+      .execute() as Promise<readonly PendingClaimSummary[]>;
+  }
+
+  async listPendingClaims(): Promise<readonly PendingClaimSummary[]> {
+    const claims = await this.queryClaimSummaryRows();
 
     const pending: PendingClaimSummary[] = [];
     for (const claim of claims) {
@@ -177,8 +185,55 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
     return pending;
   }
 
+  async listAllClaims(): Promise<readonly ClaimSummary[]> {
+    const claims = await this.queryClaimSummaryRows();
+
+    const summaries: ClaimSummary[] = [];
+    for (const claim of claims) {
+      const latest = await getLatestDecision(this.db, this.tenantId, claim.claimId);
+      if (latest === undefined || latest.hasReversal) {
+        summaries.push({
+          ...claim,
+          status: 'pending',
+          latestDecisionId: null,
+          latestDecisionTotalPaisa: null,
+          latestDecisionReason: null,
+        });
+        continue;
+      }
+
+      const decisionRow = await this.db
+        .selectFrom('commissionDecision')
+        .select(['id', 'decision', 'reason'])
+        .where('tenantId', '=', this.tenantId)
+        .where('id', '=', latest.id)
+        .executeTakeFirstOrThrow();
+
+      if (decisionRow.decision === 'approved') {
+        const recipients = await getRecipients(this.db, this.tenantId, latest.id);
+        const totalPaisa = recipients.reduce((sum, r) => sum + r.amountPaisa, 0);
+        summaries.push({
+          ...claim,
+          status: 'approved',
+          latestDecisionId: latest.id,
+          latestDecisionTotalPaisa: totalPaisa,
+          latestDecisionReason: null,
+        });
+      } else {
+        summaries.push({
+          ...claim,
+          status: 'rejected',
+          latestDecisionId: latest.id,
+          latestDecisionTotalPaisa: null,
+          latestDecisionReason: decisionRow.reason,
+        });
+      }
+    }
+    return summaries;
+  }
+
   async getClaimDetail(claimId: string): Promise<ClaimDetail> {
-    const claim = await this.db
+    const claim = (await this.db
       .selectFrom('commissionClaim')
       .innerJoin('job', 'job.id', 'commissionClaim.jobId')
       .innerJoin('party', 'party.id', 'job.customerId')
@@ -192,10 +247,13 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
         'commissionClaim.labourAmountPaisa as labourAmountPaisa',
         'commissionClaim.suggestedAmountPaisa as suggestedAmountPaisa',
         'commissionClaim.suggestedRecipientPartyId as suggestedRecipientPartyId',
+        'commissionClaim.commissionMode as commissionMode',
+        'commissionClaim.commissionAmountPaisa as commissionAmountPaisa',
+        'commissionClaim.commissionBp as commissionBp',
       ])
       .where('commissionClaim.tenantId', '=', this.tenantId)
       .where('commissionClaim.id', '=', claimId)
-      .executeTakeFirst();
+      .executeTakeFirst()) as PendingClaimSummary | undefined;
     if (!claim) {
       throw new Error(`commission_claim ${claimId} not found`);
     }
