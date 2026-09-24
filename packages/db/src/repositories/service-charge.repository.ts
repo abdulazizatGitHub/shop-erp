@@ -1,10 +1,10 @@
 import { newId } from '@shop/shared';
-import type {
-  CommissionMode,
-  NewServiceChargeInput,
-  ServiceChargeRecord,
-  ServiceChargeRepositoryPort,
-  UpdateServiceChargeFields,
+import {
+  deriveCommissionMode,
+  type NewServiceChargeInput,
+  type ServiceChargeRecord,
+  type ServiceChargeRepositoryPort,
+  type UpdateServiceChargeFields,
 } from '@shop/core';
 import type { Kysely } from 'kysely';
 import { withRetry } from '../retry.js';
@@ -22,16 +22,6 @@ interface ServiceChargeRow {
   readonly isActive: number;
   readonly notes: string | null;
   readonly createdAt: string;
-}
-
-/** Mirrors service-charge.repository.port.ts's doc comment — mode is derived, never stored. */
-function deriveCommissionMode(
-  commissionAmount: number | null,
-  commissionBp: number | null,
-): CommissionMode {
-  if (commissionAmount !== null) return 'fixed';
-  if (commissionBp !== null) return 'bp';
-  return 'none';
 }
 
 function toRecord(row: ServiceChargeRow): ServiceChargeRecord {
@@ -84,7 +74,7 @@ export class KyselyServiceChargeRepository implements ServiceChargeRepositoryPor
     }
   }
 
-  /** Same lookup-by-code convention as commission.repository.ts's getLabourTotalPaisa and job-delivery.repository.ts's repairUnit — never hardcoded. */
+  /** Same lookup-by-code convention as job-delivery.repository.ts's repairUnit — never hardcoded. */
   private async resolveRepairUnitId(trx: Kysely<Database>): Promise<string> {
     const row = await trx
       .selectFrom('businessUnit')

@@ -10,7 +10,6 @@ const EMPTY_FORM = {
   phone: '',
   staffRole: 'technician' as StaffRoleOption,
   wageRateRupees: '',
-  commissionPercent: '',
 };
 
 /**
@@ -49,7 +48,7 @@ export function AddStaffModal({
   if (!open) return null;
 
   function setField(
-    field: 'name' | 'phone' | 'wageRateRupees' | 'commissionPercent',
+    field: 'name' | 'phone' | 'wageRateRupees',
   ): (e: React.ChangeEvent<HTMLInputElement>) => void {
     return (e) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -71,21 +70,17 @@ export function AddStaffModal({
       setError('Daily rate must be a non-negative number');
       return;
     }
-    const commissionPercent =
-      form.commissionPercent.trim().length === 0 ? 0 : Number(form.commissionPercent);
-    if (!Number.isFinite(commissionPercent) || commissionPercent < 0) {
-      setError('Commission % must be a non-negative whole number');
-      return;
-    }
-
-    // Rs -> paisa (x100), whole-number percent -> basis points (x100).
-    // e.g. Rs 600/day -> 60000 paisa; 10% -> 1000 bp.
+    // Rs -> paisa (x100). commissionBp is retired (P16-3a Checkpoint 2,
+    // ADR-0015) — commission is now per service charge, decided by the
+    // owner per delivery, not a per-technician rate set here. The column
+    // stays (never edit an applied migration) but no code reads it any
+    // more, so it is sent as 0 and never shown in this form.
     const input: StaffCreateInput = {
       name: form.name.trim(),
       phone: form.phone.trim(),
       staffRole: form.staffRole,
       wageRatePaisa: Math.round(wageRateRupees * 100),
-      commissionBp: Math.round(commissionPercent * 100),
+      commissionBp: 0,
     };
     try {
       const result = await ipc.staff.create(input);
@@ -134,13 +129,6 @@ export function AddStaffModal({
             required
             value={form.wageRateRupees}
             onChange={setField('wageRateRupees')}
-          />
-          <TextInput
-            label="Commission % (0 if none)"
-            variant="number"
-            min="0"
-            value={form.commissionPercent}
-            onChange={setField('commissionPercent')}
           />
         </div>
         <div className="flex justify-end gap-3">

@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 done, 710/710 tests; P16-3a next)
+**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a done, 761/761 tests; P16-3b next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -413,15 +413,15 @@ resolves to the same `brand.id` and imports successfully; no second
 
 ## 3. Tasks
 
-| ID     | Task                                                | Depends on                         | Status                                                             | Commit  |
-| ------ | --------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------ | ------- |
-| P16-1  | Service charge management                           | —                                  | DONE                                                               | 55f0438 |
-| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                               | 320e602 |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                               | c0294bf |
-| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | IN PROGRESS (Checkpoint 1 done 7eedff6; Checkpoint 1b in progress) | 7eedff6 |
-| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                        | —       |
-| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                        | —       |
-| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                        | —       |
+| ID     | Task                                                | Depends on                         | Status                                                                             | Commit  |
+| ------ | --------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------- | ------- |
+| P16-1  | Service charge management                           | —                                  | DONE                                                                               | 55f0438 |
+| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                                               | 320e602 |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                                               | c0294bf |
+| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | DONE (Checkpoint 1 7eedff6, Checkpoint 1b 0f6ee92, Checkpoint 2 — see PROGRESS.md) | 0f6ee92 |
+| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                                        | —       |
+| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                                        | —       |
+| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                                        | —       |
 
 Order: P16-1 → P16-1b → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One
 task at a time; verified and reviewed before the next begins.
@@ -673,53 +673,81 @@ verified `npm run verify` count):
   (deactivated Haier still matches CSV import, no second row),
   `BrandsTab.test.tsx` ×1, `JobCreateForm.test.tsx` ×1 (brand-list-
   load-failure never blocks intake)).
+- P16-3a Checkpoint 1 (`7eedff6`): 710 → 727 (+17: `commission-claim.test.ts`
+  ×11 (`computeSuggestedCommissionPaisa` ×7, `suggestCommissionRecipient`
+  ×4), `commission-claim.repository.test.ts` ×6 (schema constraints)).
+- P16-3a Checkpoint 1b (`0f6ee92`): 727 → 729 (+2: `commission-claim.test.ts`
+  ×1 new tie-break test (FIX-C3), `migration-runner.test.ts` ×1 new
+  0019-column-defaults test).
+- P16-3a Checkpoint 2: 729 → 761 (+32 net — see below for the exact
+  rewritten/deleted/added breakdown; `commission.repository.test.ts`
+  (4 tests) and `commission.service.test.ts` (5 tests) deleted outright,
+  replaced as detailed in "Rewritten (not deleted) from Phase 7" below).
 
-**Rewritten (not deleted) from Phase 7** — `commission.repository.test.ts`:
+**Rewritten from Phase 7 — actual outcome (Checkpoint 2).** Both
+`commission.repository.test.ts` and `commission.service.test.ts` were
+deleted outright (their subject files no longer exist — Phase 7's
+`recordCommission`/`getLabourTotalPaisa`/`computeCommission` are all
+retired). Each of their tests' _intent_ survives as a new test
+elsewhere:
 
 1. `'inserts correct party_ledger row — commissionPaisa = 12000
-(pre-computed)'` → becomes a claim-approval test asserting the same
-   ledger row shape, sourced from a decision instead of a direct write.
+(pre-computed)'` → `commission-decision.repository.test.ts`'s
+   `'approves 50000 to one in-history technician — one
+commission_decision (attemptNo=1), one recipient row, one party_ledger
+row amount=-50000'`.
 2. `'recordCommission with commissionPaisa = 0 throws, inserts nothing'`
-   → becomes `'approving with amountPaisa <= 0 is rejected, inserts
-nothing'` (amount > 0 is now a core check per C-2), joined by sibling
-   tests for a duplicate technician among recipients and a
-   whitespace-only reject reason (OD-16-3a additional criteria).
+   → `commission-decision.repository.test.ts`'s `'validation: a
+recipient amountPaisa <= 0 is rejected before any write'`, joined by
+   sibling validation tests for a duplicate recipient, OD-16-12's
+   recipient rule (both directions), and a non-staff recipient.
 3. `'PARTS-unit lines do not contribute to commission — only the REPAIR
-labour line counts'` → unchanged in spirit; asserts no claim is ever
-   created for a `line_kind = 'part'` line.
+labour line counts'` → `job-delivery.repository.test.ts`'s `'a part
+line never produces a commission_claim row, even on a delivery that
+also has a commissioned labour line'`.
 4. `'EC-P7-6: Rs 1,200 labour, 10% commission -> exactly 12000 paisa,
-technician with commission_bp=0 gets nothing'` → becomes two tests:
-   a claim-suggestion hand-calc (bp mode) and a `commissionMode = none`
-   → zero-claims test (the `commission_bp = 0`-on-party concept no
+technician with commission_bp=0 gets nothing'` → split into
+   `commission-claim.test.ts`'s pure-function hand-calc tests (already
+   landed at Checkpoint 1) plus `job-delivery.repository.test.ts`'s `'a
+labour line on a charge with commission mode "none" creates no
+commission_claim row'` (the `commission_bp = 0`-on-party concept no
    longer exists post-OD-16-1).
 5. `'a commission recording failure does not roll back the delivery'` →
-   **inverted** per C-5: `'a claim insert failure rolls back the entire
-delivery'`.
+   **inverted**, exactly per ADR-0015: `job-delivery.repository.test.ts`'s
+   `'a claim insert failure rolls back the entire delivery — no sale,
+sale_line, stock movement, or claim survive (ADR-0015, inverted from
+Phase 7's isolated-failure behaviour)'`, forced via a test-only
+   SQLite trigger on `commission_claim` (never a schema/migration
+   change — scoped to that one test's ephemeral DB).
 
-`commission.service.test.ts`'s `computeCommission` test is retired
-outright — replaced by unit tests for the new pure claim-calculation
-function (fixed/bp × the milli-quantity and override cases above).
+`commission.service.test.ts`'s `computeCommission` tests have no direct
+descendant — `commission-claim.test.ts`'s `computeSuggestedCommissionPaisa`
+tests (already landed at Checkpoint 1) cover the same FLOOR-arithmetic
+ground under the new claim model.
 
-**Net new tests this phase** (estimate, finalized per task as built):
+**Net new tests this phase** (final, as built):
 
-- P16-1: ~10 (create/edit/toggle/uniqueness/list-excludes-inactive ×
+- P16-1: 10 (create/edit/toggle/uniqueness/list-excludes-inactive ×
   repository, commission-mode derivation validation — none/fixed/bp/
   both-set-rejected, duplicate-name-case-insensitive rejection,
   edit-price-after-delivery-leaves-past-invoice-unchanged, + 1 UI test)
-- P16-2: ~7 (create/toggle/case-insensitive-uniqueness-including-deleted/
+- P16-2: 7 (create/toggle/case-insensitive-uniqueness-including-deleted/
   bootstrap-exact-count-18/bootstrap-idempotent-rerun × repository,
   1 named CSV-import-still-matches-deactivated-brand test, + 1 UI test)
-- P16-3a: ~25 (5 rewritten above; net new: pure-function unit tests for
-  fixed/bp/quantity-milli-2000/FLOOR-1234-on-99999, `commissionMode =
-none` → zero claims, NULL-suggested-recipient, multi-recipient
-  approval, duplicate-recipient rejection, amount<=0 rejection,
-  whitespace-reason rejection, bad-recipient-not-in-history rejection,
-  month-attribution (Sept delivery / Oct approval), rollback-on-failure;
-  GAP-1 (OD-16-3a): reverse-approved-decision-nets-zero,
-  reverse-multi-recipient-decision (FIX-2), reapprove-as-attempt-2-to-
-  different-technician, double-reversal-rejected,
-  reverse-a-rejected-decision-no-ledger-rows,
-  duplicate-attempt-no-unique-constraint-violation (FIX-3))
+- P16-3a Checkpoint 1: 17 (`commission-claim.test.ts` ×11,
+  `commission-claim.repository.test.ts` ×6 schema constraints)
+- P16-3a Checkpoint 1b: 2 (tie-break test FIX-C3, 0019 column-defaults
+  test)
+- P16-3a Checkpoint 2: net +32 (−9 deleted Phase 7 tests, +6
+  `job-delivery.repository.test.ts` new commission-claim-integration
+  tests including the inverted rollback test, +19
+  `commission-decision.repository.test.ts` — approve/reject/reverse/
+  list/detail including GAP-1 (reverse-nets-zero,
+  reapprove-as-attempt-2-to-different-technician, double-reversal-
+  rejected, reverse-a-rejected-decision-no-ledger-rows,
+  multi-recipient-reversal) and OD-16-12 (outside-history-rejected,
+  outside-history-with-reason-accepted, non-staff-rejected), +17
+  `commission-decision.test.ts` (core) pure-validator unit tests)
 - P16-3b: ~8 (approvals list, approve flow, wage-report pending total,
   wage-report per-technician approval-date attribution, reverse-from-UI,
   plus 3 for FIX-1: reversal-month-shows-negative-commission,

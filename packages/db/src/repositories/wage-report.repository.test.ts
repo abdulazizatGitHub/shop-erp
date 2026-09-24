@@ -14,7 +14,6 @@ import type { Database as Schema } from '../kysely-schema.js';
 import { KyselyPartyRepository } from './party.repository.js';
 import { KyselyAttendanceRepository } from './attendance.repository.js';
 import { KyselyAdvanceRepository } from './advance.repository.js';
-import { KyselyCommissionRepository } from './commission.repository.js';
 import { getWageMonthReport } from './wage-report.repository.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../migrations');
@@ -28,7 +27,6 @@ let kysely: Kysely<Schema>;
 let partyRepo: KyselyPartyRepository;
 let attendanceRepo: KyselyAttendanceRepository;
 let advanceRepo: KyselyAdvanceRepository;
-let commissionRepo: KyselyCommissionRepository;
 
 beforeEach(() => {
   workDir = mkdtempSync(path.join(tmpdir(), 'shop-erp-wage-report-repo-test-'));
@@ -41,8 +39,30 @@ beforeEach(() => {
   partyRepo = new KyselyPartyRepository(kysely, TENANT_ID, DEVICE_CODE);
   attendanceRepo = new KyselyAttendanceRepository(kysely, TENANT_ID, DEVICE_CODE);
   advanceRepo = new KyselyAdvanceRepository(kysely, TENANT_ID, DEVICE_CODE);
-  commissionRepo = new KyselyCommissionRepository(kysely, TENANT_ID, DEVICE_CODE);
 });
+
+/**
+ * Phase 7's KyselyCommissionRepository.recordCommission is retired
+ * (P16-3a Checkpoint 2, ADR-0015) — commission is now a claim/decision,
+ * not a direct ledger write. These tests only exercise
+ * getWageMonthReport's own aggregation over party_ledger, so a direct
+ * insert of the same shape recordCommission used to produce (one
+ * entry_type='commission' row, amount negative) is equivalent and
+ * simpler than standing up a full claim+decision fixture for every case.
+ */
+function insertCommissionLedgerRow(
+  technicianId: string,
+  commissionPaisa: number,
+  entryDate: string,
+): void {
+  const now = new Date().toISOString();
+  rawDb
+    .prepare(
+      `INSERT INTO party_ledger (id, tenant_id, party_id, entry_date, entry_type, amount, source_type, source_id, created_at)
+       VALUES (?, ?, ?, ?, 'commission', ?, 'commission_decision', ?, ?)`,
+    )
+    .run(newId(), TENANT_ID, technicianId, entryDate, -commissionPaisa, newId(), now);
+}
 
 afterEach(() => {
   rawDb.close();
@@ -112,21 +132,11 @@ describe('getWageMonthReport (PHASE_7.md §5, EC-P7-7)', () => {
       amountPaisa: 300000,
       notes: null,
     });
-    await commissionRepo.recordCommission({
-      technicianId: staffA.id,
-      jobId: newId(),
-      commissionPaisa: 24000,
-      deliveryDate: '2026-08-15',
-    });
+    insertCommissionLedgerRow(staffA.id, 24000, '2026-08-15');
     // Staff B: commissionBp=0 on their party row, but a commission row
     // can still exist (posted from a different path) — proves the
     // report reads party_ledger, not party.commission_bp.
-    await commissionRepo.recordCommission({
-      technicianId: staffB.id,
-      jobId: newId(),
-      commissionPaisa: 48000,
-      deliveryDate: '2026-08-20',
-    });
+    insertCommissionLedgerRow(staffB.id, 48000, '2026-08-20');
 
     // Hand-calc, written before calling getWageMonthReport:
     //   Staff A: gross = 22 x 60000 + 2 x 30000 = 1,320,000 + 60,000 = 1,380,000
@@ -227,12 +237,7 @@ describe('getWageMonthReport (PHASE_7.md §5, EC-P7-7)', () => {
       amountPaisa: 300000,
       notes: null,
     });
-    await commissionRepo.recordCommission({
-      technicianId: staffA.id,
-      jobId: newId(),
-      commissionPaisa: 24000,
-      deliveryDate: '2026-08-15',
-    });
+    insertCommissionLedgerRow(staffA.id, 24000, '2026-08-15');
     // A prior-month advance that must NOT be included in August's report.
     await advanceRepo.recordAdvance({
       staffId: staffA.id,

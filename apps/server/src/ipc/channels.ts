@@ -112,6 +112,13 @@ export const channels = {
     create: 'brand:create',
     toggleActive: 'brand:toggleActive',
   },
+  commission: {
+    listPending: 'commission:listPending',
+    getDetail: 'commission:getDetail',
+    approve: 'commission:approve',
+    reject: 'commission:reject',
+    reverse: 'commission:reverse',
+  },
   uom: { listConversions: 'uom:listConversions' },
   report: {
     dailySales: 'report:dailySales',

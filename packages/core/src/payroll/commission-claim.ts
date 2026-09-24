@@ -1,17 +1,34 @@
 import type { CommissionMode } from '../job/service-charge.repository.port.js';
 
 /**
+ * Hoisted from packages/db/src/repositories/service-charge.repository.ts's
+ * former private copy (Checkpoint 2) — the delivery-hook claim
+ * computation needs the exact same derivation, and packages/db is not
+ * allowed to own business logic (CLAUDE.md §3.7). Mode is never stored
+ * on service_charge itself — see service-charge.repository.port.ts's
+ * ServiceChargeRecord doc comment.
+ */
+export function deriveCommissionMode(
+  commissionAmountPaisa: number | null,
+  commissionBp: number | null,
+): CommissionMode {
+  if (commissionAmountPaisa !== null) return 'fixed';
+  if (commissionBp !== null) return 'bp';
+  return 'none';
+}
+
+/**
  * Phase 16, P16-3a (docs/phases/PHASE_16.md §2a OD-16-1/OD-16-2,
  * ADR-0015). Pure — no DB, no Electron, no React (packages/core's own
  * rule). Called from job-delivery.repository.ts exactly as
  * computeLineTotalPaisa already is: a `packages/core` pure function
  * imported by `packages/db`, never a service invoked from a repository.
  *
- * Retires nothing here — Phase 7's computeCommission
- * (packages/core/src/payroll/commission.service.ts) and its
- * party.commission_bp read path stay untouched until P16-3a's own
- * Checkpoint 2 wires the delivery hook and the approve/reject/reverse
- * services. This file only adds the new calculation, standalone.
+ * Phase 7's computeCommission (formerly
+ * packages/core/src/payroll/commission.service.ts) is retired and
+ * deleted as of Checkpoint 2 — this function replaces it. The
+ * party.commission_bp column itself stays (never edit an applied
+ * migration); it is simply never read by any code path any more.
  *
  * `none` -> no claim at all, expressed as `null`, not a zero-amount
  * claim — OD-16-2: "Charges with mode = none create no claim."

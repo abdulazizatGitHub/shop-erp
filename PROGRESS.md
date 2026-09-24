@@ -41,6 +41,147 @@
 
 ---
 
+## [2026-09-24] Session 81 — Phase 16 P16-3a Checkpoint 2: delivery integration, approve/reject/reverse, Phase 7 retirement
+
+**Goal:** Wire the commission claim model end to end per
+`docs/phases/PHASE_16.md` §2a/§3/§4 and `docs/decisions/ADR-0015-commission-claims.md`:
+insert claims inside `deliverJob`'s own transaction, build the
+approve/reject/reverse core services + Zod-validated IPC, retire Phase
+7's separate commission-recording path entirely, hide `commission_bp`
+from the staff UI, and cover every §4 P16-3a criterion with tests.
+
+**Done:**
+
+- **Delivery integration**: `job-delivery.repository.ts`'s `deliverJob`
+  now inserts one `commission_claim` row per labour line whose service
+  charge has commission configured, INSIDE the same transaction as the
+  sale/sale_line/party_ledger writes — a claim insert failure now rolls
+  back the entire delivery (ADR-0015's deliberate inversion of Phase
+  7's isolated-failure behaviour). Suggested recipient is computed once
+  per delivery from `job_technician` rows read in the same transaction.
+  `deriveCommissionMode` hoisted from `service-charge.repository.ts`'s
+  private copy into `packages/core` (`commission-claim.ts`) so the
+  delivery hook can reuse the exact same derivation without duplicating
+  business logic in `packages/db`.
+- **Core services**: `packages/core/src/payroll/commission-decision.ts`
+  — pure validators (`validateApprovalRecipients` enforcing OD-16-3's
+  rules plus OD-16-12's recipient correction, `assertNonBlankReason`,
+  `isClaimPending`), plus `commission-decision.repository.port.ts` (the
+  port). `packages/db/src/repositories/commission-decision.repository.ts`
+  — `KyselyCommissionDecisionRepository` implements
+  `listPendingClaims`/`getClaimDetail`/`approveClaim`/`rejectClaim`/
+  `reverseDecision`, each a single transaction, `attempt_no` computed
+  inside it from existing decisions, calling the core validators before
+  any write. `party_ledger` rows: `entry_type='commission'`,
+  `source_type='commission_decision'`, `source_id=decision.id`,
+  `amount=-recipientAmount` on approval, `+same amount` on reversal,
+  `entry_date`=decision/reversal date — `reversed_by_id` never written
+  (ADR-0004: corrections are new rows, never edits).
+- **Zod-validated IPC**: new `packages/contracts/src/payroll/commission-decision.ts`
+  schemas; `commission:listPending/getDetail/approve/reject/reverse`
+  channels, `commission.handler.ts`, registered in `main.ts`, exposed
+  via `preload.ts` and `electron-api.d.ts` — P16-3b (Commission
+  Approvals UI, not started) will be UI-only against this surface.
+- **Phase 7 retirement**: deleted `commission.service.ts` (+its test),
+  `commission.repository.ts` (+its test), `commission.repository.port.ts`
+  — `computeCommission`, `recordCommission`, `getLabourTotalPaisa` no
+  longer exist anywhere. `job-delivery.handler.ts`'s
+  `recordCommissionIfEligible` and its post-delivery call removed
+  entirely; the handler now just calls `deliverJob` and returns.
+  `wage-report.repository.test.ts`'s 3 `commissionRepo.recordCommission`
+  call sites replaced with a direct `party_ledger` insert helper (same
+  row shape) since that file only tests the wage report's own
+  aggregation, not the (now-deleted) recording mechanism.
+- **`commission_bp` UI hidden (C-9)**: grepped `apps/client` for every
+  `commissionBp`/`Commission %` reference outside the new (P16-1)
+  service-charge commission UI, which is a different, current concept
+  and stays untouched. Found and fixed two: `AddStaffModal.tsx` (the
+  "Commission % (0 if none)" input removed; the form now always sends
+  `commissionBp: 0` — the column stays, per "never edit an applied
+  migration," but nothing reads it any more) and `StaffListView.tsx`
+  (the "Commission" column header and cell removed from the staff
+  list). `AttendancePage.test.tsx`'s `commissionBp` values are fixture
+  data satisfying the `StaffRecord` type shape, not a display — left
+  unchanged, confirmed by reading the file.
+
+**Verified:**
+
+- `npm run verify`: 761/761, exit 0 (typecheck clean, lint clean with
+  `--max-warnings=0`).
+- New/changed tests: `job-delivery.repository.test.ts` 9 → 15 (+6:
+  fixed-mode claim snapshot, mode-none-creates-no-claim, part-line-
+  never-creates-a-claim, suggested-recipient-earliest-active,
+  suggested-recipient-null-when-none-active, the inverted rollback test
+  forced via a test-only SQLite trigger scoped to one test's ephemeral
+  DB — never a schema/migration change). New file
+  `commission-decision.repository.test.ts` — 19 tests (approve ×8
+  including two-recipient/OD-16-12 both directions/non-staff-rejected/
+  already-decided-rejected, reject ×2, reverse ×6 covering GAP-1 in
+  full including multi-recipient reversal, listPendingClaims/
+  getClaimDetail ×3). New file `commission-decision.test.ts` (core) —
+  17 pure-validator unit tests. `wage-report.repository.test.ts`
+  unchanged in test count (4), only its fixture-setup mechanism changed.
+  `service-charge.repository.ts`'s `deriveCommissionMode` move verified
+  by its own existing 6 tests still passing unchanged (behaviour
+  identical, just relocated).
+- Hand-run end-to-end scenario on a scratch DB (`tsx` script, not
+  committed): delivered an AC Installation job (Rs 3,000 charge, fixed
+  commission 50000 paisa) → `commission_claim` row created with the
+  FIX-C2 snapshot (`commission_mode='fixed'`,
+  `commission_amount_paisa=50000`, `quantity_milli=1000`,
+  `suggested_recipient_party_id`=the one assigned technician) →
+  approved 30000+20000 to two in-history recipients → two
+  `party_ledger` rows (`-30000`, `-20000`) → reversed → two more
+  `party_ledger` rows (`+30000`, `+20000`, net 0 per recipient),
+  `commission_decision_reversal` row present, claim back in
+  `listPendingClaims` → re-approved 50000 (`attempt_no=2`) to a THIRD
+  staff member never assigned to the job, with a stored
+  `outside_history_reason` → one `party_ledger` row (`-50000`),
+  `listPendingClaims` empty again. Every row's actual field values
+  matched hand-calculated expectations exactly — full output pasted to
+  the owner in chat.
+- `git show --stat` for both this session's commits pasted to the owner.
+
+**Not done / deferred:** P16-3b (Commission Approvals UI section, wage
+report FIX-1 ABS→negate sign fix and pending-total header) — next task,
+per `docs/phases/PHASE_16.md` §3's explicit ordering. FIX-1 is
+deliberately NOT applied in this session: it is P16-3b's own scope per
+the phase doc's task boundaries, and no reversal-carrying ledger data
+existed anywhere before this session, so the bug was latent, not yet
+live — Checkpoint 2 makes it live (a real reversal can now produce a
+positive `commission` row) but the fix itself stays with P16-3b, which
+is where the wage report is actually touched.
+
+**Bugs found:** none new (FIX-1 was already documented in ADR-0015 and
+`PHASE_16.md` as P16-3b scope, prior to this session).
+
+**Decisions taken:** none new — this session implements OD-16-3/
+OD-16-3a/OD-16-12/ADR-0015 exactly as already decided; no new owner
+decisions were required.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-3b (Commission Approvals section in
+the Settings shell, including the "Reverse" action; wage-report FIX-1
+sign fix; pending-commission total in the report header), per
+`docs/phases/PHASE_16.md` §2a/§3/§4/§5.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log — BUG-COMMISSION-MULTI
+      closes as SUPERSEDED by ADR-0015 once P16-3a is fully verified, per
+      OD-16-8; that closure note belongs with P16-3b's completion, not
+      this session's, since P16-3b is still what an owner will actually
+      use)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-24] Session 80 — Phase 16 P16-3a Checkpoint 1 + Checkpoint 1b: commission claim schema, pure calc, four review fixes
 
 **Goal:** Checkpoint 1 — commission claim/decision schema (migration

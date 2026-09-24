@@ -659,3 +659,315 @@ describe('P6-10: getSaleReceiptData/getSaleInvoiceData on a job delivery sale', 
     expect(layout.indexOf('-- Spare Parts --')).toBeLessThan(layout.indexOf('-- Repair --'));
   });
 });
+
+/** Assigns a technician into job_technician — insertJob only sets the legacy job.assigned_to column, not this table. */
+function assignTechnician(
+  jobId: string,
+  partyId: string,
+  assignedAt: string,
+  unassignedAt: string | null,
+): void {
+  rawDb
+    .prepare(
+      `INSERT INTO job_technician (id, tenant_id, job_id, party_id, assigned_at, unassigned_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(newId(), TENANT_ID, jobId, partyId, assignedAt, unassignedAt, new Date().toISOString());
+}
+
+describe('KyselyJobDeliveryRepository.deliverJob — commission claim (P16-3a Checkpoint 2, ADR-0015)', () => {
+  it('a labour line on a commission-configured (fixed) charge creates exactly one commission_claim row with the FIX-C2 snapshot', async () => {
+    const commissionChargeId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO service_charge (id, tenant_id, business_unit_id, name, retail_charge, commission_amount, is_active, created_at)
+         VALUES (?, ?, ?, 'AC Installation (commission)', 300000, 50000, 1, ?)`,
+      )
+      .run(commissionChargeId, TENANT_ID, repairUnitId, new Date().toISOString());
+
+    const jobId = insertJob(customerId);
+    assignTechnician(jobId, technicianPartyId, '2026-09-05T08:00:00.000Z', null);
+
+    const result = await deliveryRepo.deliverJob({
+      jobId,
+      saleDate: '2026-09-05',
+      partLines: [],
+      labourLines: [
+        {
+          serviceChargeId: commissionChargeId,
+          unitPricePaisa: null,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      paidPaisa: 0,
+    });
+
+    const saleLine = rawDb
+      .prepare(`SELECT id FROM sale_line WHERE sale_id = ? AND line_kind = 'labour'`)
+      .get(result.id) as { id: string };
+
+    const claims = rawDb
+      .prepare(`SELECT * FROM commission_claim WHERE job_id = ?`)
+      .all(jobId) as Array<{
+      id: string;
+      sale_line_id: string;
+      service_charge_id: string;
+      labour_amount_paisa: number;
+      suggested_amount_paisa: number;
+      suggested_recipient_party_id: string | null;
+      commission_mode: string;
+      commission_amount_paisa: number | null;
+      commission_bp: number | null;
+      quantity_milli: number;
+    }>;
+
+    expect(claims).toHaveLength(1);
+    // Hand-calc: retail_charge 300000 paisa, quantityMilli always 1000 for
+    // labour -> FLOOR(50000 * 1000 / 1000) = 50000.
+    expect(claims[0]).toMatchObject({
+      sale_line_id: saleLine.id,
+      service_charge_id: commissionChargeId,
+      labour_amount_paisa: 300000,
+      suggested_amount_paisa: 50000,
+      suggested_recipient_party_id: technicianPartyId,
+      commission_mode: 'fixed',
+      commission_amount_paisa: 50000,
+      commission_bp: null,
+      quantity_milli: 1000,
+    });
+  });
+
+  it('a labour line on a charge with commission mode "none" creates no commission_claim row', async () => {
+    // serviceChargeId (the beforeEach fixture) has no commission_amount/commission_bp set.
+    const jobId = insertJob(customerId);
+    assignTechnician(jobId, technicianPartyId, '2026-09-05T08:00:00.000Z', null);
+
+    await deliveryRepo.deliverJob({
+      jobId,
+      saleDate: '2026-09-05',
+      partLines: [],
+      labourLines: [
+        {
+          serviceChargeId,
+          unitPricePaisa: null,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      paidPaisa: 0,
+    });
+
+    const claims = rawDb.prepare(`SELECT id FROM commission_claim WHERE job_id = ?`).all(jobId);
+    expect(claims).toHaveLength(0);
+  });
+
+  it('a part line never produces a commission_claim row, even on a delivery that also has a commissioned labour line', async () => {
+    const commissionChargeId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO service_charge (id, tenant_id, business_unit_id, name, retail_charge, commission_amount, is_active, created_at)
+         VALUES (?, ?, ?, 'AC Installation (commission)', 300000, 50000, 1, ?)`,
+      )
+      .run(commissionChargeId, TENANT_ID, repairUnitId, new Date().toISOString());
+
+    const jobId = insertJob(customerId);
+    const jobPart = await jobPartRepo.issuePartsToJob({
+      jobId,
+      itemId: compressorItemId,
+      quantityMilli: 1000,
+      technicianPartyId,
+      unitPricePaisa: 1500000,
+      isBillable: true,
+    });
+
+    await deliveryRepo.deliverJob({
+      jobId,
+      saleDate: '2026-09-05',
+      partLines: [
+        {
+          jobPartId: jobPart.jobPartId,
+          unitPricePaisa: 1500000,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      labourLines: [
+        {
+          serviceChargeId: commissionChargeId,
+          unitPricePaisa: null,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      paidPaisa: 0,
+    });
+
+    const claims = rawDb.prepare(`SELECT id FROM commission_claim WHERE job_id = ?`).all(jobId);
+    // Exactly one — the labour line's, never the part line's.
+    expect(claims).toHaveLength(1);
+  });
+
+  it('suggested recipient is the earliest-assigned technician still active at delivery time, not the one who was removed (OD-16-2)', async () => {
+    const commissionChargeId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO service_charge (id, tenant_id, business_unit_id, name, retail_charge, commission_amount, is_active, created_at)
+         VALUES (?, ?, ?, 'AC Installation (commission)', 300000, 50000, 1, ?)`,
+      )
+      .run(commissionChargeId, TENANT_ID, repairUnitId, new Date().toISOString());
+
+    const jobId = insertJob(customerId);
+    const secondTechnicianId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO party (id, tenant_id, party_code, party_type, name, staff_role, is_active, created_at, updated_at)
+         VALUES (?, ?, 'STF-0002', 'staff', 'Bilal', 'technician', 1, ?, ?)`,
+      )
+      .run(secondTechnicianId, TENANT_ID, new Date().toISOString(), new Date().toISOString());
+
+    // technicianPartyId (Naeem) assigned first, then removed.
+    assignTechnician(
+      jobId,
+      technicianPartyId,
+      '2026-09-01T08:00:00.000Z',
+      '2026-09-02T08:00:00.000Z',
+    );
+    // Bilal assigned after, still active at delivery time.
+    assignTechnician(jobId, secondTechnicianId, '2026-09-02T09:00:00.000Z', null);
+
+    await deliveryRepo.deliverJob({
+      jobId,
+      saleDate: '2026-09-05',
+      partLines: [],
+      labourLines: [
+        {
+          serviceChargeId: commissionChargeId,
+          unitPricePaisa: null,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      paidPaisa: 0,
+    });
+
+    const claim = rawDb
+      .prepare(`SELECT suggested_recipient_party_id FROM commission_claim WHERE job_id = ?`)
+      .get(jobId) as { suggested_recipient_party_id: string | null };
+    expect(claim.suggested_recipient_party_id).toBe(secondTechnicianId);
+  });
+
+  it('no technician active on the job at delivery time -> suggested_recipient_party_id is NULL, claim is still created', async () => {
+    const commissionChargeId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO service_charge (id, tenant_id, business_unit_id, name, retail_charge, commission_amount, is_active, created_at)
+         VALUES (?, ?, ?, 'AC Installation (commission)', 300000, 50000, 1, ?)`,
+      )
+      .run(commissionChargeId, TENANT_ID, repairUnitId, new Date().toISOString());
+
+    const jobId = insertJob(customerId);
+    assignTechnician(
+      jobId,
+      technicianPartyId,
+      '2026-09-01T08:00:00.000Z',
+      '2026-09-02T08:00:00.000Z',
+    );
+    // No replacement assigned — nobody active at delivery time.
+
+    await deliveryRepo.deliverJob({
+      jobId,
+      saleDate: '2026-09-05',
+      partLines: [],
+      labourLines: [
+        {
+          serviceChargeId: commissionChargeId,
+          unitPricePaisa: null,
+          payerPartyId: customerId,
+          revenueType: 'customer_paid',
+        },
+      ],
+      paidPaisa: 0,
+    });
+
+    const claim = rawDb
+      .prepare(`SELECT suggested_recipient_party_id FROM commission_claim WHERE job_id = ?`)
+      .get(jobId) as { suggested_recipient_party_id: string | null } | undefined;
+    expect(claim).toBeDefined();
+    expect(claim?.suggested_recipient_party_id).toBeNull();
+  });
+
+  it("a claim insert failure rolls back the entire delivery — no sale, sale_line, stock movement, or claim survive (ADR-0015, inverted from Phase 7's isolated-failure behaviour)", async () => {
+    const commissionChargeId = newId();
+    rawDb
+      .prepare(
+        `INSERT INTO service_charge (id, tenant_id, business_unit_id, name, retail_charge, commission_amount, is_active, created_at)
+         VALUES (?, ?, ?, 'AC Installation (commission)', 300000, 50000, 1, ?)`,
+      )
+      .run(commissionChargeId, TENANT_ID, repairUnitId, new Date().toISOString());
+
+    const jobId = insertJob(customerId);
+    const jobPart = await jobPartRepo.issuePartsToJob({
+      jobId,
+      itemId: compressorItemId,
+      quantityMilli: 1000,
+      technicianPartyId,
+      unitPricePaisa: 1500000,
+      isBillable: true,
+    });
+
+    // Test-only trigger (never part of the app's own migrations) that
+    // forces exactly one commission_claim insert for this job to fail,
+    // simulating any real-world claim-insert failure — a bad FK, a disk
+    // error, anything — without needing to fabricate one from legitimate
+    // delivery input (every field commission_claim receives is derived
+    // from already-validated data by the time it's inserted).
+    rawDb.exec(`
+      CREATE TRIGGER block_this_claim
+      BEFORE INSERT ON commission_claim
+      WHEN NEW.job_id = '${jobId}'
+      BEGIN
+        SELECT RAISE(ABORT, 'test-forced commission_claim insert failure');
+      END;
+    `);
+
+    const movementsBefore = stockMovementCount();
+
+    await expect(
+      deliveryRepo.deliverJob({
+        jobId,
+        saleDate: '2026-09-05',
+        partLines: [
+          {
+            jobPartId: jobPart.jobPartId,
+            unitPricePaisa: 1500000,
+            payerPartyId: customerId,
+            revenueType: 'customer_paid',
+          },
+        ],
+        labourLines: [
+          {
+            serviceChargeId: commissionChargeId,
+            unitPricePaisa: null,
+            payerPartyId: customerId,
+            revenueType: 'customer_paid',
+          },
+        ],
+        paidPaisa: 0,
+      }),
+    ).rejects.toThrow(/test-forced commission_claim insert failure/);
+
+    const sales = rawDb.prepare(`SELECT id FROM sale WHERE job_id = ?`).all(jobId);
+    expect(sales).toHaveLength(0);
+    const saleLines = rawDb
+      .prepare(`SELECT sl.id FROM sale_line sl JOIN sale s ON s.id = sl.sale_id WHERE s.job_id = ?`)
+      .all(jobId);
+    expect(saleLines).toHaveLength(0);
+    const claims = rawDb.prepare(`SELECT id FROM commission_claim WHERE job_id = ?`).all(jobId);
+    expect(claims).toHaveLength(0);
+    // job_part-sourced deliveries write NO stock_movement at all (P6-4's
+    // job_issue is the real stock event) — this assertion instead proves
+    // the rollback didn't somehow create one, holding the count steady.
+    expect(stockMovementCount()).toBe(movementsBefore);
+  });
+});

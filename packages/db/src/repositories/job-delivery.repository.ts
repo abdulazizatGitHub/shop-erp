@@ -1,6 +1,11 @@
 import { Money } from '@shop/shared';
 import { formatDisplayDocNumber, newId } from '@shop/shared';
-import { computeLineTotalPaisa } from '@shop/core';
+import {
+  computeLineTotalPaisa,
+  computeSuggestedCommissionPaisa,
+  deriveCommissionMode,
+  suggestCommissionRecipient,
+} from '@shop/core';
 import type {
   DeliverJobInput,
   DeliverJobResult,
@@ -27,6 +32,10 @@ interface ComputedLine {
   readonly serviceChargeId: string | null;
   readonly payerPartyId: string | null;
   readonly revenueType: string;
+  // Commission claim snapshot (Checkpoint 2, FIX-C2) — null/null for
+  // part lines, which never carry commission.
+  readonly commissionAmountPaisa: number | null;
+  readonly commissionBp: number | null;
 }
 
 export class KyselyJobDeliveryRepository implements JobDeliveryRepositoryPort {
@@ -185,13 +194,15 @@ export class KyselyJobDeliveryRepository implements JobDeliveryRepositoryPort {
             serviceChargeId: null,
             payerPartyId: line.payerPartyId,
             revenueType: line.revenueType,
+            commissionAmountPaisa: null,
+            commissionBp: null,
           });
         }
 
         for (const line of input.labourLines) {
           const serviceCharge = await trx
             .selectFrom('serviceCharge')
-            .select(['id', 'name', 'retailCharge'])
+            .select(['id', 'name', 'retailCharge', 'commissionAmount', 'commissionBp'])
             .where('id', '=', line.serviceChargeId)
             .where('tenantId', '=', this.tenantId)
             .executeTakeFirst();
@@ -214,6 +225,8 @@ export class KyselyJobDeliveryRepository implements JobDeliveryRepositoryPort {
             serviceChargeId: serviceCharge.id,
             payerPartyId: line.payerPartyId,
             revenueType: line.revenueType,
+            commissionAmountPaisa: serviceCharge.commissionAmount,
+            commissionBp: serviceCharge.commissionBp,
           });
         }
 
@@ -269,11 +282,36 @@ export class KyselyJobDeliveryRepository implements JobDeliveryRepositoryPort {
           })
           .execute();
 
+        // Commission claim suggested recipient (OD-16-2) is the same for
+        // every labour line on this delivery — computed once, lazily,
+        // only if at least one labour line actually needs a claim.
+        let suggestedRecipientPartyId: string | null | undefined;
+        const resolveSuggestedRecipient = async (): Promise<string | null> => {
+          if (suggestedRecipientPartyId === undefined) {
+            const assignments = await trx
+              .selectFrom('jobTechnician')
+              .select(['id', 'partyId', 'assignedAt', 'unassignedAt'])
+              .where('tenantId', '=', this.tenantId)
+              .where('jobId', '=', input.jobId)
+              .execute();
+            suggestedRecipientPartyId = suggestCommissionRecipient(
+              assignments.map((a) => ({
+                id: a.id,
+                technicianPartyId: a.partyId,
+                assignedAt: a.assignedAt,
+                unassignedAt: a.unassignedAt,
+              })),
+            );
+          }
+          return suggestedRecipientPartyId;
+        };
+
         for (const [index, line] of computedLines.entries()) {
+          const saleLineId = newId();
           await trx
             .insertInto('saleLine')
             .values({
-              id: newId(),
+              id: saleLineId,
               tenantId: this.tenantId,
               saleId,
               lineNo: index + 1,
@@ -298,6 +336,48 @@ export class KyselyJobDeliveryRepository implements JobDeliveryRepositoryPort {
             .execute();
           // NO stock_movement insert here — P6-4's job_issue movement is
           // the real, final stock event for job-sourced part lines.
+
+          // Commission claim (OD-16-2/ADR-0015) — INSIDE this same
+          // transaction, deliberately: a claim insert failure must roll
+          // back the whole delivery (ADR-0015 "A deliberate reversal of
+          // Phase 7's transaction behaviour"), the opposite of Phase 7's
+          // isolated, swallowed commission-recording failure.
+          if (line.lineKind === 'labour' && line.serviceChargeId) {
+            const commissionMode = deriveCommissionMode(
+              line.commissionAmountPaisa,
+              line.commissionBp,
+            );
+            if (commissionMode !== 'none') {
+              const suggestedAmountPaisa = computeSuggestedCommissionPaisa(
+                commissionMode,
+                line.commissionAmountPaisa,
+                line.commissionBp,
+                line.lineTotalPaisa,
+                line.quantityMilli,
+              );
+              const recipientPartyId = await resolveSuggestedRecipient();
+              await trx
+                .insertInto('commissionClaim')
+                .values({
+                  id: newId(),
+                  tenantId: this.tenantId,
+                  jobId: input.jobId,
+                  saleLineId,
+                  serviceChargeId: line.serviceChargeId,
+                  labourAmountPaisa: line.lineTotalPaisa,
+                  // commissionMode !== 'none' guarantees a non-null result — see
+                  // computeSuggestedCommissionPaisa's own doc comment.
+                  suggestedAmountPaisa: suggestedAmountPaisa as number,
+                  suggestedRecipientPartyId: recipientPartyId,
+                  createdAt: now,
+                  commissionMode,
+                  commissionAmountPaisa: line.commissionAmountPaisa,
+                  commissionBp: line.commissionBp,
+                  quantityMilli: line.quantityMilli,
+                })
+                .execute();
+            }
+          }
         }
 
         const singlePayer = payerTotals.size === 1;

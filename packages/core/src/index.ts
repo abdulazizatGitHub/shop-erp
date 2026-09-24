@@ -71,16 +71,29 @@ export type {
 
 export type { AttendanceStatus } from '@shop/contracts';
 export { computeDayWage } from './payroll/wage.service.js';
-export { computeCommission } from './payroll/commission.service.js';
 export {
   computeSuggestedCommissionPaisa,
   suggestCommissionRecipient,
+  deriveCommissionMode,
 } from './payroll/commission-claim.js';
 export type { TechnicianAssignmentForSuggestion } from './payroll/commission-claim.js';
+export {
+  validateApprovalRecipients,
+  assertNonBlankReason,
+  isClaimPending,
+} from './payroll/commission-decision.js';
+export type { RecipientInput, RecipientPartyInfo } from './payroll/commission-decision.js';
 export type {
-  RecordCommissionInput,
-  CommissionRepositoryPort,
-} from './payroll/commission.repository.port.js';
+  TechnicianHistoryEntry,
+  DecisionRecipientRecord,
+  DecisionRecord,
+  PendingClaimSummary,
+  ClaimDetail,
+  ApproveClaimInput,
+  RejectClaimInput,
+  ReverseDecisionInput,
+  CommissionDecisionRepositoryPort,
+} from './payroll/commission-decision.repository.port.js';
 export { saveAttendanceBatch } from './payroll/attendance.service.js';
 export type { AttendanceInputRow } from './payroll/attendance.service.js';
 export type {

@@ -75,7 +75,6 @@ export function StaffListView(): React.JSX.Element {
               <TableHeaderCell>Phone</TableHeaderCell>
               <TableHeaderCell>Role</TableHeaderCell>
               <TableHeaderCell className="text-right">Daily rate</TableHeaderCell>
-              <TableHeaderCell className="text-right">Commission</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -88,7 +87,6 @@ export function StaffListView(): React.JSX.Element {
                 <TableCell className="text-right">
                   <MoneyDisplay paisaValue={member.wageRatePaisa} />
                 </TableCell>
-                <TableCell className="text-right">{member.commissionBp / 100}%</TableCell>
               </TableRow>
             ))}
           </TableBody>

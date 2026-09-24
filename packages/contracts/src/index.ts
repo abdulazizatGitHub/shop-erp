@@ -146,6 +146,19 @@ export {
 export { CreateBrandInput, ToggleBrandInput, BrandAdminDto } from './job/brand.js';
 
 export {
+  ApproveClaimRecipientInput,
+  ApproveClaimInput,
+  RejectClaimInput,
+  ReverseDecisionInput,
+  GetClaimDetailInput,
+  PendingClaimSummaryDto,
+  TechnicianHistoryEntryDto,
+  DecisionRecipientRecordDto,
+  DecisionRecordDto,
+  ClaimDetailDto,
+} from './payroll/commission-decision.js';
+
+export {
   PurchaseLineInput,
   CreatePurchaseInput,
   PurchaseIdInput,

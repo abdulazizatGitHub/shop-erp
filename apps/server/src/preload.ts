@@ -62,6 +62,12 @@ import type {
   CreateBrandInput,
   ToggleBrandInput,
   BrandAdminDto,
+  ApproveClaimInput,
+  RejectClaimInput,
+  ReverseDecisionInput,
+  PendingClaimSummaryDto,
+  ClaimDetailDto,
+  DecisionRecordDto,
   PartyAnyDto,
   PartySearchAnyInput,
   PaymentDto,
@@ -454,6 +460,20 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.brand.create, input) as Promise<BrandAdminDto>,
     toggleActive: (input: ToggleBrandInput): Promise<BrandAdminDto> =>
       ipcRenderer.invoke(channels.brand.toggleActive, input) as Promise<BrandAdminDto>,
+  },
+  commission: {
+    listPending: (): Promise<readonly PendingClaimSummaryDto[]> =>
+      ipcRenderer.invoke(channels.commission.listPending) as Promise<
+        readonly PendingClaimSummaryDto[]
+      >,
+    getDetail: (claimId: string): Promise<ClaimDetailDto> =>
+      ipcRenderer.invoke(channels.commission.getDetail, { claimId }) as Promise<ClaimDetailDto>,
+    approve: (input: ApproveClaimInput): Promise<DecisionRecordDto> =>
+      ipcRenderer.invoke(channels.commission.approve, input) as Promise<DecisionRecordDto>,
+    reject: (input: RejectClaimInput): Promise<DecisionRecordDto> =>
+      ipcRenderer.invoke(channels.commission.reject, input) as Promise<DecisionRecordDto>,
+    reverse: (input: ReverseDecisionInput): Promise<void> =>
+      ipcRenderer.invoke(channels.commission.reverse, input) as Promise<void>,
   },
   uom: {
     listConversions: (): Promise<readonly UomConversionOption[]> =>

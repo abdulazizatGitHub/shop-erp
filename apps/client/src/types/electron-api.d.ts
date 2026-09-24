@@ -63,6 +63,12 @@ import type {
   CreateBrandInput,
   ToggleBrandInput,
   BrandAdminDto,
+  ApproveClaimInput,
+  RejectClaimInput,
+  ReverseDecisionInput,
+  PendingClaimSummaryDto,
+  ClaimDetailDto,
+  DecisionRecordDto,
   PaymentDto,
   PaymentReceiptDataDto,
   PurchaseIdInput,
@@ -553,6 +559,13 @@ export interface ElectronApi {
     readonly listAdmin: () => Promise<readonly BrandAdminDto[]>;
     readonly create: (input: CreateBrandInput) => Promise<BrandAdminDto>;
     readonly toggleActive: (input: ToggleBrandInput) => Promise<BrandAdminDto>;
+  };
+  readonly commission: {
+    readonly listPending: () => Promise<readonly PendingClaimSummaryDto[]>;
+    readonly getDetail: (claimId: string) => Promise<ClaimDetailDto>;
+    readonly approve: (input: ApproveClaimInput) => Promise<DecisionRecordDto>;
+    readonly reject: (input: RejectClaimInput) => Promise<DecisionRecordDto>;
+    readonly reverse: (input: ReverseDecisionInput) => Promise<void>;
   };
   readonly uom: {
     readonly listConversions: () => Promise<readonly UomConversionOption[]>;
