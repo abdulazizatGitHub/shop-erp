@@ -609,6 +609,47 @@ export interface ItemPriceHistoryTable {
   sourceId: string;
 }
 
+// Phase 16, P16-3a (docs/phases/PHASE_16.md §2a, ADR-0015).
+export interface CommissionClaimTable {
+  id: string;
+  tenantId: string;
+  jobId: string;
+  saleLineId: string;
+  serviceChargeId: string;
+  labourAmountPaisa: number;
+  suggestedAmountPaisa: number;
+  suggestedRecipientPartyId: string | null;
+  createdAt: string;
+}
+
+export interface CommissionDecisionTable {
+  id: string;
+  tenantId: string;
+  claimId: string;
+  attemptNo: number;
+  decision: string; // 'approved' | 'rejected'
+  reason: string | null;
+  decidedAt: string;
+  createdAt: string;
+}
+
+export interface CommissionDecisionRecipientTable {
+  id: string;
+  tenantId: string;
+  decisionId: string;
+  technicianPartyId: string;
+  amountPaisa: number;
+}
+
+export interface CommissionDecisionReversalTable {
+  id: string;
+  tenantId: string;
+  decisionId: string;
+  reason: string;
+  reversedAt: string;
+  createdAt: string;
+}
+
 export interface Database {
   item: ItemTable;
   itemPrice: ItemPriceTable;
@@ -649,4 +690,8 @@ export interface Database {
   grn: GrnTable;
   grnLine: GrnLineTable;
   itemPriceHistory: ItemPriceHistoryTable;
+  commissionClaim: CommissionClaimTable;
+  commissionDecision: CommissionDecisionTable;
+  commissionDecisionRecipient: CommissionDecisionRecipientTable;
+  commissionDecisionReversal: CommissionDecisionReversalTable;
 }

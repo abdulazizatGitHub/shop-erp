@@ -72,6 +72,11 @@ export type {
 export type { AttendanceStatus } from '@shop/contracts';
 export { computeDayWage } from './payroll/wage.service.js';
 export { computeCommission } from './payroll/commission.service.js';
+export {
+  computeSuggestedCommissionPaisa,
+  suggestCommissionRecipient,
+} from './payroll/commission-claim.js';
+export type { TechnicianAssignmentForSuggestion } from './payroll/commission-claim.js';
 export type {
   RecordCommissionInput,
   CommissionRepositoryPort,

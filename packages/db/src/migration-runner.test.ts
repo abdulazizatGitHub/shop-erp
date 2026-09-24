@@ -45,12 +45,13 @@ describe('migrate', () => {
       '0015_job_technician.sql',
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
+      '0018_commission_claims.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it('applies exactly 51 tables and 11 views — the 50-table baseline (through 0015), +1 for job_client (0016); job.job_client_id is a column add, not a new table', () => {
+  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal", () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -59,7 +60,7 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(51);
+    expect(tables).toHaveLength(55);
     expect(views).toHaveLength(11);
   });
 
@@ -99,6 +100,7 @@ describe('migrate', () => {
       '0015_job_technician.sql',
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
+      '0018_commission_claims.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -129,6 +131,7 @@ describe('migrate', () => {
       { version: 15, name: '0015_job_technician.sql' },
       { version: 16, name: '0016_job_client.sql' },
       { version: 17, name: '0017_brand_is_active.sql' },
+      { version: 18, name: '0018_commission_claims.sql' },
     ]);
   });
 
@@ -250,6 +253,7 @@ describe('migrate', () => {
       '0015_job_technician.sql',
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
+      '0018_commission_claims.sql',
     ]);
 
     db = new Database(dbPath);
