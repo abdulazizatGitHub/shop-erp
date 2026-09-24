@@ -41,6 +41,86 @@
 
 ---
 
+## [2026-09-24] Session 79 — Phase 16 P16-1b review fixes (FIX-A/FIX-B) + P16-2: brand management
+
+**Goal:** Fix two P16-1b review findings (Settings opening blank from
+the main sidebar; Save's placement not matching the reference), then
+build P16-2 (brand management) per `docs/phases/PHASE_16.md` §2a
+OD-16-6/OD-16-7, §2c, §3, §4.
+
+**Done:**
+
+- FIX-A: `SettingsPage.tsx`'s `<Routes>` only redirected the literal
+  `/settings` path. Since `App.tsx`'s main-sidebar tab switch never
+  touches the hash, Settings could mount at `/` or any stale path and
+  render blank with no active nav item. Added a trailing wildcard route
+  (`path="*"`) redirecting to `/settings/shop` for anything not matched
+  above it.
+- FIX-B: Save moved from sitting under the fields at the form's own
+  max-width edge into a shared bottom action bar in
+  `SettingsSectionFrame.tsx` (border-top divider, right-aligned, full
+  content-pane width), via a small `useSectionActions(node)` hook — a
+  form-bearing section calls it once with its Save button; sections
+  with no form (Backup, Service Charges' table, Brands, Commission
+  Approvals placeholder) never call it, so no bar renders there. No
+  behaviour change to save/dirty logic, just where it renders.
+- P16-2: migration `0017_brand_is_active.sql`
+  (`brand.is_active INTEGER NOT NULL DEFAULT 1`); starter bootstrap
+  (18 brands, per-name case-insensitive check including soft-deleted
+  rows, idempotent); `KyselyBrandRepository` + `brand:list/listAdmin/
+create/toggleActive` IPC; `BrandsTab.tsx` (list + immediate-add +
+  per-row toggle, no action bar — no form to save); `BRAND_OPTIONS`
+  deleted from `JobApplianceFields.tsx`, replaced by a live
+  `useActiveBrands.ts` hook used by both job intake
+  (`JobCreateForm.tsx`) and job edit (`JobApplianceEditSection.tsx`,
+  whose "known brand" check now runs against the live list — a stored
+  brand that's since been deactivated/deleted reopens as free-text
+  "Other" with its exact stored text, so an untouched Save is a no-op).
+
+**Verified:**
+
+- `npm run verify` — 693/693 after FIX-A/FIX-B, then 710/710 after
+  P16-2, exit 0 both times (hit the documented better-sqlite3 ABI-
+  mismatch pattern repeatedly this session — `npm rebuild
+better-sqlite3` each time, unrelated to this code).
+- Hand-run queries (§4 P16-2): fresh DB → exactly 18 brands, all
+  active; re-seeding inserts 0; `createBrand({name:'gree'})` rejected
+  (duplicate of seeded "Gree"); deactivating "Haier" removes it from
+  `listActiveBrands` (17 remain) but `listBrandsAdmin` still returns it,
+  `deleted_at` still `NULL`.
+- 27 new tests total (3 for FIX-A, 17 for P16-2, matching
+  `docs/phases/PHASE_16.md` §5's per-file breakdown), all passing.
+
+**Not done / deferred:** P16-3a (commission claim schema + core calc +
+delivery hook) — next task.
+
+**Bugs found:** none new (FIX-A/FIX-B were review findings from the
+prior session's own work, fixed in this session, not left open).
+
+**Decisions taken:** none new — implements OD-16-6/OD-16-7/§2c as
+already decided; FIX-A/FIX-B are bug fixes to P16-1b's own
+implementation, not new design decisions.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-3a (commission claim schema + core
+claim-calculation function + delivery-transaction hook + the GAP-1
+decision-reversal path), per `docs/phases/PHASE_16.md` §2a/§3/§4 and
+`docs/decisions/ADR-0015-commission-claims.md`.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log this
+      session beyond what P16-1b already logged)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-23] Session 78 — Phase 16 P16-1b: Settings shell redesign (OD-16-11)
 
 **Goal:** Replace the P16-1 stacked-cards Settings layout and the "Job

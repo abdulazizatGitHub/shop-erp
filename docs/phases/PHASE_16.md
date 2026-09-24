@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b done, 690/690 tests; P16-2 next)
+**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 done, 710/710 tests; P16-3a next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -389,7 +389,7 @@ resolves to the same `brand.id` and imports successfully; no second
 | ------ | --------------------------------------------------- | ---------------------------------- | ----------- | ------- |
 | P16-1  | Service charge management                           | —                                  | DONE        | 55f0438 |
 | P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE        | 320e602 |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | NOT STARTED | —       |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE        | c0294bf |
 | P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | NOT STARTED | —       |
 | P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED | —       |
 | P16-3c | Technician removal guard                            | —                                  | NOT STARTED | —       |
@@ -618,13 +618,25 @@ verified `npm run verify` count):
 - P16-1 review fix (`361c658`): 665 → 672 (+7: `Money.fromPercent`/
   `fromRupees` conversion tests ×3, `ServiceChargeModal` conversion
   tests ×4).
-- P16-1b: 672 → 690 (+18: `SettingsPage.test.tsx` ×13 — redirect, 7×
-  routing, active-highlight, clean-switch-no-dialog, dirty-switch-
-  confirm/stay/discard, no-dialog-after-successful-save, failed-save-
-  stays-dirty; `ShopSettingsSection.test.tsx` ×2 — save-time fresh-fetch
-  overlay, failed-save-stays-dirty; `InvoiceReceiptsSettingsSection.test.tsx`
-  ×3 — sequential save of both IPC calls, A4/A5-dirty-without-instant-
-  save, paper-size-failure-names-itself-and-stays-dirty).
+- P16-1b (`320e602`): 672 → 690 (+18: `SettingsPage.test.tsx` ×13 —
+  redirect, 7× routing, active-highlight, clean-switch-no-dialog,
+  dirty-switch-confirm/stay/discard, no-dialog-after-successful-save,
+  failed-save-stays-dirty; `ShopSettingsSection.test.tsx` ×2 — save-time
+  fresh-fetch overlay, failed-save-stays-dirty;
+  `InvoiceReceiptsSettingsSection.test.tsx` ×3 — sequential save of both
+  IPC calls, A4/A5-dirty-without-instant-save, paper-size-failure-
+  names-itself-and-stays-dirty).
+- P16-1b review fix, FIX-A/FIX-B (`2804cd4`): 690 → 693 (+3: blank-
+  Settings catch-all redirect from "/", from an unrecognized
+  `/settings/*` path, and a valid deep link renders directly with no
+  redirect — `SettingsPage.test.tsx`).
+- P16-2 (`c0294bf`): 693 → 710 (+17: `brand.repository.test.ts` ×5,
+  contracts `brand.test.ts` ×4, core `brand.service.test.ts` ×3
+  (`normalizeBrandName`), `bootstrap.test.ts` ×2 new (exactly-18-brands,
+  no-recreate-after-soft-delete), `import.repository.test.ts` ×1
+  (deactivated Haier still matches CSV import, no second row),
+  `BrandsTab.test.tsx` ×1, `JobCreateForm.test.tsx` ×1 (brand-list-
+  load-failure never blocks intake)).
 
 **Rewritten (not deleted) from Phase 7** — `commission.repository.test.ts`:
 
