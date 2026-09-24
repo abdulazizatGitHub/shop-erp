@@ -290,6 +290,12 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
           .execute();
 
         for (const recipient of input.recipients) {
+          // FIX-D1: the column means "why the owner paid someone OUTSIDE
+          // this job's history" — an in-history recipient always stores
+          // NULL here, regardless of what the caller sent. Validation
+          // already confirmed an outside-history recipient's reason is
+          // non-blank; this is storage, not another rejection point.
+          const inHistory = jobTechnicianPartyIds.has(recipient.technicianPartyId);
           await trx
             .insertInto('commissionDecisionRecipient')
             .values({
@@ -298,7 +304,7 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
               decisionId,
               technicianPartyId: recipient.technicianPartyId,
               amountPaisa: recipient.amountPaisa,
-              outsideHistoryReason: recipient.outsideHistoryReason,
+              outsideHistoryReason: inHistory ? null : recipient.outsideHistoryReason,
             })
             .execute();
 

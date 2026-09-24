@@ -41,6 +41,85 @@
 
 ---
 
+## [2026-09-24] Session 82 — Phase 16 P16-3a Checkpoint 2 review fixes (FIX-D1/D2/D3)
+
+**Goal:** Three owner review findings on Checkpoint 2 before starting
+P16-3b: FIX-D1 (outside_history_reason storage semantics), FIX-D2
+(transaction-atomicity tests on approve/reverse, money-critical), FIX-D3
+(Zod contract tests for the commission:* IPC inputs, matching the
+brand.test.ts/service-charge.test.ts pattern).
+
+**Done:**
+
+- **FIX-D1**: `commission-decision.repository.ts`'s `approveClaim` now
+  computes `inHistory` per recipient and always stores
+  `outsideHistoryReason = inHistory ? null : recipient.outsideHistoryReason`
+  — an in-history recipient's submitted reason (if any) is discarded,
+  never rejected. The owner's Step 2 hand-run had exposed this: a reason
+  given for an in-history recipient was being stored verbatim instead of
+  discarded.
+- **FIX-D2**: two new atomicity tests, same test-only-SQLite-trigger
+  technique as the Checkpoint 2 delivery rollback test (never a
+  schema/migration change): approving two recipients where the second
+  `party_ledger` insert is forced to fail rolls back the whole
+  transaction (zero decision/recipient/ledger rows, claim still
+  pending); reversing a two-recipient decision where the second
+  reversing `party_ledger` insert is forced to fail rolls back the whole
+  reversal (no reversal row, no reversing ledger rows, decision still
+  unreversed, the original two ledger rows untouched).
+- **FIX-D3**: new `packages/contracts/src/payroll/commission-decision.test.ts`
+  covering every commission:* Zod input — recipients non-empty,
+  amountPaisa positive integer, technicianPartyId/claimId/decisionId
+  must be uuids, reject/reverse reasons and outsideHistoryReason trimmed
+  non-blank (whitespace-only rejected), decidedAt/reversedAt non-empty.
+
+**Verified:**
+
+- `npm run verify`: 785/785, exit 0 (761 + 24: +1 FIX-D1, +2 FIX-D2,
+  +21 FIX-D3).
+- New tests named:
+  - `commission-decision.repository.test.ts`: `'FIX-D1: an in-history
+recipient submitted WITH a reason -> the reason is discarded, NULL is
+stored...; an outside-history recipient in the same approval keeps
+its reason'`; `"FIX-D2 (atomicity): a failure inserting the SECOND
+recipient's party_ledger row rolls back the whole approval..."`;
+    `"FIX-D2 (atomicity): a failure inserting the SECOND recipient's
+reversing party_ledger row rolls back the whole reversal..."`.
+  - `commission-decision.test.ts` (contracts, new file, 21 tests):
+    `ApproveClaimRecipientInput` ×7 (valid in-history recipient,
+    non-uuid technicianPartyId, amountPaisa<=0 ×2, non-integer
+    amountPaisa, whitespace-only reason, trims a valid reason, missing
+    reason field), `ApproveClaimInput` ×5 (one recipient, two
+    recipients, empty recipients array, non-uuid claimId, empty
+    decidedAt), `RejectClaimInput` ×4 (valid, empty/whitespace reason,
+    trims reason, non-uuid claimId), `ReverseDecisionInput` ×3 (valid,
+    empty/whitespace reason, non-uuid decisionId), `GetClaimDetailInput`
+    ×2 (valid uuid, non-uuid rejected).
+
+**Not done / deferred:** P16-3b — next, this same session.
+
+**Bugs found:** none new — FIX-D1 was an owner-caught defect in this
+session's own Checkpoint 2 work, fixed here, not left open.
+
+**Decisions taken:** none new.
+
+**Blocked on:** nothing.
+
+**Next session should:** build P16-3b (Commission Approvals UI +
+wage-report FIX-1) per `docs/phases/PHASE_16.md` §2a/§3/§4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-24] Session 81 — Phase 16 P16-3a Checkpoint 2: delivery integration, approve/reject/reverse, Phase 7 retirement
 
 **Goal:** Wire the commission claim model end to end per

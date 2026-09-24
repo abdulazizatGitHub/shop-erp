@@ -316,6 +316,47 @@ describe('KyselyCommissionDecisionRepository.approveClaim', () => {
     expect(ledgerRowsFor(outsideStaffId)).toHaveLength(1);
   });
 
+  it('FIX-D1: an in-history recipient submitted WITH a reason -> the reason is discarded, NULL is stored (the column means "why pay someone outside history"); an outside-history recipient in the same approval keeps its reason', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+
+    const decision = await decisionRepo.approveClaim({
+      claimId,
+      recipients: [
+        {
+          technicianPartyId: technicianAId,
+          amountPaisa: 20000,
+          outsideHistoryReason: 'Assisted on this install',
+        },
+        {
+          technicianPartyId: outsideStaffId,
+          amountPaisa: 30000,
+          outsideHistoryReason: 'Senior technician covered for A on this job',
+        },
+      ],
+      decidedAt: '2026-09-25',
+    });
+
+    const inHistoryRecipient = decision.recipients.find(
+      (r) => r.technicianPartyId === technicianAId,
+    );
+    const outsideHistoryRecipient = decision.recipients.find(
+      (r) => r.technicianPartyId === outsideStaffId,
+    );
+    expect(inHistoryRecipient?.outsideHistoryReason).toBeNull();
+    expect(outsideHistoryRecipient?.outsideHistoryReason).toBe(
+      'Senior technician covered for A on this job',
+    );
+
+    const storedRow = rawDb
+      .prepare(
+        `SELECT outside_history_reason FROM commission_decision_recipient WHERE decision_id = ? AND technician_party_id = ?`,
+      )
+      .get(decision.id, technicianAId) as { outside_history_reason: string | null };
+    expect(storedRow.outside_history_reason).toBeNull();
+  });
+
   it('OD-16-12: a non-staff party as recipient is rejected outright, even with a reason', async () => {
     const jobId = insertJob();
     assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
@@ -358,6 +399,50 @@ describe('KyselyCommissionDecisionRepository.approveClaim', () => {
         decidedAt: '2026-09-26',
       }),
     ).rejects.toThrow(/already has an active decision/);
+  });
+
+  it("FIX-D2 (atomicity): a failure inserting the SECOND recipient's party_ledger row rolls back the whole approval — zero decision, zero recipient rows, zero ledger rows, claim still pending", async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    assignTechnician(jobId, technicianBId, '2026-09-24T09:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+
+    // Test-only trigger (never part of the app's own migrations) that
+    // forces every commission party_ledger insert for technicianB to
+    // fail — technicianA's insert (first recipient) succeeds, then
+    // technicianB's (second) fails, proving the whole transaction rolls
+    // back rather than leaving technicianA's row behind.
+    rawDb.exec(`
+      CREATE TRIGGER block_ledger_for_b
+      BEFORE INSERT ON party_ledger
+      WHEN NEW.party_id = '${technicianBId}' AND NEW.entry_type = 'commission'
+      BEGIN
+        SELECT RAISE(ABORT, 'test-forced party_ledger insert failure for technicianB');
+      END;
+    `);
+
+    await expect(
+      decisionRepo.approveClaim({
+        claimId,
+        recipients: [
+          { technicianPartyId: technicianAId, amountPaisa: 30000, outsideHistoryReason: null },
+          { technicianPartyId: technicianBId, amountPaisa: 20000, outsideHistoryReason: null },
+        ],
+        decidedAt: '2026-09-25',
+      }),
+    ).rejects.toThrow(/test-forced party_ledger insert failure for technicianB/);
+
+    const decisions = rawDb
+      .prepare(`SELECT id FROM commission_decision WHERE claim_id = ?`)
+      .all(claimId);
+    expect(decisions).toHaveLength(0);
+    const recipients = rawDb.prepare(`SELECT id FROM commission_decision_recipient`).all();
+    expect(recipients).toHaveLength(0);
+    expect(ledgerRowsFor(technicianAId)).toHaveLength(0);
+    expect(ledgerRowsFor(technicianBId)).toHaveLength(0);
+
+    const pending = await decisionRepo.listPendingClaims();
+    expect(pending.some((c) => c.claimId === claimId)).toBe(true);
   });
 });
 
@@ -572,6 +657,61 @@ describe('KyselyCommissionDecisionRepository.reverseDecision — GAP-1 correctio
         reversedAt: '2026-09-26',
       }),
     ).rejects.toThrow(/reversal reason/);
+  });
+
+  it("FIX-D2 (atomicity): a failure inserting the SECOND recipient's reversing party_ledger row rolls back the whole reversal — no reversal row, no reversing ledger rows, decision still unreversed, ledger net unchanged", async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    assignTechnician(jobId, technicianBId, '2026-09-24T09:00:00.000Z');
+    const claimId = await deliverAndGetClaimId(jobId);
+
+    const decision = await decisionRepo.approveClaim({
+      claimId,
+      recipients: [
+        { technicianPartyId: technicianAId, amountPaisa: 30000, outsideHistoryReason: null },
+        { technicianPartyId: technicianBId, amountPaisa: 20000, outsideHistoryReason: null },
+      ],
+      decidedAt: '2026-09-25',
+    });
+
+    // Trigger installed AFTER the approval so the original two ledger
+    // rows above are unaffected — it only blocks a REVERSING insert for
+    // technicianB (the second recipient processed).
+    rawDb.exec(`
+      CREATE TRIGGER block_reversal_ledger_for_b
+      BEFORE INSERT ON party_ledger
+      WHEN NEW.party_id = '${technicianBId}' AND NEW.entry_type = 'commission' AND NEW.amount > 0
+      BEGIN
+        SELECT RAISE(ABORT, 'test-forced reversing party_ledger insert failure for technicianB');
+      END;
+    `);
+
+    await expect(
+      decisionRepo.reverseDecision({
+        decisionId: decision.id,
+        reason: 'Wrong split',
+        reversedAt: '2026-09-26',
+      }),
+    ).rejects.toThrow(/test-forced reversing party_ledger insert failure for technicianB/);
+
+    const reversals = rawDb
+      .prepare(`SELECT id FROM commission_decision_reversal WHERE decision_id = ?`)
+      .all(decision.id);
+    expect(reversals).toHaveLength(0);
+
+    // Still exactly the original two approval rows — no reversing rows
+    // for either recipient (technicianA's would-be reversing row must
+    // also have been rolled back, even though its own insert never hit
+    // the trigger).
+    const rowsA = ledgerRowsFor(technicianAId);
+    const rowsB = ledgerRowsFor(technicianBId);
+    expect(rowsA).toHaveLength(1);
+    expect(rowsB).toHaveLength(1);
+    expect(rowsA[0]?.amount).toBe(-30000);
+    expect(rowsB[0]?.amount).toBe(-20000);
+
+    const pending = await decisionRepo.listPendingClaims();
+    expect(pending.some((c) => c.claimId === claimId)).toBe(false);
   });
 });
 
