@@ -22,10 +22,9 @@ proposal.
 The owner reviews pending claims (Commission Approvals) and either:
 
 - **Approves**, naming one or more recipients (each an integer paisa
-  amount > 0, each a technician present in the job's technician
-  assignment history — active or previously removed) — this writes one
-  `commission_decision` row and one `party_ledger` row per recipient, in
-  one transaction; or
+  amount > 0; recipient eligibility corrected by OD-16-12 below) — this
+  writes one `commission_decision` row and one `party_ledger` row per
+  recipient, in one transaction; or
 - **Rejects**, with a required non-empty reason.
 
 Both are immutable — a decision, once made, is never edited or deleted.
@@ -54,6 +53,37 @@ is pending again and can receive a new decision at `attempt_no + 1` —
 correction is "decide again," never "edit the old decision." Corrections
 remain reversing rows throughout, per ADR-0004 — nothing is ever edited
 or deleted, on the claim side or the ledger side.
+
+**Recipient rule corrected (added 2026-09-24, P16-3a Checkpoint 1b,
+OD-16-12).** The original recipient rule above — a recipient must be
+present in the job's technician assignment history, active or removed —
+conflicts with OD-16-5's technician-list lock: claims are approved
+**after** delivery, by which point the technician list on a
+ready/delivered/cancelled job is already locked, so "assign them to the
+job first" is not something the owner can still do. A wrong or missing
+assignment record under the original rule would make the correct person
+unpayable in-app, with no correction path short of a direct DB edit —
+unacceptable for the same reason `UNIQUE(claim_id)` alone was rejected
+above. Corrected rule:
+
+- A recipient may be **any active staff party**, not only one present in
+  the job's technician history.
+- A recipient **not** in the job's assignment history requires a
+  non-blank, trimmed `outside_history_reason` stored on that specific
+  `commission_decision_recipient` row (core-enforced, Zod-validated at
+  the IPC boundary). A recipient who **is** in the history stores `NULL`
+  there — the reason exists to make an unusual payment auditable, not to
+  annotate the normal case.
+- A **non-staff** party (a customer, supplier, or any other party type)
+  as recipient is rejected outright, reason or not.
+- The Commission Approvals screen (P16-3b) flags outside-history
+  recipients and displays the stored reason next to them.
+
+Schema: `commission_decision_recipient.outside_history_reason TEXT`
+(nullable), added by migration `0019` — `0018`, already applied in dev
+databases, is never edited to add this; new columns arrive via a new
+migration instead, the same rule that applies to every other addendum
+in this codebase.
 
 ## Why Phase 7's model was retired
 

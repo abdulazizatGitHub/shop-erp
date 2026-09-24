@@ -620,6 +620,12 @@ export interface CommissionClaimTable {
   suggestedAmountPaisa: number;
   suggestedRecipientPartyId: string | null;
   createdAt: string;
+  // Added by 0019 — a snapshot of the service charge's commission config
+  // and the sale_line's quantity, as they were at delivery time.
+  commissionMode: string; // 'none' | 'fixed' | 'bp'
+  commissionAmountPaisa: number | null;
+  commissionBp: number | null;
+  quantityMilli: number;
 }
 
 export interface CommissionDecisionTable {
@@ -639,6 +645,10 @@ export interface CommissionDecisionRecipientTable {
   decisionId: string;
   technicianPartyId: string;
   amountPaisa: number;
+  // Added by 0019 (OD-16-12) — non-blank trimmed reason required when this
+  // recipient is not in the job's technician assignment history; null when
+  // they are.
+  outsideHistoryReason: string | null;
 }
 
 export interface CommissionDecisionReversalTable {

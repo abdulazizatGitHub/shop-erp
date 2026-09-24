@@ -41,6 +41,113 @@
 
 ---
 
+## [2026-09-24] Session 80 — Phase 16 P16-3a Checkpoint 1 + Checkpoint 1b: commission claim schema, pure calc, four review fixes
+
+**Goal:** Checkpoint 1 — commission claim/decision schema (migration
+`0018`) and the pure claim-suggestion calculation, no delivery-path
+wiring yet, per `docs/phases/PHASE_16.md` §2a/§3/§4 and
+`docs/decisions/ADR-0015-commission-claims.md`. Then, after owner
+review, Checkpoint 1b — four required fixes (FIX-C1..C4) before
+Checkpoint 2 begins.
+
+**Done:**
+
+- Checkpoint 1 (commit `7eedff6`): migration `0018_commission_claims.sql`
+  — four tables (`commission_claim`, `commission_decision`,
+  `commission_decision_recipient`, `commission_decision_reversal`) per
+  OD-16-2/OD-16-3/OD-16-3a, confirmed no `party_ledger` CHECK constraint
+  blocks the new `source_type`/`entry_type` values (read
+  `0001_init.sql` directly first). `packages/core/src/payroll/
+commission-claim.ts` — `computeSuggestedCommissionPaisa` (FLOOR-based
+  fixed/bp calculation) and `suggestCommissionRecipient` (earliest-
+  active-technician), both pure, both unit-tested against hand-
+  calculated §4 values. `commission-claim.repository.test.ts` —
+  6 schema-constraint tests via raw SQL.
+- Checkpoint 1b (this commit) — four owner-required fixes:
+  - **FIX-C1 → OD-16-12**: the original recipient rule ("must be in the
+    job's technician history") conflicts with OD-16-5's technician-list
+    lock — claims are approved after delivery, by which point the list
+    is already locked. New rule, documented in `PHASE_16.md` §2a and
+    `ADR-0015`: any active staff party may be a recipient; one **not**
+    in the job's history needs a non-blank trimmed
+    `outside_history_reason` on that recipient row (enforcement itself
+    is Checkpoint 2 — this commit is schema + docs only); a non-staff
+    recipient is rejected outright.
+  - **FIX-C2**: new migration `0019_commission_claim_snapshot.sql`
+    (0018 never edited — already applied in dev DBs) adds
+    `commission_claim.commission_mode/commission_amount_paisa/
+commission_bp/quantity_milli` (a delivery-time snapshot of the charge's
+    commission config, since config can change after a claim exists)
+    and `commission_decision_recipient.outside_history_reason`. SQLite
+    requires a DEFAULT on `ADD COLUMN NOT NULL`; both tables are empty
+    in every environment (no writer exists until Checkpoint 2), so the
+    defaults (`commission_mode = 'none'`, `quantity_milli = 1000`) never
+    actually backfill a real row — stated in the migration's own header.
+    P16-3c's future `unassign_reason` migration is renumbered `0020`.
+  - **FIX-C3**: `suggestCommissionRecipient` now compares `assignedAt`
+    as a plain string (not `localeCompare`, which is the wrong tool for
+    an exact ISO-8601 machine format) and tie-breaks on the
+    `job_technician` row's own `id` (UUIDv7, time-ordered) when two
+    active technicians share an identical `assignedAt`.
+    `TechnicianAssignmentForSuggestion` gained an `id` field.
+  - **FIX-C4**: corrected the stale "P16-3b wires the delivery hook"
+    comment in `commission-claim.ts` to "P16-3a's own Checkpoint 2" —
+    the delivery hook and approve/reject/reverse services are Checkpoint
+    2 of P16-3a itself, not the separate P16-3b (Commission Approvals
+    UI) task. `0018`'s own header comment is left untouched (never
+    edited); the correction lives in `0019`'s header instead.
+
+**Verified:**
+
+- `npm run verify` (typecheck + lint + test): 727/727 after Checkpoint
+  1, 729/729 after Checkpoint 1b, exit 0 both times.
+- New/changed tests (Checkpoint 1b): `commission-claim.test.ts` — all 4
+  `suggestCommissionRecipient` fixtures gained an `id` field, plus 1 new
+  tie-break test (identical `assignedAt`, smaller `id` wins regardless
+  of input order). `migration-runner.test.ts` — `0004_commission_claims`
+  applied-list assertions updated for `0019` (4 sites), plus 1 new test
+  asserting `0019`'s five column additions (name, `notnull`,
+  `dflt_value`) directly via `PRAGMA table_info`.
+- `git show --stat 7eedff6` and this commit both pasted to the owner in
+  chat as part of the checkpoint reports.
+
+**Not done / deferred:** Checkpoint 2 (delivery integration,
+approve/reject/reverse core services + Zod-validated IPC, Phase 7
+retirement, `commission_bp` UI hiding, comprehensive tests including the
+inverted-rollback test) — next, per the owner's explicit two-stage
+instruction ("commit, verify, then continue").
+
+**Bugs found:** none new.
+
+**Decisions taken:** OD-16-12 (recipient rule correction, see above).
+
+**Blocked on:** nothing.
+
+**Next session should:** start Checkpoint 2 of P16-3a exactly as
+specified by the owner (delivery-transaction claim insert with the
+FIX-C2 snapshot; `listPendingClaims`/`getClaimDetail`/`approveClaim`/
+`rejectClaim`/`reverseDecision` core services, one transaction each,
+`attempt_no` computed inside it; Zod-validated IPC; `party_ledger`
+commission/reversal rows per OD-16-4/OD-16-3a, never writing a
+`reversed_by_id` column; retiring `recordCommissionIfEligible` and dead
+Phase-7-only code; grepping and hiding every `commission_bp` UI
+reference; the full §4 test list including GAP-1, two-recipient
+reversal, and the inverted rollback test; one hand-run end-to-end
+scratch-DB scenario). Do not start P16-3b.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log — P16-3a
+      Checkpoint 1/1b status lives in `PHASE_16.md` §3, not `PROJECT.md`)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-24] Session 79 — Phase 16 P16-1b review fixes (FIX-A/FIX-B) + P16-2: brand management
 
 **Goal:** Fix two P16-1b review findings (Settings opening blank from

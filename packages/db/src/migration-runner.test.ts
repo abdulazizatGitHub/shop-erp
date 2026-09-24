@@ -46,12 +46,13 @@ describe('migrate', () => {
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
+      '0019_commission_claim_snapshot.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal", () => {
+  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 is column adds only, not a new table", () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -101,6 +102,7 @@ describe('migrate', () => {
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
+      '0019_commission_claim_snapshot.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -132,6 +134,7 @@ describe('migrate', () => {
       { version: 16, name: '0016_job_client.sql' },
       { version: 17, name: '0017_brand_is_active.sql' },
       { version: 18, name: '0018_commission_claims.sql' },
+      { version: 19, name: '0019_commission_claim_snapshot.sql' },
     ]);
   });
 
@@ -236,7 +239,7 @@ describe('migrate', () => {
     ).run(ledgerId, tenantId, partyId, new Date().toISOString());
     db.close();
 
-    // Now migrate onward with the full directory — applies 0004-0017.
+    // Now migrate onward with the full directory — applies 0004-0019.
     const result = migrate(dbPath, migrationsDir, backupDir);
     expect(result.applied).toEqual([
       '0004_party_ledger_bill_metadata.sql',
@@ -254,6 +257,7 @@ describe('migrate', () => {
       '0016_job_client.sql',
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
+      '0019_commission_claim_snapshot.sql',
     ]);
 
     db = new Database(dbPath);
@@ -559,5 +563,33 @@ describe('migration 0013 — item code reformat (ADR-0012 scope reversal)', () =
     db.close();
 
     expect(row.item_code).toBe('HAND-ENTERED-001');
+  });
+});
+
+describe('0019_commission_claim_snapshot', () => {
+  it('adds commission_claim.commission_mode/commission_amount_paisa/commission_bp/quantity_milli and commission_decision_recipient.outside_history_reason', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const claimColumns = db.prepare(`PRAGMA table_info(commission_claim)`).all() as Array<{
+      name: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>;
+    const recipientColumns = db
+      .prepare(`PRAGMA table_info(commission_decision_recipient)`)
+      .all() as Array<{ name: string; notnull: number }>;
+    db.close();
+
+    const modeColumn = claimColumns.find((c) => c.name === 'commission_mode');
+    const amountColumn = claimColumns.find((c) => c.name === 'commission_amount_paisa');
+    const bpColumn = claimColumns.find((c) => c.name === 'commission_bp');
+    const qtyColumn = claimColumns.find((c) => c.name === 'quantity_milli');
+    const reasonColumn = recipientColumns.find((c) => c.name === 'outside_history_reason');
+
+    expect(modeColumn).toMatchObject({ notnull: 1, dflt_value: "'none'" });
+    expect(amountColumn).toMatchObject({ notnull: 0 });
+    expect(bpColumn).toMatchObject({ notnull: 0 });
+    expect(qtyColumn).toMatchObject({ notnull: 1, dflt_value: '1000' });
+    expect(reasonColumn).toMatchObject({ notnull: 0 });
   });
 });

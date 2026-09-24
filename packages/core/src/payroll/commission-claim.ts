@@ -9,9 +9,9 @@ import type { CommissionMode } from '../job/service-charge.repository.port.js';
  *
  * Retires nothing here — Phase 7's computeCommission
  * (packages/core/src/payroll/commission.service.ts) and its
- * party.commission_bp read path stay untouched until P16-3b actually
- * wires the delivery hook and the approve/reject/reverse services
- * (Checkpoint 2). This file only adds the new calculation, standalone.
+ * party.commission_bp read path stay untouched until P16-3a's own
+ * Checkpoint 2 wires the delivery hook and the approve/reject/reverse
+ * services. This file only adds the new calculation, standalone.
  *
  * `none` -> no claim at all, expressed as `null`, not a zero-amount
  * claim — OD-16-2: "Charges with mode = none create no claim."
@@ -51,6 +51,7 @@ export function computeSuggestedCommissionPaisa(
 }
 
 export interface TechnicianAssignmentForSuggestion {
+  readonly id: string;
   readonly technicianPartyId: string;
   readonly assignedAt: string;
   readonly unassignedAt: string | null;
@@ -64,6 +65,13 @@ export interface TechnicianAssignmentForSuggestion {
  * job.assignedTo (P14-1's "set once, first technician ever assigned"
  * column) — a technician who was assigned first but later removed must
  * not be suggested over one who is actually still on the job.
+ *
+ * assignedAt is compared as a plain string, not via localeCompare —
+ * these are ISO-8601 timestamps, and localeCompare's locale-sensitive
+ * collation is the wrong tool for an exact machine-generated format.
+ * Ties (two technicians assigned in the same millisecond) break on the
+ * job_technician row's own id, a UUIDv7 and therefore time-ordered —
+ * the smaller id was inserted first.
  */
 export function suggestCommissionRecipient(
   assignments: readonly TechnicianAssignmentForSuggestion[],
@@ -71,6 +79,12 @@ export function suggestCommissionRecipient(
   const active = assignments.filter((a) => a.unassignedAt === null);
   if (active.length === 0) return null;
 
-  const [earliest] = [...active].sort((a, b) => a.assignedAt.localeCompare(b.assignedAt));
+  const [earliest] = [...active].sort((a, b) => {
+    if (a.assignedAt < b.assignedAt) return -1;
+    if (a.assignedAt > b.assignedAt) return 1;
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
+  });
   return earliest ? earliest.technicianPartyId : null;
 }

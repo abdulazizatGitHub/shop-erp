@@ -90,7 +90,10 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
     `-COALESCE((...), 0)` (drop `ABS`, negate instead).
   - **P16-3c** — technician removal guard: `unassign_reason`, new core
     `unassignTechnician` function enforcing a required reason and a
-    status lock, replacing the handler's direct repository call.
+    status lock, replacing the handler's direct repository call. Its
+    migration is **`0020`** (renumbered from an earlier implied `0019` —
+    `0019` was taken by Checkpoint 1b's `commission_claim`/
+    `commission_decision_recipient` snapshot columns).
 
 - **P16-4 — Shop Identity verification.** Owner smoke test, not an agent
   task (see §4).
@@ -110,7 +113,7 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
 
 ---
 
-## 2a. Owner decisions (OD-16-1 – OD-16-10, 2026-09-22)
+## 2a. Owner decisions (OD-16-1 – OD-16-12, 2026-09-22 to 2026-09-24)
 
 These replace parts of this document's original draft and are binding.
 
@@ -136,9 +139,10 @@ mode = none create no claim.
 lists pending claims (job number, customer, charge name, labour amount,
 suggested amount, full technician assignment history including removed
 technicians with dates/reasons). Approve: one or more recipients, each
-an integer paisa amount > 0, each a technician present in that job's
-assignment history (active or removed) — to pay someone else they must
-first be assigned to the job. Reject: requires a non-empty reason.
+an integer paisa amount > 0. **Recipient rule superseded by OD-16-12
+below** (Checkpoint 1b) — "must first be assigned to the job" turned out
+to conflict with the P16-3c technician-list lock; see OD-16-12 for the
+corrected rule. Reject: requires a non-empty reason.
 Approval writes the decision and all `party_ledger` commission rows in
 one transaction. Decisions are immutable; corrections are reversing
 `party_ledger` rows. Unrestricted by convention until the auth phase
@@ -244,6 +248,30 @@ product's settings screen (layout pattern only — not its pharmacy
 content, not its green colour scheme; Shop ERP's own colours, fonts,
 and `@shop/ui` components throughout). Full design in the (superseded)
 §2b below, replaced by §2b as currently written.
+
+**OD-16-12 — Recipient rule vs. technician-list lock (owner, 2026-09-24,
+P16-3a Checkpoint 1b).** OD-16-3's original recipient rule ("must be
+present in the job's assignment history — active or removed") conflicts
+with OD-16-5's technician-list lock: claims are approved **after**
+delivery, but the technician list is already locked at
+ready/delivered/cancelled, so "assign them to the job first" is
+impossible by the time an approval happens, and a wrong or missing
+technician record would make the correct person unpayable in-app.
+Corrected rule:
+
+- A recipient may be **any active staff party** — not limited to the
+  job's technician history.
+- A recipient **not** in the job's assignment history requires a
+  non-blank, trimmed `outside_history_reason` on that recipient row
+  (core-enforced and Zod-validated — Checkpoint 2). A recipient who
+  **is** in the history stores `NULL` there.
+- A **non-staff** party as recipient is rejected outright.
+- The Commission Approvals screen (P16-3b, not this phase's scope) flags
+  outside-history recipients and shows the stored reason.
+
+Schema: `commission_decision_recipient.outside_history_reason TEXT`,
+nullable, added by migration `0019` (Checkpoint 1b — `0018` is never
+edited once applied). See §4 for the updated exit-criteria test list.
 
 ---
 
@@ -385,15 +413,15 @@ resolves to the same `brand.id` and imports successfully; no second
 
 ## 3. Tasks
 
-| ID     | Task                                                | Depends on                         | Status      | Commit  |
-| ------ | --------------------------------------------------- | ---------------------------------- | ----------- | ------- |
-| P16-1  | Service charge management                           | —                                  | DONE        | 55f0438 |
-| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE        | 320e602 |
-| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE        | c0294bf |
-| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | NOT STARTED | —       |
-| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED | —       |
-| P16-3c | Technician removal guard                            | —                                  | NOT STARTED | —       |
-| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED | —       |
+| ID     | Task                                                | Depends on                         | Status                                                             | Commit  |
+| ------ | --------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------ | ------- |
+| P16-1  | Service charge management                           | —                                  | DONE                                                               | 55f0438 |
+| P16-1b | Settings shell redesign (OD-16-11)                  | P16-1                              | DONE                                                               | 320e602 |
+| P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                               | c0294bf |
+| P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | IN PROGRESS (Checkpoint 1 done 7eedff6; Checkpoint 1b in progress) | 7eedff6 |
+| P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | NOT STARTED                                                        | —       |
+| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                        | —       |
+| P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                        | —       |
 
 Order: P16-1 → P16-1b → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One
 task at a time; verified and reviewed before the next begins.
@@ -514,8 +542,16 @@ commissionAmountPaisa: 50000}` via the new create channel, then
     `amountPaisa <= 0`; a reject reason that is whitespace-only (e.g.
     `"   "`) — trimmed length must be `> 0`, so whitespace counts as
     empty, not as a value.
-  - A recipient not in the job's assignment history is rejected by core
-    before any write; nothing written.
+  - A recipient **not** in the job's assignment history, with no
+    `outsideHistoryReason` given → rejected by core before any write;
+    nothing written (OD-16-12).
+  - The same recipient not in the job's assignment history, **with** a
+    non-blank trimmed `outsideHistoryReason` → accepted; the reason is
+    stored on that `commission_decision_recipient` row exactly as given
+    (OD-16-12).
+  - A recipient who is a **non-staff** party (e.g. a customer or
+    supplier party id) → rejected by core before any write, regardless
+    of any reason given (OD-16-12).
   - **GAP-1 correction path** (OD-16-3a):
     - Approve a claim for 50000 to technician X, then reverse that
       decision with a reason → one `commission_decision_reversal` row;
