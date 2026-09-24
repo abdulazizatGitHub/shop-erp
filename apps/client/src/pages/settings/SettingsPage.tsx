@@ -7,6 +7,7 @@ import { BackupSettingsSection } from './sections/BackupSettingsSection.js';
 import { DiscountsSettingsSection } from './sections/DiscountsSettingsSection.js';
 import { InvoiceReceiptsSettingsSection } from './sections/InvoiceReceiptsSettingsSection.js';
 import { ShopSettingsSection } from './sections/ShopSettingsSection.js';
+import { CommissionRefreshContext } from './CommissionRefreshContext.js';
 import { SettingsDirtyContext } from './SettingsDirtyContext.js';
 import { SettingsNav } from './SettingsNav.js';
 import { SettingsSectionFrame } from './SettingsSectionFrame.js';
@@ -22,98 +23,107 @@ import { SettingsSectionFrame } from './SettingsSectionFrame.js';
  */
 export function SettingsPage(): React.JSX.Element {
   const [dirty, setDirty] = useState(false);
+  const [commissionRefreshToken, setCommissionRefreshToken] = useState(0);
 
   return (
     <SettingsDirtyContext.Provider value={{ dirty, setDirty }}>
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Settings</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Manage shop identity, jobs, discounts, and backups.
-          </p>
-        </div>
-        <div className="flex overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
-          <SettingsNav />
-          <Routes>
-            <Route
-              path="/settings/shop"
-              element={
-                <SettingsSectionFrame
-                  title="Shop"
-                  description="Basic information shown on receipts and throughout the system."
-                >
-                  <ShopSettingsSection />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/invoices"
-              element={
-                <SettingsSectionFrame
-                  title="Invoices & Receipts"
-                  description="Header, footer, and paper size for printed documents."
-                >
-                  <InvoiceReceiptsSettingsSection />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/sales/discounts"
-              element={
-                <SettingsSectionFrame
-                  title="Discounts"
-                  description="Owner-configured discount presets and eligibility."
-                >
-                  <DiscountsSettingsSection />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/jobs/service-charges"
-              element={
-                <SettingsSectionFrame
-                  title="Service Charges"
-                  description="Labour charges available at job delivery, and their commission."
-                  wide
-                >
-                  <ServiceChargesTab />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/jobs/brands"
-              element={
-                <SettingsSectionFrame
-                  title="Brands"
-                  description="Appliance brands offered at job intake."
-                >
-                  <BrandsTab />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/jobs/commission-approvals"
-              element={
-                <SettingsSectionFrame
-                  title="Commission Approvals"
-                  description="Review and approve or reject pending commission claims."
-                >
-                  <CommissionApprovalsTab />
-                </SettingsSectionFrame>
-              }
-            />
-            <Route
-              path="/settings/backup"
-              element={
-                <SettingsSectionFrame
-                  title="Backup & Restore"
-                  description="Export the database, or restore from a previous backup."
-                >
-                  <BackupSettingsSection />
-                </SettingsSectionFrame>
-              }
-            />
-            {/* FIX-A (P16-1b review): App.tsx's main-sidebar tab switch never
+      <CommissionRefreshContext.Provider
+        value={{
+          token: commissionRefreshToken,
+          bump: () => {
+            setCommissionRefreshToken((t) => t + 1);
+          },
+        }}
+      >
+        <div className="flex flex-col gap-6">
+          <div>
+            <h1 className="text-xl font-semibold text-ink">Settings</h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              Manage shop identity, jobs, discounts, and backups.
+            </p>
+          </div>
+          <div className="flex overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+            <SettingsNav />
+            <Routes>
+              <Route
+                path="/settings/shop"
+                element={
+                  <SettingsSectionFrame
+                    title="Shop"
+                    description="Basic information shown on receipts and throughout the system."
+                  >
+                    <ShopSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/invoices"
+                element={
+                  <SettingsSectionFrame
+                    title="Invoices & Receipts"
+                    description="Header, footer, and paper size for printed documents."
+                  >
+                    <InvoiceReceiptsSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/sales/discounts"
+                element={
+                  <SettingsSectionFrame
+                    title="Discounts"
+                    description="Owner-configured discount presets and eligibility."
+                  >
+                    <DiscountsSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/jobs/service-charges"
+                element={
+                  <SettingsSectionFrame
+                    title="Service Charges"
+                    description="Labour charges available at job delivery, and their commission."
+                    wide
+                  >
+                    <ServiceChargesTab />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/jobs/brands"
+                element={
+                  <SettingsSectionFrame
+                    title="Brands"
+                    description="Appliance brands offered at job intake."
+                  >
+                    <BrandsTab />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/jobs/commission-approvals"
+                element={
+                  <SettingsSectionFrame
+                    title="Commission Approvals"
+                    description="Review and approve or reject pending commission claims."
+                  >
+                    <CommissionApprovalsTab />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/backup"
+                element={
+                  <SettingsSectionFrame
+                    title="Backup & Restore"
+                    description="Export the database, or restore from a previous backup."
+                  >
+                    <BackupSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              {/* FIX-A (P16-1b review): App.tsx's main-sidebar tab switch never
                 touches the hash, so Settings can mount at "/" or any other
                 non-/settings path — not just the literal "/settings" this
                 used to redirect. A wildcard route (lowest React Router
@@ -121,10 +131,11 @@ export function SettingsPage(): React.JSX.Element {
                 declaration order, so it only matches when none of them did)
                 catches every one of those, not just the exact "/settings"
                 case the tests happened to start from. */}
-            <Route path="*" element={<Navigate to="/settings/shop" replace />} />
-          </Routes>
+              <Route path="*" element={<Navigate to="/settings/shop" replace />} />
+            </Routes>
+          </div>
         </div>
-      </div>
+      </CommissionRefreshContext.Provider>
     </SettingsDirtyContext.Provider>
   );
 }

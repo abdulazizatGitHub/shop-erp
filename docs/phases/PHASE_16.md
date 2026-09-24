@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b done, 799/799 tests; P16-3c next)
+**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b done, 805/805 tests; P16-3c next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -700,6 +700,49 @@ verified `npm run verify` count):
   outside-history flag blocks approval until a reason is given, Reverse
   requires a reason), `SettingsPage.test.tsx` ×2 (pending-count badge
   shown/not-shown)).
+- P16-3b review fixes (items 1/3/4/5 below): 799 → 805 (+6:
+  `WageMonthReport.test.tsx` ×2 (the wage-report's own pending-commission
+  header total — missed in the first pass, this fix adds it — and its
+  zero-pending case), `SettingsPage.test.tsx` ×1 (sub-nav badge
+  refreshes immediately after an in-modal approve, not only on
+  remount), `ClaimDetailModal.test.tsx` ×3 (null-suggestion prefills the
+  Approve row empty, the total-vs-suggested difference display, and
+  Money.fromRupees conversion/invalid-input handling)).
+
+**P16-3b review findings (owner, 2026-09-25) — all fixed in the same
+session, before approval:**
+
+1. The wage-report header itself never got the ONE pending-commission
+   total (count + suggested amount) the spec required — only
+   `CommissionApprovalsTab`'s own header got one. Added to
+   `WageMonthReport.tsx`: a second `useEffect` calls
+   `ipc.commission.listPending()` independently of the month/year
+   filter (a pending claim isn't attributed to any month until
+   approved), shown as one line, never split per technician.
+2. This session's own earlier report undercounted
+   `commission.repository.test.ts`'s deleted tests as 4 instead of 5
+   (10 deleted total, not 9) — corrected above and in the
+   "Rewritten from Phase 7" list below.
+3. `ClaimDetailModal.tsx` had the total-vs-suggested diff and the
+   Money.fromRupees conversion path implemented but untested — added
+   both cases (diff text only appears once the amount is actually
+   edited away from the suggestion; "300.50" → 30050 paisa; a
+   genuinely unparseable amount like "." and a syntactically-valid-but-
+   zero amount are both blocked with no IPC call, via two different
+   guards).
+4. The pending-count badge (`SettingsNav.tsx`) only fetched once on
+   mount — approving/rejecting/reversing inside
+   `CommissionApprovalsTab`'s modal never updated it until a full
+   remount. Fixed with a new `CommissionRefreshContext` (same
+   no-op-default shape as `SettingsDirtyContext`, since `SettingsNav`
+   and `CommissionApprovalsTab` are siblings under `SettingsPage`, not
+   parent/child): `CommissionApprovalsTab` bumps a shared token after
+   any successful decision, `SettingsNav`'s pending-count effect
+   depends on that token and refetches.
+5. Approve-row prefill (suggested recipient + suggested amount) was
+   already implemented but had no assertion confirming it, and the
+   null-suggestion case (empty recipient, but the suggested amount
+   still prefills) had no test at all — added both.
 
 **Rewritten from Phase 7 — actual outcome (Checkpoint 2).** Both
 `commission.repository.test.ts` and `commission.service.test.ts` were

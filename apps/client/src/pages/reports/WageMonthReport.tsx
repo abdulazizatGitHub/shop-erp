@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { WageMonthRowDto } from '@shop/contracts';
+import type { PendingClaimSummaryDto, WageMonthRowDto } from '@shop/contracts';
 import { Money } from '@shop/shared';
 import {
   Alert,
@@ -126,6 +126,9 @@ export function WageMonthReport(): React.JSX.Element {
   const [rows, setRows] = useState<readonly WageMonthRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [pendingClaims, setPendingClaims] = useState<readonly PendingClaimSummaryDto[] | null>(
+    null,
+  );
 
   const year = Number.parseInt(range.from.slice(0, 4), 10);
   const month = Number.parseInt(range.from.slice(5, 7), 10);
@@ -142,6 +145,20 @@ export function WageMonthReport(): React.JSX.Element {
         setError(err instanceof Error ? err.message : 'Failed to load wage report');
       });
   }, [year, month]);
+
+  useEffect(() => {
+    // OD-16-3a's "pending" total — one figure for the whole report, not
+    // per technician (a pending claim has no recipient decided yet, so
+    // it cannot be attributed to any one person's row). Independent of
+    // the month/year filter above: pending claims aren't attributed to
+    // a month until they're approved.
+    ipc.commission
+      .listPending()
+      .then(setPendingClaims)
+      .catch(() => {
+        setPendingClaims(null); // never blocks the wage report itself over this figure
+      });
+  }, []);
 
   const chartData = toChartData(rows ?? []);
   const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
@@ -164,6 +181,17 @@ export function WageMonthReport(): React.JSX.Element {
         <p className={`mt-3 text-sm ${spansMultipleMonths ? 'text-warning' : 'text-ink-muted'}`}>
           Showing wages for {MONTH_NAMES[month - 1]} {year} based on start date.
         </p>
+
+        {pendingClaims !== null && pendingClaims.length > 0 && (
+          <p className="mt-1 text-sm text-warning">
+            Pending commission: {pendingClaims.length} claim
+            {pendingClaims.length === 1 ? '' : 's'} awaiting approval,{' '}
+            {Money.format(
+              Money.of(pendingClaims.reduce((sum, c) => sum + c.suggestedAmountPaisa, 0)),
+            )}{' '}
+            suggested (not split per technician — no recipient is decided yet).
+          </p>
+        )}
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}

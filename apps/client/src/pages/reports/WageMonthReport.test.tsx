@@ -7,6 +7,9 @@ vi.mock('../../lib/ipc.js', () => ({
     report: {
       wageMonth: vi.fn(),
     },
+    commission: {
+      listPending: vi.fn(),
+    },
   },
 }));
 
@@ -14,6 +17,7 @@ import { ipc } from '../../lib/ipc.js';
 import { WageMonthReport } from './WageMonthReport.js';
 
 const wageMonth = vi.mocked(ipc.report.wageMonth);
+const listPendingClaims = vi.mocked(ipc.commission.listPending);
 
 afterEach(() => {
   cleanup();
@@ -22,6 +26,7 @@ afterEach(() => {
 
 describe('WageMonthReport (P7-11 smoke test, EC-P7-7/EC-P7-11)', () => {
   it('renders Staff A and Staff B with exact Rs values from the EC-P7-7 scenario', async () => {
+    listPendingClaims.mockResolvedValue([]);
     wageMonth.mockResolvedValue([
       {
         staffId: 'a',
@@ -73,10 +78,59 @@ describe('WageMonthReport (P7-11 smoke test, EC-P7-7/EC-P7-11)', () => {
   });
 
   it('shows an empty state when report:wageMonth returns an empty array', async () => {
+    listPendingClaims.mockResolvedValue([]);
     wageMonth.mockResolvedValue([]);
 
     render(<WageMonthReport />);
 
     expect(await screen.findByText('No attendance records for this month.')).toBeTruthy();
+  });
+
+  it('P16-3b: shows ONE pending-commission total (count + suggested amount) in the header, not split per technician', async () => {
+    wageMonth.mockResolvedValue([]);
+    listPendingClaims.mockResolvedValue([
+      {
+        claimId: 'c1',
+        jobId: 'j1',
+        jobDocNo: 'JOB-0001',
+        customerName: 'Ahmad',
+        serviceChargeName: 'AC Installation',
+        labourAmountPaisa: 300000,
+        suggestedAmountPaisa: 50000,
+        suggestedRecipientPartyId: null,
+        commissionMode: 'fixed',
+        commissionAmountPaisa: 50000,
+        commissionBp: null,
+      },
+      {
+        claimId: 'c2',
+        jobId: 'j2',
+        jobDocNo: 'JOB-0002',
+        customerName: 'Bilal',
+        serviceChargeName: 'Compressor Replacement Labour',
+        labourAmountPaisa: 400000,
+        suggestedAmountPaisa: 40000,
+        suggestedRecipientPartyId: null,
+        commissionMode: 'bp',
+        commissionAmountPaisa: null,
+        commissionBp: 1000,
+      },
+    ]);
+
+    render(<WageMonthReport />);
+
+    // 2 claims, 50000 + 40000 = 90000 paisa -> Rs 900, shown once, not per technician.
+    expect(await screen.findByText(/Pending commission: 2 claims/)).toBeTruthy();
+    expect(screen.getByText(/Rs 900 suggested/)).toBeTruthy();
+  });
+
+  it('shows no pending-commission line when there are zero pending claims', async () => {
+    wageMonth.mockResolvedValue([]);
+    listPendingClaims.mockResolvedValue([]);
+
+    render(<WageMonthReport />);
+
+    await screen.findByText('No attendance records for this month.');
+    expect(screen.queryByText(/Pending commission/)).toBeNull();
   });
 });

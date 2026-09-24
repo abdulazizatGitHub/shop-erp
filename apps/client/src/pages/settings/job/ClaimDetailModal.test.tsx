@@ -103,6 +103,12 @@ describe('ClaimDetailModal (P16-3b)', () => {
     await waitFor(() => {
       expect(screen.getByText('Confirm approval')).toBeTruthy();
     });
+    // P16-3b item 5: prefilled with the suggested recipient/amount.
+    const staffSelect: HTMLSelectElement = screen.getByLabelText('Staff member');
+    const amountInput: HTMLInputElement = screen.getByLabelText('Amount (Rs)');
+    expect(staffSelect.value).toBe('tech1');
+    expect(amountInput.value).toBe('500');
+
     fireEvent.click(screen.getByText('Confirm approval'));
 
     await waitFor(() => {
@@ -116,6 +122,27 @@ describe('ClaimDetailModal (P16-3b)', () => {
       );
     });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('P16-3b item 5: a claim with NO suggested recipient prefills the Approve row empty, not with a stale value', async () => {
+    getDetail.mockResolvedValue({ ...PENDING_DETAIL, suggestedRecipientPartyId: null });
+    listStaff.mockResolvedValue(STAFF);
+
+    render(<ClaimDetailModal claimId="claim1" onClose={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Approve'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Staff member')).toBeTruthy();
+    });
+
+    const staffSelect: HTMLSelectElement = screen.getByLabelText('Staff member');
+    const amountInput: HTMLInputElement = screen.getByLabelText('Amount (Rs)');
+    expect(staffSelect.value).toBe('');
+    // The suggested AMOUNT still prefills even with no recipient suggestion — only the staff pick is empty.
+    expect(amountInput.value).toBe('500');
   });
 
   it('selecting a recipient NOT in the technician history flags it and blocks approval until a reason is given', async () => {
@@ -166,6 +193,90 @@ describe('ClaimDetailModal (P16-3b)', () => {
               amountPaisa: 50000,
               outsideHistoryReason: 'Senior technician covered for Naeem',
             },
+          ],
+        }),
+      );
+    });
+  });
+
+  it('P16-3b item 3: shows the total-vs-suggested difference once the amount is edited away from the suggestion', async () => {
+    getDetail.mockResolvedValue(PENDING_DETAIL);
+    listStaff.mockResolvedValue(STAFF);
+
+    render(<ClaimDetailModal claimId="claim1" onClose={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Approve'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Amount (Rs)')).toBeTruthy();
+    });
+
+    // Suggested is Rs 500 (50000 paisa) — no diff shown yet.
+    expect(screen.getByText('Total: Rs 500')).toBeTruthy();
+    expect(screen.queryByText(/vs\. suggested/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Amount (Rs)'), { target: { value: '650' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Total: Rs 650/)).toBeTruthy();
+    });
+    // +65000 paisa - 50000 suggested = +15000 paisa = +Rs 150.
+    expect(screen.getByText(/\+Rs 150 vs\. suggested/)).toBeTruthy();
+  });
+
+  it('P16-3b item 3: Rs amounts convert through Money.fromRupees ("300.50" -> 30050 paisa); an invalid amount is blocked with no IPC call', async () => {
+    getDetail.mockResolvedValue(PENDING_DETAIL);
+    listStaff.mockResolvedValue(STAFF);
+    approve.mockResolvedValue({
+      id: 'decision1',
+      attemptNo: 1,
+      decision: 'approved',
+      reason: null,
+      decidedAt: '2026-09-25',
+      recipients: [],
+      reversal: null,
+    });
+
+    render(<ClaimDetailModal claimId="claim1" onClose={vi.fn()} onChanged={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Approve'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Amount (Rs)')).toBeTruthy();
+    });
+
+    // sanitizeMoneyInput strips anything but digits/one dot, so a stray
+    // letter never even reaches state; a lone "." survives the sanitizer
+    // (it's a valid partial-decimal character) but Money.fromRupees
+    // rejects it outright (Number(".") is NaN) — a genuine parse failure.
+    fireEvent.change(screen.getByLabelText('Amount (Rs)'), { target: { value: '.' } });
+    fireEvent.click(screen.getByText('Confirm approval'));
+    await waitFor(() => {
+      expect(screen.getByText(/must be a valid Rs amount/)).toBeTruthy();
+    });
+    expect(approve).not.toHaveBeenCalled();
+
+    // A syntactically valid amount that resolves to zero is a separate
+    // guard (amount > 0), not a parse failure — also blocked, no call.
+    fireEvent.change(screen.getByLabelText('Amount (Rs)'), { target: { value: '0' } });
+    fireEvent.click(screen.getByText('Confirm approval'));
+    await waitFor(() => {
+      expect(screen.getByText(/must be greater than zero/)).toBeTruthy();
+    });
+    expect(approve).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Amount (Rs)'), { target: { value: '300.50' } });
+    fireEvent.click(screen.getByText('Confirm approval'));
+
+    await waitFor(() => {
+      expect(approve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipients: [
+            { technicianPartyId: 'tech1', amountPaisa: 30050, outsideHistoryReason: null },
           ],
         }),
       );

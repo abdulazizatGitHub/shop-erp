@@ -41,6 +41,89 @@
 
 ---
 
+## [2026-09-25] Session 84 — Phase 16 P16-3b review fixes (items 1/3/4/5)
+
+**Goal:** Five owner review findings on P16-3b before approval: the
+wage-report's own pending-commission header was missing entirely;
+name every FIX-D and P16-3b test; add missing `ClaimDetailModal`
+coverage (outside-history flag, total-vs-suggested diff, Rs-amount
+conversion, Reverse-without-reason); make the sub-nav badge refresh
+immediately after an in-modal decision instead of only on remount;
+confirm and test the Approve-row prefill defaults.
+
+**Done:**
+
+1. **Wage-report pending total** (was missing): `WageMonthReport.tsx`
+   gained its own `useEffect` calling `ipc.commission.listPending()`
+   independently of the month/year filter, rendered as one line — "N
+   claims awaiting approval, Rs X suggested" — never split per
+   technician, matching OD-16-3a's own framing (a pending claim has no
+   decided recipient yet).
+2. **Test naming / count correction**: confirmed via `git show` against
+   the actual deleted-file contents that `commission.repository.test.ts`
+   had 5 tests, not 4 as an earlier report in this session claimed (10
+   deleted total, not 9) — `PHASE_16.md` §5 corrected.
+3. **`ClaimDetailModal.tsx` — 3 new tests**: null-suggestion prefill
+   (empty recipient, amount still prefills), the total-vs-suggested
+   diff text (only appears once the amount is edited away from the
+   suggestion), and `Money.fromRupees` conversion ("300.50" → 30050
+   paisa) alongside two distinct blocked-input guards (a genuine parse
+   failure via "." — `sanitizeMoneyInput` lets a lone dot through, only
+   `Money.fromRupees` rejects it — and a syntactically valid zero,
+   caught by the separate amount>0 guard).
+4. **Badge refresh**: new `CommissionRefreshContext.ts` (same
+   no-op-default shape as `SettingsDirtyContext` — `SettingsNav` and
+   `CommissionApprovalsTab` are siblings under `SettingsPage`, not
+   parent/child, so a callback prop can't connect them).
+   `CommissionApprovalsTab` calls `bump()` after any successful
+   approve/reject/reverse; `SettingsNav`'s pending-count effect now
+   depends on that token and refetches immediately.
+5. **Approve-row prefill**: was already implemented (Session 83) but
+   untested — added an explicit assertion to the existing happy-path
+   test plus a new test for the null-suggestion case.
+
+**Verified:**
+
+- `npm run verify`: 805/805, exit 0 (799 + 6).
+- New tests named:
+  - `WageMonthReport.test.tsx` +2: `'P16-3b: shows ONE
+pending-commission total (count + suggested amount) in the header,
+not split per technician'`; `'shows no pending-commission line when
+there are zero pending claims'`.
+  - `SettingsPage.test.tsx` +1: `'P16-3b: the sub-nav badge refreshes
+immediately after approving a claim from inside the modal — not only
+on remount'`.
+  - `ClaimDetailModal.test.tsx` +3: `'P16-3b item 5: a claim with NO
+suggested recipient prefills the Approve row empty, not with a stale
+value'`; `'P16-3b item 3: shows the total-vs-suggested difference
+once the amount is edited away from the suggestion'`; `'P16-3b item 3:
+Rs amounts convert through Money.fromRupees ("300.50" -> 30050
+paisa); an invalid amount is blocked with no IPC call'`.
+
+**Not done / deferred:** P16-3c (technician removal guard) — next task.
+
+**Bugs found:** none new — items 1/3/4/5 were gaps in Session 83's own
+work, caught by review before approval, fixed here.
+
+**Decisions taken:** none new.
+
+**Blocked on:** nothing.
+
+**Next session should:** start P16-3c per `docs/phases/PHASE_16.md`
+§2a OD-16-5/§3/§4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found
+- [x] Test suite passing
+
+---
+
 ## [2026-09-25] Session 83 — Phase 16 P16-3b: Commission Approvals UI + wage-report FIX-1
 
 **Goal:** Build the Commission Approvals section (Settings → JOBS →

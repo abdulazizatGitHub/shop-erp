@@ -34,6 +34,13 @@ vi.mock('../../lib/ipc.js', () => ({
     commission: {
       listPending: vi.fn(),
       listAll: vi.fn(),
+      getDetail: vi.fn(),
+      approve: vi.fn(),
+      reject: vi.fn(),
+      reverse: vi.fn(),
+    },
+    staff: {
+      listStaff: vi.fn(),
     },
   },
 }));
@@ -54,6 +61,9 @@ const listServiceChargesAdmin = vi.mocked(ipc.job.listServiceChargesAdmin);
 const listBrandsAdmin = vi.mocked(ipc.brand.listAdmin);
 const listPendingClaims = vi.mocked(ipc.commission.listPending);
 const listAllClaims = vi.mocked(ipc.commission.listAll);
+const getClaimDetail = vi.mocked(ipc.commission.getDetail);
+const approveClaim = vi.mocked(ipc.commission.approve);
+const listStaff = vi.mocked(ipc.staff.listStaff);
 
 const IDENTITY = {
   shopName: 'Malakand AC & Fridge',
@@ -204,6 +214,91 @@ describe('SettingsPage — P16-1b routing (OD-16-11)', () => {
       expect(screen.getByRole('link', { name: /^Shop/ }).getAttribute('aria-current')).toBe('page');
     });
     expect(screen.queryByText('0')).toBeNull();
+  });
+
+  it('P16-3b: the sub-nav badge refreshes immediately after approving a claim from inside the modal — not only on remount', async () => {
+    mockEverything();
+    const claim = {
+      claimId: 'c1',
+      jobId: 'j1',
+      jobDocNo: 'JOB-0001',
+      customerName: 'Ahmad',
+      serviceChargeName: 'AC Installation',
+      labourAmountPaisa: 300000,
+      suggestedAmountPaisa: 50000,
+      suggestedRecipientPartyId: 'tech1',
+      commissionMode: 'fixed' as const,
+      commissionAmountPaisa: 50000,
+      commissionBp: null,
+    };
+    listPendingClaims.mockResolvedValueOnce([claim]).mockResolvedValue([]);
+    listAllClaims.mockResolvedValue([
+      {
+        ...claim,
+        status: 'pending',
+        latestDecisionId: null,
+        latestDecisionTotalPaisa: null,
+        latestDecisionReason: null,
+      },
+    ]);
+    getClaimDetail.mockResolvedValue({
+      ...claim,
+      technicianHistory: [
+        {
+          technicianPartyId: 'tech1',
+          technicianName: 'Naeem',
+          assignedAt: '2026-09-24T08:00:00.000Z',
+          unassignedAt: null,
+        },
+      ],
+      decisions: [],
+    });
+    listStaff.mockResolvedValue([
+      {
+        id: 'tech1',
+        name: 'Naeem',
+        phone: '0300',
+        staffRole: 'technician',
+        wageRatePaisa: 60000,
+        commissionBp: 0,
+        partyCode: 'STF-0001',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+    approveClaim.mockResolvedValue({
+      id: 'd1',
+      attemptNo: 1,
+      decision: 'approved',
+      reason: null,
+      decidedAt: '2026-09-25',
+      recipients: [],
+      reversal: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/jobs/commission-approvals']}>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('1')).toBeTruthy(); // the badge
+    });
+
+    fireEvent.click(screen.getByText('JOB-0001'));
+    await waitFor(() => {
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Approve'));
+    await waitFor(() => {
+      expect(screen.getByText('Confirm approval')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Confirm approval'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('1')).toBeNull();
+    });
+    expect(listPendingClaims).toHaveBeenCalledTimes(2); // once on mount, once after bump()
   });
 
   it('switching with a clean form navigates immediately, no confirm dialog', async () => {

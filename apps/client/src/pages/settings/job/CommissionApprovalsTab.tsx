@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@shop/ui';
 import { ipc } from '../../../lib/ipc.js';
+import { useCommissionRefresh } from '../CommissionRefreshContext.js';
 import { commissionBasisText } from './commissionBasisText.js';
 import { ClaimDetailModal } from './ClaimDetailModal.js';
 
@@ -29,6 +30,7 @@ export function CommissionApprovalsTab(): React.JSX.Element {
   const [claims, setClaims] = useState<readonly ClaimSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const { bump: bumpCommissionRefresh } = useCommissionRefresh();
 
   function load(): void {
     ipc.commission
@@ -128,6 +130,7 @@ export function CommissionApprovalsTab(): React.JSX.Element {
           onChanged={() => {
             setSelectedClaimId(null);
             load();
+            bumpCommissionRefresh();
           }}
         />
       )}
