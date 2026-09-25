@@ -177,15 +177,22 @@ export const TechnicianAssignmentDto = z.object({
   partyId: z.string().uuid(),
   assignedAt: z.string(),
   unassignedAt: z.string().nullable(),
+  /** P16-3c (OD-16-5) — null while active; the stored removal reason once unassigned. */
+  unassignReason: z.string().nullable(),
 });
 export type TechnicianAssignmentDto = z.infer<typeof TechnicianAssignmentDto>;
 
 /** P14-5 — targets one job_technician row by its own id (not jobId +
  * technicianPartyId), since a technician could in principle be
  * assigned/unassigned/reassigned to the same job more than once over
- * time and only the specific active row should be closed. */
+ * time and only the specific active row should be closed.
+ * P16-3c (OD-16-5): reason is now required — trimmed, non-blank. This is
+ * the Zod half of the "Zod + core" double validation; the other half is
+ * technician-assignment.ts's assertUnassignReasonProvided, re-checked in
+ * the repository regardless of what reaches it here. */
 export const UnassignTechnicianInput = z.object({
   id: z.string().uuid(),
+  reason: z.string().trim().min(1).max(500),
 });
 export type UnassignTechnicianInput = z.infer<typeof UnassignTechnicianInput>;
 

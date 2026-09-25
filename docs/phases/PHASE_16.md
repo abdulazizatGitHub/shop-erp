@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b done, 805/805 tests; P16-3c next)
+**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b + P16-3c done, 845/845 tests; P16-4 next)
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -88,12 +88,17 @@ DEFAULT 1` (same convention as `service_charge.is_active`). `is_active`
     reversal-only month would show as commission _earned_ instead of
     _clawed back_. Both must change from `COALESCE(ABS((...)), 0)` to
     `-COALESCE((...), 0)` (drop `ABS`, negate instead).
-  - **P16-3c** — technician removal guard: `unassign_reason`, new core
-    `unassignTechnician` function enforcing a required reason and a
-    status lock, replacing the handler's direct repository call. Its
-    migration is **`0020`** (renumbered from an earlier implied `0019` —
-    `0019` was taken by Checkpoint 1b's `commission_claim`/
-    `commission_decision_recipient` snapshot columns).
+  - **P16-3c** — technician removal guard: `unassign_reason` (migration
+    `0020`, renumbered from an earlier implied `0019` — `0019` was taken
+    by Checkpoint 1b's `commission_claim`/`commission_decision_recipient`
+    snapshot columns). New core `technician-assignment.ts`
+    (`assertTechnicianListUnlocked`, `assertUnassignReasonProvided`) and
+    a new `unassignTechnician` core service function, replacing the
+    handler's former direct repository call. The status lock covers
+    **both** assign and unassign (widened during implementation, not
+    unassign-only as this section originally read) — enforced in
+    `job-technician.repository.ts`'s two write sites, each deriving the
+    job's current status inside its own transaction.
 
 - **P16-4 — Shop Identity verification.** Owner smoke test, not an agent
   task (see §4).
@@ -187,14 +192,40 @@ pending commission (count + suggested amount, **not** split per
 technician, since it is not yet owed to anyone) shown once in the report
 header.
 
-**OD-16-5 — Technician removal guard.** `job_technician` rows are never
-deleted; removal only sets `unassigned_at` (confirmed true today — the
-only write path is `KyselyJobTechnicianRepository.unassignTechnician`).
-Removal requires a reason: new nullable `unassign_reason` column,
-required in the UI and enforced by a new core-layer function for every
-removal path (confirmed there is exactly one). The technician list is
-locked once the job reaches status **`ready`, `delivered`, or
-`cancelled`**, enforced in the core service, not only the UI.
+**OD-16-5 — Technician removal guard (implemented P16-3c).**
+`job_technician` rows are never deleted; removal only sets
+`unassigned_at` and now also a required `unassign_reason` (new nullable
+column, migration `0020`; nullable only because every pre-existing row
+predates it, never as "removed for no reason"). Required in the UI and
+enforced by `packages/core/src/job/technician-assignment.ts`
+(`assertUnassignReasonProvided`), called from
+`KyselyJobTechnicianRepository.unassignTechnician` — re-grepped at
+implementation time and confirmed still the only write path into
+`job_technician.unassigned_at`.
+
+The technician list is locked once the job reaches status **`ready`,
+`delivered`, or `cancelled`** — for **both directions**, assigning and
+unassigning (not just removal, as an earlier draft of this decision
+implied): `assertTechnicianListUnlocked(status, 'assign' | 'unassign')`,
+called from both `job_technician` write sites
+(`assignTechnicianWrite`/`unassignTechnician`, each deriving the job's
+current status from `job_status_history` inside its own transaction —
+never the `job.status` column directly, same rule as everywhere else in
+this codebase). Enforced in the repository (which is where the current
+status is available inside the write transaction), not only the UI —
+`TechnicianAssignmentPanel.tsx`'s own `isReadOnly` check is a
+convenience that mirrors the same three statuses, never the source of
+truth.
+
+**The lock is not sticky.** It re-checks the job's live derived status
+on every call. If a job moves backwards from `ready` to an earlier
+status (e.g. more work is found after being marked ready, and the
+owner reopens it to `in_progress`), the very next assign/unassign call
+sees the earlier status and the lock lifts automatically — no special
+handling, no "lock stays lifted once granted" state anywhere. Verified
+directly: `job-technician.repository.test.ts`'s
+`'a job that moves BACKWARDS from ready to an earlier status lifts the
+lock — reassigning then succeeds again'`.
 
 **OD-16-6 — Brands.** Brand is stored on the job as `TEXT` (a snapshot;
 confirmed — `job.appliance_brand`, no FK). The `brand` table is the pick
@@ -420,7 +451,7 @@ resolves to the same `brand.id` and imports successfully; no second
 | P16-2  | Brand management + DB-driven dropdown               | P16-1b (adds a route to the shell) | DONE                                                                     | c0294bf |
 | P16-3a | Commission claim schema + core calc + delivery hook | P16-1                              | DONE (Checkpoint 1 7eedff6, Checkpoint 1b 0f6ee92, Checkpoint 2 6e480e2) | 6e480e2 |
 | P16-3b | Commission Approvals section + wage report change   | P16-3a, P16-1b                     | DONE                                                                     | —       |
-| P16-3c | Technician removal guard                            | —                                  | NOT STARTED                                                              | —       |
+| P16-3c | Technician removal guard                            | —                                  | DONE                                                                     | —       |
 | P16-4  | Shop identity verify (owner smoke test)             | —                                  | NOT STARTED                                                              | —       |
 
 Order: P16-1 → P16-1b → P16-2 → P16-3a → P16-3b → P16-3c → P16-4. One
@@ -623,14 +654,25 @@ commissionAmountPaisa: 50000}` via the new create channel, then
     confirmed by hand: for any pre-reversal, approval-only month,
     `-COALESCE(SUM(amount), 0)` and `ABS(...)` produce the identical
     result, since every row in that scenario is already negative.
-- **P16-3c**: `job:unassignTechnician` with no reason → Zod rejection.
-  Called (directly, bypassing the UI) on a job at status `ready`,
-  `delivered`, or `cancelled` → core-service rejection, named test for
-  each of the three statuses. **Positive case**: called on a job at
-  status `in_progress` with a non-empty reason → succeeds,
-  `unassign_reason` is stored on the `job_technician` row exactly as
-  given — one named test alongside the three rejection cases, not just
-  rejection coverage.
+- **P16-3c (actual outcome)**: `job:unassignTechnician` with no reason →
+  Zod rejection (`UnassignTechnicianInput`'s `reason` field, trimmed
+  non-blank); a whitespace-only reason rejected the same way, both at
+  the Zod boundary and again by the repository's own
+  `assertUnassignReasonProvided` call for a caller that bypasses Zod.
+  **Both assign AND unassign** called (directly, bypassing the UI) on a
+  job at status `ready`, `delivered`, or `cancelled` → repository-level
+  rejection, one named test per status per direction (6 cases total, not
+  3 — the lock was widened during implementation to cover assign as
+  well as unassign, per this checkpoint's own instruction). **Positive
+  case**: unassign called on a job at status `in_progress` with a
+  non-empty reason → succeeds, `unassign_reason` and `unassigned_at` are
+  stored on the `job_technician` row exactly as given, the row is not
+  deleted. **Lock-lifts case**: a job moved from `ready` back to
+  `in_progress` unlocks the list again — one named test. The commission
+  claim detail (P16-3b's `ClaimDetailModal.tsx` / `getClaimDetail`) now
+  shows the stored removal reason — one named test confirming the
+  reason threads all the way from `job_technician.unassign_reason`
+  through to the DTO.
 - **P16-4**: owner manually confirms Shop Identity persists across
   restart and prints on an invoice. Not agent-verifiable — checklist
   only:
@@ -744,6 +786,27 @@ session, before approval:**
    null-suggestion case (empty recipient, but the suggested amount
    still prefills) had no test at all — added both.
 
+- P16-3c: 805 → 845 (+40: `technician-assignment.test.ts` (core, new
+  file) ×14 — `assertTechnicianListUnlocked` × 3 locked statuses ×
+  2 directions (assign/unassign) = 6 throw cases + 5 unlocked-statuses
+  not-throw cases, `assertUnassignReasonProvided` × 3;
+  `job.service.test.ts` ×1 (`unassignTechnician` pass-through);
+  `job.test.ts` (contracts, new file) ×7 (`UnassignTechnicianInput`'s
+  reason field × 5, `TechnicianAssignmentDto`'s `unassignReason` × 2);
+  `job-history-events.test.ts` ×1 (a legacy pre-OD-16-5 row with no
+  stored reason falls back to the plain wording);
+  `job-technician.repository.test.ts` (new file) ×12 — assign rejected
+  on ready/delivered/cancelled ×3 + succeeds on in_progress ×1, unassign
+  rejected on ready/delivered/cancelled ×3 + empty/whitespace reason
+  rejected ×2 + succeeds with a reason stored ×1 + unknown-id throws ×1
+  - the lock-lifts-going-backwards case ×1;
+    `TechnicianAssignmentPanel.test.tsx` (new file) ×3 (reason required
+    before Confirm, locked-status shows no controls + explanation, a
+    removed technician shows its date and reason);
+    `migration-runner.test.ts` ×1 (0020 column check);
+    `commission-decision.repository.test.ts` ×1 (claim detail surfaces
+    the stored removal reason)).
+
 **Rewritten from Phase 7 — actual outcome (Checkpoint 2).** Both
 `commission.repository.test.ts` and `commission.service.test.ts` were
 deleted outright (their subject files no longer exist — Phase 7's
@@ -815,8 +878,11 @@ ground under the new claim model.
   the estimate didn't anticipate, plus a dedicated badge-shown/
   not-shown pair instead of folding the badge into the approve-flow
   test)
-- P16-3c: ~5 (missing-reason rejection, one test per locked status ×3,
-  one positive case — `in_progress` + reason succeeds)
+- P16-3c: 40 (see above — the ~5 estimate covered only the
+  unassign-side rejection cases; the actual scope widened to lock BOTH
+  assign and unassign, needed dedicated new-file test suites for the
+  pure core module, the repository, and the UI panel, plus threading
+  the removal reason through to the commission claim detail)
 - P16-4: 0 (manual checklist only)
 
 Each task's commit states the exact before/after count from its own

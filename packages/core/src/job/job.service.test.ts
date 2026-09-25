@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { JobTechnicianRepositoryPort } from './job-technician.repository.port.js';
 import type {
   AssignTechnicianInput,
   JobRecord,
@@ -10,7 +11,12 @@ import type {
   NewJobInput,
   TechnicianCustodyRecord,
 } from './job.repository.port.js';
-import { assignTechnician, createJob, transitionJobStatus } from './job.service.js';
+import {
+  assignTechnician,
+  createJob,
+  transitionJobStatus,
+  unassignTechnician,
+} from './job.service.js';
 
 /**
  * Minimal in-memory fake — enough to prove job.service.ts's functions
@@ -83,6 +89,30 @@ class FakeJobRepository implements JobRepositoryPort {
   assignTechnician(input: AssignTechnicianInput): Promise<JobRecord> {
     this.lastAssignTechnicianInput = input;
     return Promise.resolve({ ...this.job, assignedTo: input.technicianPartyId });
+  }
+}
+
+/**
+ * Minimal fake for JobTechnicianRepositoryPort — proves
+ * unassignTechnician (job.service.ts) is a pure pass-through to
+ * repo.unassignTechnician(id, reason), same convention as
+ * FakeJobRepository above. The real lock/reason enforcement lives in
+ * the repository implementation, tested separately in
+ * job-technician.repository.test.ts.
+ */
+class FakeJobTechnicianRepository implements JobTechnicianRepositoryPort {
+  public lastUnassignId: string | undefined;
+  public lastUnassignReason: string | undefined;
+
+  listTechnicianAssignments(): ReturnType<
+    JobTechnicianRepositoryPort['listTechnicianAssignments']
+  > {
+    return Promise.resolve([]);
+  }
+  unassignTechnician(id: string, reason: string): Promise<void> {
+    this.lastUnassignId = id;
+    this.lastUnassignReason = reason;
+    return Promise.resolve();
   }
 }
 
@@ -166,5 +196,16 @@ describe('assignTechnician', () => {
 
     expect(repo.lastAssignTechnicianInput).toEqual({ jobId: 'job-1', technicianPartyId: 'tech-1' });
     expect(result.assignedTo).toBe('tech-1');
+  });
+});
+
+describe('unassignTechnician (P16-3c)', () => {
+  it('passes id/reason through unchanged to repo.unassignTechnician', async () => {
+    const repo = new FakeJobTechnicianRepository();
+
+    await unassignTechnician(repo, { id: 'ta-1', reason: 'Technician left the company' });
+
+    expect(repo.lastUnassignId).toBe('ta-1');
+    expect(repo.lastUnassignReason).toBe('Technician left the company');
   });
 });

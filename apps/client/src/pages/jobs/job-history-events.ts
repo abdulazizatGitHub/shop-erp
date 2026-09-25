@@ -84,7 +84,14 @@ export function buildHistoryEvents({
     const name = technicianNames[a.partyId] ?? '…';
     events.push({ timestamp: a.assignedAt, description: `${name} assigned` });
     if (a.unassignedAt !== null) {
-      events.push({ timestamp: a.unassignedAt, description: `${name} unassigned` });
+      // P16-3c (OD-16-5) — every removal has a reason now; older rows
+      // (from before this column existed) have unassignReason = null,
+      // so the description falls back to the plain P14-8 wording.
+      const description =
+        a.unassignReason !== null
+          ? `${name} unassigned — ${a.unassignReason}`
+          : `${name} unassigned`;
+      events.push({ timestamp: a.unassignedAt, description });
     }
   }
 

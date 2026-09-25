@@ -230,12 +230,23 @@ export type {
   AssignTechnicianInput,
   JobRepositoryPort,
 } from './job/job.repository.port.js';
-export { createJob, assignTechnician, transitionJobStatus } from './job/job.service.js';
+export {
+  createJob,
+  assignTechnician,
+  unassignTechnician,
+  transitionJobStatus,
+} from './job/job.service.js';
 
 export type {
   TechnicianAssignmentRecord,
   JobTechnicianRepositoryPort,
 } from './job/job-technician.repository.port.js';
+
+export {
+  assertTechnicianListUnlocked,
+  assertUnassignReasonProvided,
+} from './job/technician-assignment.js';
+export type { TechnicianAssignmentAction } from './job/technician-assignment.js';
 
 export type {
   CommissionMode,

@@ -70,6 +70,8 @@ export const TechnicianHistoryEntryDto = z.object({
   technicianName: z.string(),
   assignedAt: z.string(),
   unassignedAt: z.string().nullable(),
+  /** P16-3c (OD-16-5) — null while active; the stored removal reason once unassigned. */
+  unassignReason: z.string().nullable(),
 });
 export type TechnicianHistoryEntryDto = z.infer<typeof TechnicianHistoryEntryDto>;
 

@@ -8,6 +8,8 @@ export interface TechnicianHistoryEntry {
   readonly technicianName: string;
   readonly assignedAt: string;
   readonly unassignedAt: string | null;
+  /** P16-3c (OD-16-5) — null while active; the stored removal reason once unassigned. */
+  readonly unassignReason: string | null;
 }
 
 export interface DecisionRecipientRecord {

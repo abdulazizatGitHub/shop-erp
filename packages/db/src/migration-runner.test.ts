@@ -47,12 +47,13 @@ describe('migrate', () => {
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
+      '0020_job_technician_unassign_reason.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 is column adds only, not a new table", () => {
+  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 and 0020 are column adds only, not new tables", () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -103,6 +104,7 @@ describe('migrate', () => {
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
+      '0020_job_technician_unassign_reason.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -135,6 +137,7 @@ describe('migrate', () => {
       { version: 17, name: '0017_brand_is_active.sql' },
       { version: 18, name: '0018_commission_claims.sql' },
       { version: 19, name: '0019_commission_claim_snapshot.sql' },
+      { version: 20, name: '0020_job_technician_unassign_reason.sql' },
     ]);
   });
 
@@ -258,6 +261,7 @@ describe('migrate', () => {
       '0017_brand_is_active.sql',
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
+      '0020_job_technician_unassign_reason.sql',
     ]);
 
     db = new Database(dbPath);
@@ -591,5 +595,21 @@ describe('0019_commission_claim_snapshot', () => {
     expect(bpColumn).toMatchObject({ notnull: 0 });
     expect(qtyColumn).toMatchObject({ notnull: 1, dflt_value: '1000' });
     expect(reasonColumn).toMatchObject({ notnull: 0 });
+  });
+});
+
+describe('0020_job_technician_unassign_reason', () => {
+  it('adds job_technician.unassign_reason, nullable, no default (existing rows stay NULL)', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const columns = db.prepare(`PRAGMA table_info(job_technician)`).all() as Array<{
+      name: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>;
+    db.close();
+
+    const reasonColumn = columns.find((c) => c.name === 'unassign_reason');
+    expect(reasonColumn).toMatchObject({ notnull: 0, dflt_value: null });
   });
 });

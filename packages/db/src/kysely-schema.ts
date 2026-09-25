@@ -381,6 +381,9 @@ export interface JobTechnicianTable {
   assignedAt: string;
   unassignedAt: string | null;
   createdAt: string;
+  // Added by 0020 (OD-16-5) — nullable, non-blank trimmed reason
+  // required by core when unassignedAt is set; existing rows stay NULL.
+  unassignReason: string | null;
 }
 
 export interface JobPartTable {

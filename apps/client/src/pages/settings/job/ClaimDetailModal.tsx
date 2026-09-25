@@ -257,12 +257,18 @@ export function ClaimDetailModal({
           <p className="mb-2 text-sm font-semibold text-ink">Technician history</p>
           <ul className="flex flex-col gap-1 text-sm">
             {detail.technicianHistory.map((t) => (
-              <li key={t.technicianPartyId} className="flex items-center gap-2">
-                <span>{t.technicianName}</span>
-                <span className="text-ink-muted">
-                  assigned {t.assignedAt.slice(0, 10)}
-                  {t.unassignedAt ? `, removed ${t.unassignedAt.slice(0, 10)}` : ' (active)'}
+              <li key={t.technicianPartyId} className="flex flex-col">
+                <span className="flex items-center gap-2">
+                  <span>{t.technicianName}</span>
+                  <span className="text-ink-muted">
+                    assigned {t.assignedAt.slice(0, 10)}
+                    {t.unassignedAt ? `, removed ${t.unassignedAt.slice(0, 10)}` : ' (active)'}
+                  </span>
                 </span>
+                {/* P16-3c (OD-16-5) — the stored removal reason, when present. */}
+                {t.unassignReason && (
+                  <span className="text-xs text-ink-muted">Removal reason: {t.unassignReason}</span>
+                )}
               </li>
             ))}
             {detail.technicianHistory.length === 0 && (

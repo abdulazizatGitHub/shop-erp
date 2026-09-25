@@ -1,10 +1,12 @@
 import { newId } from '@shop/shared';
 import type { Kysely } from 'kysely';
-import type {
-  AssignTechnicianInput,
-  JobRecord,
-  JobTechnicianRepositoryPort,
-  TechnicianAssignmentRecord,
+import {
+  assertTechnicianListUnlocked,
+  assertUnassignReasonProvided,
+  type AssignTechnicianInput,
+  type JobRecord,
+  type JobTechnicianRepositoryPort,
+  type TechnicianAssignmentRecord,
 } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
@@ -25,7 +27,7 @@ export class KyselyJobTechnicianRepository implements JobTechnicianRepositoryPor
   async listTechnicianAssignments(jobId: string): Promise<readonly TechnicianAssignmentRecord[]> {
     const rows = await this.db
       .selectFrom('jobTechnician')
-      .select(['id', 'jobId', 'partyId', 'assignedAt', 'unassignedAt'])
+      .select(['id', 'jobId', 'partyId', 'assignedAt', 'unassignedAt', 'unassignReason'])
       .where('jobId', '=', jobId)
       .where('tenantId', '=', this.tenantId)
       .orderBy('assignedAt', 'asc')
@@ -37,17 +39,51 @@ export class KyselyJobTechnicianRepository implements JobTechnicianRepositoryPor
       partyId: row.partyId,
       assignedAt: row.assignedAt,
       unassignedAt: row.unassignedAt,
+      unassignReason: row.unassignReason,
     }));
   }
 
-  /** See job-technician.repository.port.ts's doc comment — plain UPDATE, no other writes. */
-  async unassignTechnician(id: string): Promise<void> {
-    await this.db
-      .updateTable('jobTechnician')
-      .set({ unassignedAt: new Date().toISOString() })
-      .where('id', '=', id)
-      .where('tenantId', '=', this.tenantId)
-      .execute();
+  /**
+   * P16-3c (OD-16-5) — the ONLY legal write path for
+   * job_technician.unassigned_at (see the port's doc comment). Derives
+   * the job's current status inside this same transaction and calls
+   * technician-assignment.ts's assertions before writing anything;
+   * assertUnassignReasonProvided is redundant with the Zod boundary by
+   * design (a caller invoking this repository directly, bypassing Zod,
+   * must not be able to skip the invariant).
+   */
+  async unassignTechnician(id: string, reason: string): Promise<void> {
+    assertUnassignReasonProvided(reason);
+
+    await withRetry(() =>
+      this.db.transaction().execute(async (trx) => {
+        const row = await trx
+          .selectFrom('jobTechnician')
+          .select(['jobId'])
+          .where('id', '=', id)
+          .where('tenantId', '=', this.tenantId)
+          .executeTakeFirst();
+        if (!row) {
+          throw new Error(`job_technician ${id} not found`);
+        }
+
+        const job = await trx
+          .selectFrom('job')
+          .select(['status'])
+          .where('id', '=', row.jobId)
+          .where('tenantId', '=', this.tenantId)
+          .executeTakeFirstOrThrow();
+        const status = await deriveStatus(trx, this.tenantId, row.jobId, job.status);
+        assertTechnicianListUnlocked(status, 'unassign');
+
+        await trx
+          .updateTable('jobTechnician')
+          .set({ unassignedAt: new Date().toISOString(), unassignReason: reason.trim() })
+          .where('id', '=', id)
+          .where('tenantId', '=', this.tenantId)
+          .execute();
+      }),
+    );
   }
 }
 
@@ -77,13 +113,16 @@ export async function assignTechnicianWrite(
     db.transaction().execute(async (trx) => {
       const existing = await trx
         .selectFrom('job')
-        .select(['id', 'assignedTo'])
+        .select(['id', 'assignedTo', 'status'])
         .where('id', '=', input.jobId)
         .where('tenantId', '=', tenantId)
         .executeTakeFirst();
       if (!existing) {
         throw new Error(`Job ${input.jobId} not found`);
       }
+
+      const status = await deriveStatus(trx, tenantId, input.jobId, existing.status);
+      assertTechnicianListUnlocked(status, 'assign');
 
       const now = new Date().toISOString();
       if (existing.assignedTo === null) {
@@ -104,6 +143,7 @@ export async function assignTechnicianWrite(
           partyId: input.technicianPartyId,
           assignedAt: now,
           unassignedAt: null,
+          unassignReason: null,
           createdAt: now,
         })
         .execute();
@@ -147,7 +187,8 @@ export async function assignTechnicianWrite(
         .where('tenantId', '=', tenantId)
         .executeTakeFirstOrThrow();
 
-      const status = await deriveStatus(trx, tenantId, input.jobId, row.status);
+      // Reuses the status derived above — unchanged within this same
+      // transaction, no need to re-query jobStatusHistory.
       const invoiceDocNo = await resolveInvoiceDocNo(trx, tenantId, row.saleId);
       const jobClientDisplay = await resolveJobClientDisplay(trx, tenantId, row.jobClientId);
       return toJobRecord(row, status, invoiceDocNo, jobClientDisplay);

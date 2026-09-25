@@ -1,0 +1,31 @@
+-- =====================================================================
+--  ADDENDUM 20 - JOB_TECHNICIAN UNASSIGN REASON
+--  Migration version 20.
+-- =====================================================================
+--
+--  WHY THIS EXISTS
+--  Phase 16, P16-3c (docs/phases/PHASE_16.md §2a OD-16-5). Removing a
+--  technician from a job has always been a soft removal —
+--  job_technician.unassigned_at is set, the row is never deleted (0015's
+--  own header, "assignment history survives") — but there was no way to
+--  record WHY a technician was removed. OD-16-5 requires a reason,
+--  enforced both at the Zod boundary and by a new core-layer function
+--  that owns every assign/unassign write path (packages/core/src/job/
+--  technician-assignment.ts). Nullable: every existing row predates this
+--  column and stays NULL, which is correct — they were removed before
+--  a reason was ever asked for, not "removed for no reason" as a
+--  meaningful value.
+--
+--  Renumbered from an earlier implied "0019" — 0019 was taken by P16-3a
+--  Checkpoint 1b's commission_claim/commission_decision_recipient
+--  snapshot columns (see that migration's own header).
+--
+--  Table count: unchanged (column add, not a new table). View count:
+--  unchanged.
+--
+--  No BEGIN/COMMIT here — migration-runner.ts already wraps
+--  db.exec(migration.sql) in its own db.transaction() closure, same
+--  note as every migration from 0006 on.
+-- =====================================================================
+
+ALTER TABLE job_technician ADD COLUMN unassign_reason TEXT;

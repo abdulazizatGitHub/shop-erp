@@ -66,6 +66,7 @@ const PENDING_DETAIL: ClaimDetailDto = {
       technicianName: 'Naeem',
       assignedAt: '2026-09-24T08:00:00.000Z',
       unassignedAt: null,
+      unassignReason: null,
     },
   ],
   decisions: [],

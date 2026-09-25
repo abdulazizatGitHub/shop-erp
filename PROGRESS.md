@@ -41,6 +41,131 @@
 
 ---
 
+## [2026-09-25] Session 85 — Phase 16 P16-3c: technician removal guard
+
+**Goal:** OD-16-5's technician-list lock and required removal reason,
+per `docs/phases/PHASE_16.md` §2a/§3/§4: `unassign_reason` column
+(migration `0020`), a new core module owning every job_technician
+write path, the lock covering BOTH assign and unassign (widened from
+the original unassign-only framing), and the UI (reason prompt,
+locked-state explanation, removed-technician display with date and
+reason). Carry-over from the P16-3b approval: confirmed
+`ClaimDetailModal.test.tsx` already asserted "Reverse without a reason
+is blocked, no IPC call" — no new test needed there.
+
+**Done:**
+
+- **Migration `0020`**: `job_technician ADD COLUMN unassign_reason
+TEXT` (nullable — every pre-existing row predates the column and
+  stays NULL, never a meaningful "removed for no reason").
+- **New core module** `packages/core/src/job/technician-assignment.ts`:
+  `assertTechnicianListUnlocked(status, 'assign' | 'unassign')` (throws
+  on `ready`/`delivered`/`cancelled`, either direction) and
+  `assertUnassignReasonProvided(reason)` (trimmed non-blank). New core
+  service function `unassignTechnician(repo, input)` in `job.service.ts`
+  — a pure pass-through, same shape as the existing `assignTechnician`
+  — replacing the handler's former direct
+  `repo.unassignTechnician(input.id)` call.
+- **Re-grepped every job_technician write path** before and after:
+  exactly two write statements exist
+  (`job-technician.repository.ts`'s `assignTechnicianWrite` INSERT and
+  `unassignTechnician` UPDATE), both now derive the job's current
+  status inside their own transaction (via `job-shared.ts`'s
+  `deriveStatus`, never `job.status` directly) and call the core
+  assertions before writing anything. Every caller into these two
+  methods goes through `@shop/core`'s `assignTechnician`/
+  `unassignTechnician` — confirmed no handler calls the repository
+  directly.
+- **Backwards-transition lock lift**: no special handling needed or
+  added — the lock re-derives the job's live status on every call, so
+  a job moved back from `ready` to an earlier status is simply
+  unlocked again on the next call. Verified directly with a dedicated
+  test. Documented in `PHASE_16.md`'s OD-16-5 section.
+- **UI (`TechnicianAssignmentPanel.tsx`)**: `isReadOnly` now includes
+  `ready` (previously only `delivered`/`cancelled` — a real gap in the
+  older code, found while reading it before this change). Unassign now
+  reveals an inline required reason field before Confirm; a locked job
+  shows a short explanation instead of the add/remove controls;
+  removed technicians are now listed (previously invisible once
+  removed) with their removal date and reason.
+- **Removal reason threaded through**: `job-history-events.ts`'s
+  "X unassigned" History event now appends the reason when present
+  (falls back to the plain wording for a legacy pre-OD-16-5 row with
+  no stored reason). `commission-decision.repository.ts`'s
+  `getClaimDetail` technician-history query now selects
+  `unassignReason`; `ClaimDetailModal.tsx` displays it under a removed
+  technician's entry — the P16-3b UI now shows why someone was removed,
+  not just when.
+
+**Verified:**
+
+- `npm run verify`: 845/845, exit 0 (805 + 40).
+- New tests named:
+  - `technician-assignment.test.ts` (core, new file) — 14: `assertTechnicianListUnlocked`
+    parametrized over `['ready','delivered','cancelled']` × `['assign','unassign']`
+    (6 throw cases) + the 5 unlocked statuses (not-throw, both
+    directions each), `assertUnassignReasonProvided` × 3
+    (non-blank/empty/whitespace).
+  - `job.service.test.ts` +1: `'passes id/reason through unchanged to
+repo.unassignTechnician'`.
+  - `job.test.ts` (contracts, new file) — 7: `UnassignTechnicianInput`
+    ×5 (valid, empty/whitespace reason, missing reason, trims, non-uuid
+    id), `TechnicianAssignmentDto` ×2 (null unassignReason, stored
+    unassignReason).
+  - `job-history-events.test.ts` +1: `'P16-3c: a removal with no
+stored reason (a legacy pre-OD-16-5 row) falls back to the plain
+"unassigned" wording'`.
+  - `job-technician.repository.test.ts` (new file) — 12:
+    `KyselyJobRepository.assignTechnician` × 4 (rejected on
+    ready/delivered/cancelled, succeeds on in_progress);
+    `KyselyJobTechnicianRepository.unassignTechnician` × 8 (rejected on
+    ready/delivered/cancelled, empty reason rejected, whitespace reason
+    rejected, succeeds with reason stored + row not deleted, unknown id
+    throws, lock-lifts-going-backwards).
+  - `TechnicianAssignmentPanel.test.tsx` (new file) — 3: reason
+    required before Confirm, `ready` status locks the panel with an
+    explanation, a removed technician shows its date and reason.
+  - `migration-runner.test.ts` +1: `'0020_job_technician_unassign_reason'`
+    column check.
+  - `commission-decision.repository.test.ts` +1: `'P16-3c (OD-16-5):
+getClaimDetail surfaces the stored removal reason for a removed
+technician'`.
+
+**Not done / deferred:** P16-4 (Shop Identity verification) — owner
+smoke test, not agent-verifiable, per `docs/phases/PHASE_16.md` §4's
+own checklist. Phase 16 is otherwise complete pending that manual
+check.
+
+**Bugs found:** `TechnicianAssignmentPanel.tsx`'s `isReadOnly` check
+was missing `'ready'` (only checked `delivered`/`cancelled`) — found
+while reading the file before modifying it, fixed as part of this
+same task rather than logged separately, since implementing OD-16-5's
+lock correctly required fixing it.
+
+**Decisions taken:** none new — implements OD-16-5 exactly, widened to
+cover assign (not just unassign) per this checkpoint's own explicit
+instruction, documented in `PHASE_16.md`.
+
+**Blocked on:** nothing.
+
+**Next session should:** P16-4 — owner manually confirms Shop Identity
+persists across restart and prints on an invoice (checklist in
+`PHASE_16.md` §4). No further agent work is defined for Phase 16 after
+that.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (nothing new to log)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md — none found (the
+      `isReadOnly` gap was fixed, not left open)
+- [x] Test suite passing
+
+---
+
 ## [2026-09-25] Session 84 — Phase 16 P16-3b review fixes (items 1/3/4/5)
 
 **Goal:** Five owner review findings on P16-3b before approval: the

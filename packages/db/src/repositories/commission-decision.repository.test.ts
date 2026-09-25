@@ -774,6 +774,21 @@ describe('KyselyCommissionDecisionRepository.listPendingClaims / getClaimDetail'
   it('getClaimDetail on an unknown claim id throws', async () => {
     await expect(decisionRepo.getClaimDetail('does-not-exist')).rejects.toThrow(/not found/);
   });
+
+  it('P16-3c (OD-16-5): getClaimDetail surfaces the stored removal reason for a removed technician', async () => {
+    const jobId = insertJob();
+    assignTechnician(jobId, technicianAId, '2026-09-24T08:00:00.000Z');
+    rawDb
+      .prepare(
+        `UPDATE job_technician SET unassigned_at = ?, unassign_reason = ? WHERE job_id = ? AND party_id = ?`,
+      )
+      .run('2026-09-24T09:00:00.000Z', 'Technician left the company', jobId, technicianAId);
+    const claimId = await deliverAndGetClaimId(jobId);
+
+    const detail = await decisionRepo.getClaimDetail(claimId);
+    const entry = detail.technicianHistory.find((t) => t.technicianPartyId === technicianAId);
+    expect(entry?.unassignReason).toBe('Technician left the company');
+  });
 });
 
 describe('KyselyCommissionDecisionRepository.listAllClaims (P16-3b)', () => {

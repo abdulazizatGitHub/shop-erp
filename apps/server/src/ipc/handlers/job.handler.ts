@@ -12,7 +12,7 @@ import {
   type JobStatusHistoryDto,
   type TechnicianAssignmentDto,
 } from '@shop/contracts';
-import { assignTechnician, createJob, transitionJobStatus } from '@shop/core';
+import { assignTechnician, createJob, transitionJobStatus, unassignTechnician } from '@shop/core';
 import type { JobSplitRecord, TechnicianCustodyRecord } from '@shop/core';
 import {
   createKyselyDb,
@@ -185,7 +185,7 @@ export function registerJobHandlers(deps: JobHandlerDeps): void {
       const db = openDatabase(deps.dbPath);
       try {
         const repo = new KyselyJobTechnicianRepository(createKyselyDb(db), deps.tenantId);
-        await repo.unassignTechnician(input.id);
+        await unassignTechnician(repo, input);
       } finally {
         db.close();
       }

@@ -14,6 +14,8 @@ export interface TechnicianAssignmentRecord {
   readonly assignedAt: string;
   /** null while the technician is still active on the job. */
   readonly unassignedAt: string | null;
+  /** null while active; non-blank once removed (P16-3c, OD-16-5). */
+  readonly unassignReason: string | null;
 }
 
 export interface JobTechnicianRepositoryPort {
@@ -25,14 +27,21 @@ export interface JobTechnicianRepositoryPort {
    */
   listTechnicianAssignments(jobId: string): Promise<readonly TechnicianAssignmentRecord[]>;
   /**
-   * P14-5 — plain UPDATE setting job_technician.unassigned_at = now on
-   * the given row. The row is NOT deleted (append-only — its full
-   * history stays queryable, needed by P14-8's History panel). No other
-   * table is touched: job.assigned_to is untouched (it means "the first
-   * technician ever assigned," not "currently active," per P14-1's own
-   * decision), and there is no audit_log/sync_outbox write for this
-   * action, matching the owner's explicit "no other writes" scope for
-   * this task.
+   * P14-5, P16-3c — sets job_technician.unassigned_at = now and stores
+   * the given reason on the given row. The row is NOT deleted
+   * (append-only — its full history stays queryable, needed by P14-8's
+   * History panel). No other table is touched: job.assigned_to is
+   * untouched (it means "the first technician ever assigned," not
+   * "currently active," per P14-1's own decision), and there is no
+   * audit_log/sync_outbox write for this action, matching the owner's
+   * explicit "no other writes" scope from P14-5.
+   *
+   * P16-3c (OD-16-5): the implementation MUST derive the job's current
+   * status inside its own transaction and call
+   * technician-assignment.ts's assertTechnicianListUnlocked/
+   * assertUnassignReasonProvided before writing anything — this port
+   * method is the ONLY legal way to unassign a technician; no caller
+   * may write job_technician.unassigned_at directly.
    */
-  unassignTechnician(id: string): Promise<void>;
+  unassignTechnician(id: string, reason: string): Promise<void>;
 }

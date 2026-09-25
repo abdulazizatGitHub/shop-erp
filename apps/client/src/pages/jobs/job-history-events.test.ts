@@ -60,6 +60,7 @@ describe('buildHistoryEvents', () => {
         partyId: 'tech-1',
         assignedAt: '2026-09-01T09:05:00.000Z',
         unassignedAt: null,
+        unassignReason: null,
       },
       {
         id: 'ta-2',
@@ -67,6 +68,7 @@ describe('buildHistoryEvents', () => {
         partyId: 'tech-2',
         assignedAt: '2026-09-01T09:06:00.000Z',
         unassignedAt: '2026-09-02T12:00:00.000Z',
+        unassignReason: 'Reassigned to a different job',
       },
     ];
     const parts: JobPartRecord[] = [
@@ -99,11 +101,31 @@ describe('buildHistoryEvents', () => {
       'Status changed to In Progress',
       '1 × Compressor 1.5T issued to job',
       'Diagnosis recorded: Compressor relay burnt out',
-      'Hassan unassigned',
+      'Hassan unassigned — Reassigned to a different job',
     ]);
     // Sorted ascending — every timestamp must be <= the next.
     const timestamps = events.map((e) => e.timestamp);
     expect(timestamps).toEqual([...timestamps].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('P16-3c: a removal with no stored reason (a legacy pre-OD-16-5 row) falls back to the plain "unassigned" wording', () => {
+    const events = buildHistoryEvents({
+      job: { ...BASE_JOB, diagnosedFault: null },
+      parts: [],
+      statusHistory: [],
+      technicianAssignments: [
+        {
+          id: 'ta-1',
+          jobId: 'job-1',
+          partyId: 'tech-1',
+          assignedAt: '2026-09-01T09:05:00.000Z',
+          unassignedAt: '2026-09-02T12:00:00.000Z',
+          unassignReason: null,
+        },
+      ],
+      technicianNames: { 'tech-1': 'Naeem' },
+    });
+    expect(events.map((e) => e.description)).toEqual(['Naeem assigned', 'Naeem unassigned']);
   });
 
   it('truncates a long diagnosedFault to 60 chars with an ellipsis', () => {

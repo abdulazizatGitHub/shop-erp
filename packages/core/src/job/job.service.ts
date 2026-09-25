@@ -2,7 +2,9 @@ import type {
   AssignTechnicianInput as CreateAssignTechnicianInput,
   CreateJobInput,
   JobStatusTransitionInput as CreateJobStatusTransitionInput,
+  UnassignTechnicianInput as CreateUnassignTechnicianInput,
 } from '@shop/contracts';
+import type { JobTechnicianRepositoryPort } from './job-technician.repository.port.js';
 import type { JobRecord, JobRepositoryPort } from './job.repository.port.js';
 
 export async function createJob(
@@ -34,6 +36,24 @@ export async function assignTechnician(
   input: CreateAssignTechnicianInput,
 ): Promise<JobRecord> {
   return repo.assignTechnician({ jobId: input.jobId, technicianPartyId: input.technicianPartyId });
+}
+
+/**
+ * P16-3c — replaces the handler's former direct
+ * `repo.unassignTechnician(id)` call (OD-16-5: "replacing the handler's
+ * direct repository call"). The actual lock/reason enforcement lives in
+ * the repository implementation (it must derive the job's current
+ * status inside its own write transaction — see
+ * job-technician.repository.port.ts's doc comment); this function is
+ * the single core-layer entry point every handler must call instead of
+ * touching the repository directly, matching assignTechnician's own
+ * shape immediately above.
+ */
+export async function unassignTechnician(
+  repo: JobTechnicianRepositoryPort,
+  input: CreateUnassignTechnicianInput,
+): Promise<void> {
+  return repo.unassignTechnician(input.id, input.reason);
 }
 
 export async function transitionJobStatus(

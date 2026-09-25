@@ -249,6 +249,7 @@ describe('SettingsPage — P16-1b routing (OD-16-11)', () => {
           technicianName: 'Naeem',
           assignedAt: '2026-09-24T08:00:00.000Z',
           unassignedAt: null,
+          unassignReason: null,
         },
       ],
       decisions: [],

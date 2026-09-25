@@ -266,6 +266,7 @@ export class KyselyCommissionDecisionRepository implements CommissionDecisionRep
         'party.name as technicianName',
         'jobTechnician.assignedAt as assignedAt',
         'jobTechnician.unassignedAt as unassignedAt',
+        'jobTechnician.unassignReason as unassignReason',
       ])
       .where('jobTechnician.tenantId', '=', this.tenantId)
       .where('jobTechnician.jobId', '=', claim.jobId)
