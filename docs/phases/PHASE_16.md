@@ -1,6 +1,6 @@
 # Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
-**Status:** IN PROGRESS (P16-1 + P16-1b + P16-2 + P16-3a + P16-3b + P16-3c done, 845/845 tests; P16-4 next)
+**Status:** ✅ COMPLETE (P16-1–P16-4, 845/845 tests). Closed 2026-09-26.
 **Started:** 2026-09-23 (P16-1)
 **Branch:** main
 **Baseline:** f9cc7b8 (H1-H3 + I1-I4 close, 649/649 tests)
@@ -673,19 +673,28 @@ commissionAmountPaisa: 50000}` via the new create channel, then
   shows the stored removal reason — one named test confirming the
   reason threads all the way from `job_technician.unassign_reason`
   through to the DTO.
-- **P16-4**: owner manually confirms Shop Identity persists across
-  restart and prints on an invoice. Not agent-verifiable — checklist
-  only:
-  - [ ] Open Settings, edit shop name, Save
-  - [ ] Restart the app
-  - [ ] Confirm the new name is still shown in Settings
-  - [ ] Print/preview an invoice, confirm the shop name appears
+- **P16-4 — DONE, owner-verified 2026-09-26**: owner manually confirmed
+  Shop Identity persists across restart and prints on an invoice. Not
+  agent-verifiable — checklist:
+  - [x] Open Settings, edit shop name, Save
+  - [x] Restart the app
+  - [x] Confirm the new name is still shown in Settings
+  - [x] Print/preview an invoice, confirm the shop name appears
+
+  Owner additionally hand-verified, outside this checklist's original
+  scope: the full end-to-end commission flow (configure a commissioned
+  service charge → deliver a job → approve a split to two recipients →
+  wage report reflects it → reverse → wage report reflects the
+  clawback → re-approve to a third, outside-history recipient with a
+  reason) and the P16-3c technician-list lock/reason flow, both in the
+  running app, not only via this phase's automated tests.
 
 ---
 
 ## 5. Rewritten/added tests and expected count delta
 
-Baseline: 649/649 (commit f9cc7b8).
+Baseline: 649/649 (commit f9cc7b8). **Final: 845/845 (+196), phase
+closed 2026-09-26.**
 
 **Actual counts landed so far** (not estimates — each is this task's own
 verified `npm run verify` count):
@@ -907,3 +916,94 @@ verified until each task lands.
 - Zero-bill delivery (OD-16-10): the delivery modal allows "Deliver &
   Invoice" with no parts and no labour (Rs 0) — legitimate for
   warranty/free-check jobs, or a missing guard? Owner to decide.
+
+---
+
+## 7. Phase summary (close-out, 2026-09-26)
+
+**Status: ✅ COMPLETE.** P16-1 through P16-4, all owner-approved and
+(where applicable) owner-verified in the running app. 649/649 → 845/845
+tests (+196), zero regressions, `npm run verify` exit 0 throughout.
+
+### Migrations added this phase
+
+- **`0017_brand_is_active.sql`** — `brand.is_active INTEGER NOT NULL
+DEFAULT 1` (P16-2): hides a brand from the job-intake dropdown only;
+  CSV/item brand matching is untouched.
+- **`0018_commission_claims.sql`** — four new tables:
+  `commission_claim`, `commission_decision` (`attempt_no` +
+  `UNIQUE(claim_id, attempt_no)`, not `UNIQUE(claim_id)` alone —
+  GAP-1/OD-16-3a), `commission_decision_recipient`,
+  `commission_decision_reversal` (P16-3a Checkpoint 1).
+- **`0019_commission_claim_snapshot.sql`** — `commission_claim` gains
+  its own delivery-time snapshot of the charge's commission config
+  (`commission_mode`/`commission_amount_paisa`/`commission_bp`/
+  `quantity_milli`); `commission_decision_recipient` gains
+  `outside_history_reason` (P16-3a Checkpoint 1b, OD-16-12).
+- **`0020_job_technician_unassign_reason.sql`** — `job_technician.
+unassign_reason TEXT`, nullable (P16-3c, OD-16-5).
+
+### ADRs written or amended this phase
+
+- **ADR-0014** (`no-hard-delete-jobs`) — written this phase from
+  PROGRESS.md Session 75's existing decision record (no new decision;
+  the file itself didn't exist until Phase 16 planning found the gap).
+- **ADR-0015** (`commission-claims`) — written this phase. Commission
+  is an owner-approved claim, not an automatic posting; replaces Phase
+  7's `party.commission_bp` model entirely. Amended mid-phase for
+  GAP-1 (decision reversal, not edit-in-place) and OD-16-12 (recipient
+  rule correction).
+
+### Owner decisions (OD-16-1 – OD-16-12)
+
+- **OD-16-1** — Commission configured per service charge (mode: none /
+  fixed paisa / basis points of charged amount), not per technician.
+- **OD-16-2** — Delivery never posts commission money; it writes an
+  immutable claim inside the delivery's own transaction.
+- **OD-16-3** — Owner approves (naming recipients) or rejects
+  (required reason) each claim. Recipient eligibility later corrected
+  by OD-16-12.
+- **OD-16-3a** — GAP-1 correction: decisions are correctable via
+  reversal (`attempt_no` + `commission_decision_reversal`), never
+  edited or deleted.
+- **OD-16-4** — Commission is attributed to the wage report by
+  approval date, not delivery date.
+- **OD-16-5** — Technician list locked on `ready`/`delivered`/
+  `cancelled`, both assign and unassign; removal requires a non-blank
+  reason. Lock re-derives live status on every call — not sticky.
+- **OD-16-6** — Brand stored as a `TEXT` snapshot on `job`; `brand`
+  table is the shared pick list with `item.brandId`.
+- **OD-16-7** — Idempotent per-tenant brand seed (18 starter names);
+  dev-only service-charge seed, never runs against a packaged build.
+- **OD-16-8** — Phase 7's commission tests rewritten to the claim
+  model, not deleted silently; `ADR-0015` records why.
+- **OD-16-9** — No historical commission back-fill.
+- **OD-16-10** — Zero-bill delivery unchanged; logged as `Q-ZEROBILL`,
+  not decided this phase.
+- **OD-16-11** — Settings shell redesign: grouped left sub-nav +
+  routed right content pane, replacing the original stacked-cards
+  design.
+- **OD-16-12** — Recipient rule corrected: any active staff party may
+  receive commission (not limited to the job's technician history); a
+  recipient outside that history requires a stored reason; a non-staff
+  recipient is rejected outright.
+
+### Known limitations carried forward (not built this phase, tracked in `PROJECT.md`)
+
+- Commission Approvals is unrestricted — no owner-only access control,
+  no `decided_by` column — pending the auth phase (`ADR-0009`,
+  `BUG-ADR9`).
+- Settings' unsaved-changes guard covers sub-nav clicks only, not
+  leaving Settings via the main sidebar.
+- `Q-VOID-COMM` — what happens to a voided job's commission claims is
+  undesigned (moot today since `Q-VOID` itself is deferred).
+- `Q-ZEROBILL` (OD-16-10) — zero-bill delivery is unchanged, still an
+  open question.
+- Go-live clean-start procedure — the production database must start
+  with no test data before 2026-10-31; not designed or built this
+  phase.
+- `BUG-TECHLIST-1` (LOW, pre-existing) — the job list's Technicians
+  column still shows only the primary technician, unrelated to and
+  unchanged by this phase's work.
+- `BUG-COMMISSION-MULTI` — **closed**, SUPERSEDED by ADR-0015 (the
+  mechanism it was reported against no longer exists).

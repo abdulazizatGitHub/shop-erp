@@ -255,3 +255,60 @@ auto-collapse, inactive report group tabs visible) were fixed before commit.
 
 See `docs/phases/PHASE_12.md` for full sub-phase detail, design decisions,
 and verification output.
+
+---
+
+## Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
+
+The shop owner can manage service charges and appliance brands without a
+developer touching the database, and commission is no longer automatic:
+the owner reviews and approves (or rejects) a claim for every delivered
+labour charge that has commission configured, deciding who gets paid and
+how much. Replaces Phase 7's automatic per-technician commission model
+entirely.
+
+- P16-1: Service Charges section — list, create, edit, toggle active for
+  `service_charge`; commission mode (none / fixed paisa / basis points)
+- P16-1b: Settings shell redesign (OD-16-11) — grouped left sub-nav +
+  routed right content pane, replacing the original stacked-cards layout
+- P16-2: Brand management — Brands section, DB-driven job-intake
+  dropdown replacing the hardcoded `BRAND_OPTIONS` constant
+- P16-3a: Commission claim schema (`commission_claim`/
+  `commission_decision`/`commission_decision_recipient`/
+  `commission_decision_reversal`), pure claim-calculation function,
+  delivery-transaction claim insert, approve/reject/reverse core
+  services + IPC, retiring Phase 7's automatic commission entirely
+  (ADR-0015)
+- P16-3b: Commission Approvals section (Settings shell) + wage-report
+  sign fix (a reversal-only month must show as clawed back, not earned)
+- P16-3c: Technician removal guard (OD-16-5) — the technician list locks
+  on `ready`/`delivered`/`cancelled`, for both assign and unassign;
+  removal requires a stored reason
+- P16-4: Shop Identity verification — owner smoke test
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 845/845 (baseline 649/649)
+- [x] Service Charges section: create/edit/toggle a charge, commission
+      mode validated (none/fixed/bp mutually exclusive)
+- [x] Brands section: create/toggle a brand; job intake reads the live
+      DB-driven list, CSV import matching unaffected
+- [x] A commission-configured labour line's delivery writes a claim
+      inside the delivery's own transaction — a claim insert failure
+      rolls back the entire delivery (ADR-0015)
+- [x] Owner approves a claim to one or more recipients (any active
+      staff), rejects with a reason, or reverses a decided claim with a
+      reason — a reversed decision nets to zero, never edited in place
+- [x] Wage report shows commission by approval month, correctly signed
+      through a reversal, plus one pending-commission total in its
+      header (not split per technician)
+- [x] Technician list locked on ready/delivered/cancelled for both
+      assign and unassign; removal reason required and stored; the lock
+      lifts automatically if a job moves back to an earlier status
+- [x] Owner manually confirmed (P16-4): Shop Identity persists across
+      restart and prints on an invoice; also hand-verified the full
+      end-to-end commission flow and the P16-3c lock/reason flow in the
+      running app
+
+See `docs/phases/PHASE_16.md` for full sub-phase detail, the 12 owner
+decisions (OD-16-1–OD-16-12), ADR-0014/ADR-0015, and verification output.

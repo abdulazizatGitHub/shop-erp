@@ -41,6 +41,74 @@
 
 ---
 
+## [2026-09-26] Session 86 — Phase 16 CLOSED
+
+**Goal:** Close out Phase 16 after P16-3c's approval and the owner's
+manual verification of P16-4 (Shop Identity persistence + invoice
+print), the full end-to-end commission flow (configure → deliver →
+approve split → wage report → reverse → wage report → outside-history
+approval with reason), and the P16-3c lock/reason flow — all confirmed
+in the running app, not only via this phase's automated tests.
+
+**Done:**
+
+- `docs/phases/PHASE_16.md`: status → ✅ COMPLETE (2026-09-26); P16-4's
+  checklist marked done with the owner's additional verification noted;
+  §5 baseline/final test count (649 → 845, +196); new §7 "Phase
+  summary" — one line each for migrations `0017`–`0020`, ADR-0014 and
+  ADR-0015, all twelve owner decisions (OD-16-1–OD-16-12), and every
+  known limitation carried forward.
+- `PROJECT.md`: top status header updated (Phase 16 COMPLETE; no Phase
+  17 is defined yet in `docs/PHASES.md`, which stops at Phase 12 —
+  stated plainly rather than inventing a next phase); §3 phase-status
+  table gained a Phase 16 row; `BUG-COMMISSION-MULTI` → **SUPERSEDED**
+  by ADR-0015, commit `6e480e2` (the Phase 7 mechanism it was reported
+  against no longer exists, not patched); §6 ADR index gained the
+  missing ADR-0015 row (ADR-0014 was already listed). Confirmed already
+  present, no changes needed: commission-approvals-owner-only +
+  `decided_by` backlog item, the Settings unsaved-changes-guard
+  main-sidebar gap, `Q-VOID-COMM`, the go-live clean-start procedure,
+  `Q-ZEROBILL` (OD-16-10), and `BUG-TECHLIST-1` (still open, unrelated
+  to this phase).
+- `docs/PHASES.md`: added the Phase 16 entry in the same format as
+  Phase 11/12 (scope bullets + checkboxed exit criteria + link to the
+  full phase doc).
+
+**Verified:**
+
+- `npm run verify`: 845/845, exit 0 (unchanged from Session 85 — this
+  session is documentation-only, no code touched).
+- `git log --oneline f9cc7b8..HEAD` pasted to the owner in chat,
+  confirming every commit this phase.
+
+**Not done / deferred:** Everything Phase 16 itself deferred stays
+deferred — see `PHASE_16.md` §7's "Known limitations carried forward"
+list, restated in `PROJECT.md`.
+
+**Bugs found:** none new this session.
+
+**Decisions taken:** none new — this session records and closes out
+decisions already made across Sessions 76–85.
+
+**Blocked on:** nothing. No Phase 17 is scoped yet.
+
+**Next session should:** await the owner's next task — `docs/PHASES.md`
+has no further phase defined past Phase 12, and Phases 13–16 were each
+scoped individually as they came up.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met — N/A, no next phase defined yet
+- [x] Any new bugs documented in PROJECT.md — none found; one bug
+      (`BUG-COMMISSION-MULTI`) closed as superseded
+- [x] Test suite passing
+
+---
+
 ## [2026-09-25] Session 85 — Phase 16 P16-3c: technician removal guard
 
 **Goal:** OD-16-5's technician-list lock and required removal reason,
