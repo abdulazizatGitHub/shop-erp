@@ -1,10 +1,10 @@
 # Phase 17 — Settings Backlog: Planning & Documentation Only
 
 **Status:** APPROVED — 2026-09-26. Scope (all §2 T1 items plus P17-7) is
-approved for build. **P17-1's warn-mode implementation is BLOCKED** on
-one owner decision (§2.1 — Option A vs. Option B) before that specific
-piece of code can be written; block-mode and every other T1 task have no
-open blocker.
+approved for build. **P17-1 is fully unblocked** — D17-1 resolved the
+warn-mode design with Option C (§2.1); D17-3 resolved the warehouse-
+scoping question with a new, separate `counterStockMilli` field.
+Building begins this session.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -17,14 +17,23 @@ open blocker.
   against live code (attendance, `commission_bp`, expense-category
   filtering, overhead-split consumers, negative-stock scope). Owner
   answered Q17-1–Q17-5.
-- Rev 3 (2026-09-26, this revision): amendments A17-1 through A17-5
-  applied. Pre-code verification (a)–(e) performed and reported in §2.1
-  before any editing, per instruction. Two findings — (b) and (d) —
-  triggered a STOP; P17-1's warn-mode design needs one more owner
-  decision before that piece of code is written. Q17-6 recorded (owner
-  answered). A schema-correction finding surfaced while drafting §2.6's
-  Expense Category form wording, reported before finalizing. Scope
-  marked **APPROVED**.
+- Rev 3 (2026-09-26): amendments A17-1 through A17-5 applied. Pre-code
+  verification (a)–(e) performed and reported in §2.1 before any
+  editing, per instruction. Two findings — (b) and (d) — triggered a
+  STOP; P17-1's warn-mode design needed one more owner decision. Q17-6
+  recorded (owner answered). A schema-correction finding surfaced while
+  drafting §2.6's Expense Category form wording. Scope marked
+  **APPROVED**.
+- Rev 4 (2026-09-26, this revision): decisions D17-1 through D17-4
+  applied. **D17-1 resolves the (b) blocker** with a third design
+  (Option C) — see §2.1. **D17-3 resolves the (d) blocker** — a new,
+  separate `counterStockMilli` field is added; the existing
+  all-warehouse `stockOnHandMilli` is kept for its other consumers, all
+  individually listed in §2.1 with keep/switch stated for each.
+  **D17-4** verified the expense-category schema findings against real
+  seeded data and view SQL — see §2.6; `is_billable` turned out to have
+  the same "zero consumers" problem as `kind`, applied symmetrically.
+  P17-1 is now fully unblocked and building begins this session.
 
 ---
 
@@ -78,27 +87,90 @@ introduced.
 | (d) | Does on-hand include technician custody?                               | **The server's own transaction check does not** — correctly scoped to one `warehouseId`, resolved to the single seeded "Shop" warehouse (`resolveDefaultWarehouseId`, `sale.repository.ts:65-76`; `bootstrap.ts:268` seeds exactly one `is_default=1` "Shop" row; technician warehouses are separate rows, `job-part.repository.ts`'s `resolveTechnicianWarehouseId`). **But the client-facing `item.stockOnHandMilli` field does** — `item.repository.ts:206-212,269` sums `v_stock_on_hand` with **no warehouse filter at all**, so stock currently out with a technician (`transfer_out`/`transfer_in`, netting to zero across the combined total) still counts as "in stock" here. **STOP triggered** — P10-1's hard block, and any low-stock badge built on this same field, can under-report a genuinely empty counter whenever stock is out with a technician. |
 | (e) | Item-level stock-tracking column?                                      | Exists: `item.track_stock` / `trackStock` (`item.repository.ts:233,253,266,295`, boolean `0/1`). No column needs to be added.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-**Design decision needed before P17-1's warn-mode UI is written ((b)) —
-not yet decided, do not build without a choice:**
+**D17-1 — ANSWERED (resolves the (b) blocker). Option C (neither A nor
+B):** `sale:create` gains `acknowledgedNegativeStock: boolean` (Zod,
+default `false`). Inside the sale transaction, **before any insert**,
+the unified predicate runs (per item, summed across lines, base
+milli-units, Shop warehouse only, `trackStock=false` exempt):
 
-- **Option A — validate-then-commit:** a new read-only pre-check (the
-  same per-item-summed predicate the block-mode throw uses) runs before
-  `sale:create`, in `'warn'` mode only, rendering one confirmation
-  dialog listing every item that will go negative; only on confirm does
-  the real commit happen. No throwaway committed-then-cancelled sale,
-  but a new IPC surface to design and test.
-- **Option B — extend today's commit-then-offer-to-cancel pattern:**
-  re-wire the existing credit-limit gate to also open on the corrected,
-  summed `stockBelowZero`; no new channel, a smaller change, but a
-  "negative" sale is briefly real in the DB before the user decides —
-  the same trade-off already accepted for credit-limit today.
+- `'block'` → throws `NegativeStockBlockedError(items)`. The flag is
+  ignored — it can never bypass a block.
+- `'warn'` + not acknowledged → throws
+  `NegativeStockConfirmationRequiredError(items)`. Nothing is inserted.
+- `'warn'` + acknowledged → commits normally, `warnings.stockBelowZero`
+  reflects that it happened.
 
-**Not blocked, decided in this revision:** the on-hand figure the new
+`items = readonly { itemId, name, onHandMilli, requestedMilli }[]`.
+Client: catches the confirmation error, shows **one** dialog listing the
+items, resubmits the identical input with the flag set on confirm. A
+block error shows a plain error; the cart is never touched (nothing was
+ever committed to undo). The credit-limit flow (`isCreditLimitExceeded`)
+stays exactly as it is today — untouched by this phase.
+
+**Options A/B/C and why B was rejected (recorded per instruction):**
+
+- **Option A — validate-then-commit (separate dry-run channel):** a
+  second read-only IPC call runs the same predicate before `sale:create`
+  is ever invoked. Rejected in favor of C — an extra round trip and a
+  second place the predicate logic could drift from the real commit-time
+  check, for no benefit Option C doesn't already give.
+- **Option B — extend today's commit-then-offer-to-cancel pattern**
+  (the credit-limit gate's own shape): **rejected.** During the
+  parallel run, `'warn'` is the default and stock-count drift is
+  expected to be frequent — Option B would mean every one of those
+  warnings leaves behind a real committed-then-cancelled sale: a
+  reversal `stock_movement`/`party_ledger` row pair and a **consumed,
+  never-reusable invoice number** for every single warning the owner
+  declines. At expected parallel-run frequency this pollutes the
+  document-number sequence and the ledger with noise on a near-daily
+  basis. Option C's pre-insert throw has zero footprint when declined —
+  no row of any kind, no consumed doc number.
+- **Option C — validate-inside-the-same-transaction, throw-before-insert,
+  client resubmits with an acknowledgement flag:** the one built. No
+  second channel (unlike A), no throwaway committed rows (unlike B).
+  **Logged in `PROJECT.md` as a known wart, not fixed this phase:** the
+  credit-limit gate itself _still_ uses the Option-B shape (commit,
+  then offer to cancel) — a real, pre-existing inconsistency now that
+  Option C exists as the better pattern. Candidate for the credit-limit
+  gate to adopt the same shape in a future phase; out of scope here
+  (CLAUDE.md §8 — don't fix a bug outside the task at hand).
+
+**Not blocked, decided in Rev 3, unchanged:** the on-hand figure the
 unified predicate reads must be **warehouse-scoped to the Shop counter
 only**, mirroring `sale.repository.ts`'s own existing, correct pattern —
-**never** the existing all-warehouse client DTO field. This requires a
-new or widened item-stock query; it is not optional and applies
-regardless of which option (A/B) is chosen for the UI.
+**never** the existing all-warehouse client DTO field.
+
+**D17-2 — recorded in `PROJECT.md` Known Bugs (dated, this session):**
+over-quantity counter sales currently commit silently with no warning —
+`stockBelowZero` has been computed but never read by the UI since P10-1
+(verification finding (b)). **Fixed by P17-1.**
+
+**D17-3 — ANSWERED (resolves the (d) blocker). Add a separate field,
+do not repurpose the existing one:** a new, Shop-warehouse-scoped
+`counterStockMilli` is added alongside the existing all-warehouse
+`stockOnHandMilli`, which is **not changed** — it is the business
+unit's owned stock (parts in a technician's custody are still owned by
+Spare Parts) and stays correct for stock valuation and the Items list
+quantity. Every real consumer of `stockOnHandMilli`, checked before
+writing any code:
+
+| Consumer                              | File:line                                                                                                                             | Keeps all-warehouse, or switches to counter?                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P10-1 hard-block guards               | `apps/client/src/pages/sales/ItemSearchPanel.tsx:113,167`                                                                             | **Switches** — this is exactly the counter-sellability check                                                                                         |
+| POS product-card / cart badge         | `apps/client/src/pages/sales/ItemProductCard.tsx:57` (`resolveStockBadge`)                                                            | **Switches** — the sales-screen badge must reflect what the counter can actually sell                                                                |
+| Items-list badge                      | `apps/client/src/pages/items/ItemsPage.tsx:156` (`resolveStockBadge`, same shared function, different call site)                      | **Keeps** all-warehouse — inventory management cares about total owned stock, not counter-sellability                                                |
+| Field source (query/type definitions) | `packages/db/src/repositories/item.repository.ts:206-212,269`, `item.repository.port.ts:40`, `packages/contracts/src/item/item.ts:89` | Not a consumer — the field's own definition; unchanged, a sibling field (`counterStockMilli`) added                                                  |
+| Stock valuation report                | `packages/db/src/repositories/report.repository.ts` (queries `v_stock_on_hand` directly)                                              | **Keeps** all-warehouse — not literally a consumer of this DTO field (separate query), but same correct semantic: custody-held stock still has value |
+
+No consumer beyond these was found — confirmed by a full-repo grep of
+`stockOnHandMilli` before writing any code. Only the three named in the
+original instruction (sale predicate, cart badge, `ItemSearchPanel`)
+switch in P17-1; the Items-list badge is explicitly **not** touched by
+P17-1 (it switches, if at all, only when P17-2 builds the low-stock
+badge — and even then, per §2.2, the low-stock rule reads the same new
+counter-scoped figure, while the _existing_ out-of-stock/low-stock badge
+on the Items list is a separate, pre-existing display this phase does
+not have to touch to satisfy P17-2's own requirement).
 
 | ID         | Setting                                                                                                                                                    | Source                                                                                                                                                                                     | Today's behaviour                                                                                                                                 | Proposed control & default                                                                                                                                                                                                                                                                                    | Storage                                    | Money/stock impact & history protection                                                                                                                                         | Effort                                                                                                                                                | Tier     |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -254,28 +326,86 @@ described is actually `allocation_method` (a different column from
 form — consistent with Q17-1 (don't build the overhead split this
 phase).
 
-**Corrected field list and wording** (adjusted only where the original
-draft contradicted the schema; wording is still **provisional** — the
-owner reviews it before P17-4 starts):
+**D17-4 findings, verified against real seeded data and live view SQL
+before writing any code (doc update only this step):**
 
-| Field                              | Shown?                                                                                         | Label + help text                                                                                                                                                                                                                                                                                    |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Name                               | Yes                                                                                            | (no help text needed)                                                                                                                                                                                                                                                                                |
-| Kind                               | Yes                                                                                            | **"Kind — Fixed: a cost that recurs regardless of how much business you do (e.g. rent, electricity). Variable: a cost that rises and falls with activity (e.g. fuel, courier)."** _(rewritten — the original draft's Direct/Shared wording actually described `allocation_method`, not this column)_ |
-| Billable                           | Yes                                                                                            | "Billable — Can be charged to a customer on a job or bill." _(unchanged — matches `is_billable` exactly)_                                                                                                                                                                                            |
-| Owner drawing                      | Yes                                                                                            | "Owner drawing — Money the owner takes for personal use. It is moved out of business expenses and does not reduce either shop's profit." _(unchanged — matches `is_owner_drawing` exactly)_                                                                                                          |
-| Business unit                      | **Removed**                                                                                    | _Not a category-level field — business unit is chosen per expense at entry time, on the existing expense-entry form, unaffected by this phase._                                                                                                                                                      |
-| Allocation method / Parts share bp | **Not shown**; hardcoded `allocation_method='direct'` on every category created from this form | `allocation_method` is `NOT NULL` — it can never be left blank, so new categories from this form default to `'direct'` (no overhead split), consistent with Q17-1. `parts_share_bp` stays `NULL`, matching all 6 seeded rows.                                                                        |
+**(a) The 6 seeded rows** (`bootstrap.ts:44-51`), exact values:
+
+| Name          | `kind`     | `allocationMethod` | `isBillable` | `isOwnerDrawing` |
+| ------------- | ---------- | ------------------ | ------------ | ---------------- |
+| Electricity   | `fixed`    | `shared_revenue`   | `0`          | `0`              |
+| Rent          | `fixed`    | `shared_revenue`   | `0`          | `0`              |
+| Bike Fuel     | `variable` | `direct`           | `0`          | `0`              |
+| Courier       | `variable` | `direct`           | `0`          | `0`              |
+| Petrol        | `variable` | `direct`           | `0`          | `0`              |
+| Miscellaneous | `variable` | `direct`           | `0`          | `0`              |
+
+All 6 have `isBillable=0` and `isOwnerDrawing=0` uniformly — no seeded
+row is an owner drawing, so the "owner drawing to not_expense" pairing
+the instruction expected is not actually observed in any seed; it comes
+from the migration's own comment, and (per (b) below) is never checked
+by any view either way.
+
+**(b) Column each of the 4 consumers filters on** — all four filter
+**only on `is_owner_drawing`**:
+
+| View / function                                            | Filters on                                                                                               |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `v_unit_direct_expense` (`0003_shared_overhead.sql:81-92`) | `ec.is_owner_drawing = 0` (plus `bu.is_overhead = 0`, a `business_unit` column, unrelated to this table) |
+| `v_overhead_pool` (`:94-106`)                              | `ec.is_owner_drawing = 0`; groups by `ec.allocation_method, ec.parts_share_bp` but filters on neither    |
+| `v_owner_drawings` (`:127-135`)                            | `ec.is_owner_drawing = 1`                                                                                |
+| `getExpenseSummaryReport` (`report.repository.ts:579-593`) | `ec.is_owner_drawing = 0`                                                                                |
+
+**None of the four ever filter on `kind` or `is_billable`.**
+
+**(c) Readers of `kind`/`is_billable` in application logic — zero for
+both.** `kind` appears only in a test fixture (`ExpensesPage.test.tsx:105`)
+— `AddExpenseModal.tsx` never branches on it. **`is_billable` is not
+even selected by `listCategories()`** (`expense.repository.ts:174-184`
+selects only `id, name, kind, allocationMethod`), and
+`ExpenseCategoryDto` (`packages/contracts/src/expense/expense.ts:41-47`)
+has no `isBillable` field at all — it never reaches the client. (Every
+other `isBillable` hit in the repo is `job_part.is_billable`, an
+unrelated column on a different table — per-job billing, not this one.)
+
+**Rule set, per D17-4:**
+
+- `allocation_method` is **derived** from `is_owner_drawing`, never a
+  form field: `true` maps to `'not_expense'`, `false` maps to
+  `'direct'`. A core rule enforces the two can never disagree.
+  (`'not_expense'` itself is never read by any view either — only
+  `is_owner_drawing` is — so this is for internal consistency, not
+  because a report requires it.)
+- **`kind` has zero readers, so it is hidden from the form**, defaulted
+  to `'variable'` (the majority of the 6 seeds — 4 vs. 2 — there is no
+  single value that fits all 6).
+- **Correction to the instruction's own premise:** "Billable help text
+  must cite its actual consumer" assumed one exists. **It doesn't** —
+  `is_billable` has the same zero-consumers problem as `kind`. Applying
+  the same rule symmetrically: **`is_billable` is also hidden**,
+  defaulted to `false` (matching all 6 seeds). Flagged for owner review
+  before P17-4 starts — the alternative (keep it visible with honest
+  "not yet used by any report" wording) is available if preferred.
+
+**Corrected field list** (owner reviews before P17-4 starts):
+
+| Field                              | Shown?        | Reasoning                                                                                                                                                                                                           |
+| ---------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name                               | Yes           | (no help text needed)                                                                                                                                                                                               |
+| Owner drawing                      | Yes           | "Owner drawing: money the owner takes for personal use. It is moved out of business expenses and does not reduce either shop's profit." — matches `is_owner_drawing`, the one column every real consumer filters on |
+| Kind                               | **Hidden**    | Zero readers (D17-4c) — defaulted to `'variable'`                                                                                                                                                                   |
+| Billable                           | **Hidden**    | Zero readers (D17-4c) — defaulted to `false`, matching all 6 seeds                                                                                                                                                  |
+| Business unit                      | **Removed**   | Not a category-level field — chosen per expense at entry time on the existing expense form, unaffected by this phase                                                                                                |
+| Allocation method / Parts share bp | **Not shown** | `allocation_method` derived from `is_owner_drawing`; `parts_share_bp` stays `NULL`, matching all 6 seeds and Q17-1                                                                                                  |
 
 **Field-lock rule (Q17-5, ANSWERED), corrected list:** once any expense
-references a category, only its **`name`** stays editable — `kind`,
-`is_billable`, `is_owner_drawing` lock. (`business_unit_id` and
-`allocation_method`/`parts_share_bp` are removed from this list — the
-former doesn't exist on this table; the latter is never exposed by this
-form at all, so there's nothing on those two to lock.) Enforced by a new
-core check (e.g. `assertExpenseCategoryFieldsLocked`), following the
+references a category, only its **`name`** stays editable —
+`is_owner_drawing` locks (the only other field this form actually
+writes). Enforced by a new core check (e.g.
+`assertExpenseCategoryFieldsLocked`), following the
 `assertCommissionModeConsistent` precedent
 (`packages/core/src/job/service-charge.service.ts:21-84`) — logic lives
+in `packages/core`, never a DB constraint (CLAUDE.md section 3.7).
 in `packages/core`, never a DB constraint (CLAUDE.md §3.7).
 
 **Invalid combinations rejected in `packages/core`** (checked against
@@ -562,17 +692,24 @@ Task-specific criteria for the approved T1 tasks (plus P17-7). Each
 names its own verification method, per CLAUDE.md §6 — no "looks correct"
 entries.
 
-- [ ] **P17-1** — new/rewritten tests, all four combinations named
-      explicitly:
-  - `(≤0 add) × 'warn'` — allowed, one commit-time confirmation shown
-    (exact test shape depends on the pending Option A/B decision).
-  - `(≤0 add) × 'block'` — refused with a plain error, zero rows
-    inserted.
-  - `(over-quantity at commit) × 'warn'` — allowed, confirmation lists
-    the affected item.
-  - `(over-quantity at commit) × 'block'` — the transaction throws, a
-    hand-calculated before/after stock delta confirms zero
-    `stock_movement` rows were inserted.
+- [ ] **P17-1** — new/rewritten tests, all combinations named explicitly
+      (Option C, D17-1):
+  - `(≤0 add) × 'warn'` — allowed at add time, no per-item dialog; at
+    commit, `NegativeStockConfirmationRequiredError` thrown with the
+    item listed, zero rows inserted.
+  - `warn + not acknowledged` → confirmation error thrown, **zero rows
+    inserted**, `items` in the error lists the correct
+    `onHandMilli`/`requestedMilli` for each affected item.
+  - `warn + acknowledged` → commits, stock goes negative,
+    `warnings.stockBelowZero === true`.
+  - `block + acknowledgedNegativeStock=true` → **still refused** — the
+    flag can never bypass a block, `NegativeStockBlockedError` thrown
+    regardless.
+  - A direct IPC call to `sale:create` with no flag at all, under
+    `'warn'`, for a sale that would go negative → refused with the
+    confirmation error, **never a silent oversell** (proves the
+    guarantee is server-side, not UI-only — directly answers
+    verification (a) and closes the D17-2 bug).
   - Two cart lines of the same item, each individually within stock,
     **summed** over available stock → refused under `'block'` (proves
     the per-line bug found in verification (c) is fixed).
@@ -581,17 +718,19 @@ entries.
     mode.
   - A multi-unit line (ADR-0013, e.g. cylinder→kg) → compared in base
     stock milli-units, not the sale-entered unit.
-  - A blocked sale attempted via a **direct IPC call bypassing the UI**
-    → refused, zero `stock_movement`/`sale` rows inserted (proves the
-    guarantee is server-side, not UI-only — directly answers verification
-    (a)).
-  - **Replaces** the prior revision's now-incorrect line ("`ItemSearchPanel`
-    test still passes unmodified") — that test is **rewritten**, not
-    left alone: it must assert ≤0-add is allowed under `'warn'` (new
-    behavior, reversing P10-1) and refused under `'block'`.
+  - **Custody test (D17-3):** an item with `0` in the Shop warehouse and
+    `5` in a technician's warehouse → treated as `0` at the counter by
+    both the predicate and the cart badge (`counterStockMilli`), while
+    the existing all-warehouse `stockOnHandMilli` on the same item still
+    reports `5` — both fields read back from the same seeded rows in one
+    test, proving they diverge exactly as designed.
+  - **Rewrites**, not modifies, `ItemSearchPanel.test.tsx`'s existing
+    ≤0-item test: under `'warn'`, a ≤0-stock item **can now be added**
+    to the cart (a deliberate reversal of P10-1, per Q17-6); under
+    `'block'`, it is still refused exactly as before.
   - Query: on a fresh migrated DB, `SELECT value FROM setting WHERE
-key='negativeStockPolicy'` returns no row, and the getter's default is
-    confirmed `'warn'`.
+key='negativeStockPolicy'` returns no row, and the getter's default
+    is confirmed `'warn'`.
 - [ ] **P17-2** — Repository tests: an item with `reorderLevel=5` and a
       **Shop-warehouse-scoped** `qtyOnHand<=5` (via a real seeded
       `stock_movement` sum, Shop warehouse only — not the all-warehouse
