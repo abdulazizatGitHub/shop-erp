@@ -37,6 +37,15 @@ export function toIpcError(error: unknown): IpcError {
     return { code: 'DISCOUNT_EXCEEDS_SUBTOTAL', message: error.message };
   }
 
+  // Defensive/secondary mapping only — the actual sale:create path never
+  // lets these reach here (sale.handler.ts's runCreateSale catches both
+  // and RESOLVES with a NegativeStockOutcome instead, since a rejected
+  // Error's custom .details property is not guaranteed to survive
+  // Electron's ipcMain.handle -> ipcRenderer.invoke boundary — see
+  // NegativeStockOutcome's doc comment in packages/contracts). Kept here
+  // only so a future call site that throws either error without its own
+  // catch still degrades to a real code instead of a generic
+  // INTERNAL_ERROR — .details on that path carries the same caveat.
   if (error instanceof NegativeStockBlockedError) {
     return {
       code: 'NEGATIVE_STOCK_BLOCKED',

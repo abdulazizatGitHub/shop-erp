@@ -21,6 +21,7 @@ import type {
   CustomerSearchInput,
   CustomerStatementInput,
   CustomerStatementDto,
+  NegativeStockOutcome,
   PriceLevelsDto,
   DailySalesReportInput,
   DailySalesReportRowDto,
@@ -499,7 +500,9 @@ export interface ElectronApi {
     readonly csvDryRun: (input: GrnCsvDryRunInput) => Promise<GrnCsvValidationResult>;
   };
   readonly sale: {
-    readonly create: (input: CreateSaleInput) => Promise<CreateSaleAndPrintResult>;
+    readonly create: (
+      input: CreateSaleInput,
+    ) => Promise<CreateSaleAndPrintResult | NegativeStockOutcome>;
     readonly cancel: (input: CancelSaleInput) => Promise<void>;
     // P4.5-6: was already wired end-to-end (handler + preload) but
     // missing from this type — the Daily Sales report's per-sale table

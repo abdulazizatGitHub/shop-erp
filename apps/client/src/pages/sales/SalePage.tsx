@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ConfirmDialog } from '@shop/ui';
+import { ConfirmDialog, QuantityDisplay } from '@shop/ui';
 import { CartTable } from './CartTable.js';
 import { CheckoutModal } from './CheckoutModal.js';
 import { CheckoutPanel } from './CheckoutPanel.js';
@@ -256,8 +256,8 @@ export function SalePage(): React.JSX.Element {
         <ul className="list-disc pl-5">
           {flow.negativeStockItems.map((item) => (
             <li key={item.itemId}>
-              {item.name} — on hand {String(Math.floor(item.onHandMilli / 1000))}, requested{' '}
-              {String(Math.floor(item.requestedMilli / 1000))}
+              {item.name} — on hand <QuantityDisplay quantityMilli={item.onHandMilli} />, requested{' '}
+              <QuantityDisplay quantityMilli={item.requestedMilli} />
             </li>
           ))}
         </ul>

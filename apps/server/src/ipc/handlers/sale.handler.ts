@@ -5,10 +5,15 @@ import {
   SaleIdInput,
   SaleSearchInput,
   SaleWithLinesInput,
+  type NegativeStockOutcome,
   type SaleSummaryDto,
   type SaleWithLinesDto,
 } from '@shop/contracts';
-import type { SaleRecord } from '@shop/core';
+import {
+  NegativeStockBlockedError,
+  NegativeStockConfirmationRequiredError,
+  type SaleRecord,
+} from '@shop/core';
 import {
   createKyselyDb,
   getReceiptPaperSize,
@@ -35,37 +40,66 @@ export interface SaleHandlerDeps {
   readonly deviceCode: string;
 }
 
+/**
+ * P17-1 review fix: extracted so it can be tested directly (matching
+ * customer-balance-import.handler.ts's precedent), and so the
+ * negative-stock catch lives in exactly one place. RESOLVES with
+ * `NegativeStockOutcome` for the two negative-stock cases — never lets
+ * `NegativeStockBlockedError`/`NegativeStockConfirmationRequiredError`
+ * escape as a rejection, since a thrown Error's custom properties are
+ * not guaranteed to survive Electron's IPC boundary (see
+ * `NegativeStockOutcome`'s own doc comment in packages/contracts).
+ */
+export async function runCreateSale(
+  deps: SaleHandlerDeps,
+  input: CreateSaleInput,
+): Promise<CreateSaleAndPrintResult | NegativeStockOutcome> {
+  const db = openDatabase(deps.dbPath);
+  try {
+    const kysely = createKyselyDb(db);
+    const repo = new KyselySaleRepository(kysely, deps.tenantId, deps.deviceCode);
+
+    try {
+      // Print-after-commit (docs/SYSTEM_DESIGN.md section 8): a print
+      // failure must never roll back or hide the sale — see
+      // createSaleAndPrintReceipt's own contract. Same open connection
+      // reused for the post-commit reads; the sale's own transaction
+      // has already committed by the time repo.createSale() returns.
+      return await createSaleAndPrintReceipt(
+        () => repo.createSale(input),
+        (saleId) =>
+          printReceiptForSale(saleId, {
+            getSaleData: (id) => getSaleReceiptData(kysely, deps.tenantId, id),
+            getShopName: () => getShopName(kysely, deps.tenantId),
+            getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId),
+            renderPdf: renderReceiptPdf,
+            saveFile: saveReceiptToTempFile,
+            print: printFile,
+          }),
+      );
+    } catch (err) {
+      if (err instanceof NegativeStockBlockedError) {
+        return { negativeStock: 'blocked', items: [...err.items] };
+      }
+      if (err instanceof NegativeStockConfirmationRequiredError) {
+        return { negativeStock: 'confirmationRequired', items: [...err.items] };
+      }
+      throw err;
+    }
+  } finally {
+    db.close();
+  }
+}
+
 export function registerSaleHandlers(deps: SaleHandlerDeps): void {
   ipcMain.handle(
     channels.sale.create,
-    withError(async (_event, raw: unknown): Promise<CreateSaleAndPrintResult> => {
-      const input = CreateSaleInput.parse(raw);
-      const db = openDatabase(deps.dbPath);
-      try {
-        const kysely = createKyselyDb(db);
-        const repo = new KyselySaleRepository(kysely, deps.tenantId, deps.deviceCode);
-
-        // Print-after-commit (docs/SYSTEM_DESIGN.md section 8): a print
-        // failure must never roll back or hide the sale — see
-        // createSaleAndPrintReceipt's own contract. Same open connection
-        // reused for the post-commit reads; the sale's own transaction
-        // has already committed by the time repo.createSale() returns.
-        return await createSaleAndPrintReceipt(
-          () => repo.createSale(input),
-          (saleId) =>
-            printReceiptForSale(saleId, {
-              getSaleData: (id) => getSaleReceiptData(kysely, deps.tenantId, id),
-              getShopName: () => getShopName(kysely, deps.tenantId),
-              getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId),
-              renderPdf: renderReceiptPdf,
-              saveFile: saveReceiptToTempFile,
-              print: printFile,
-            }),
-        );
-      } finally {
-        db.close();
-      }
-    }),
+    withError(
+      async (_event, raw: unknown): Promise<CreateSaleAndPrintResult | NegativeStockOutcome> => {
+        const input = CreateSaleInput.parse(raw);
+        return runCreateSale(deps, input);
+      },
+    ),
   );
 
   ipcMain.handle(

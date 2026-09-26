@@ -40,7 +40,7 @@ export const CreateSaleInput = z.object({
 });
 export type CreateSaleInput = z.infer<typeof CreateSaleInput>;
 
-/** P17-1. One item that would take the Shop counter's stock below zero — carried in a NegativeStockBlockedError/NegativeStockConfirmationRequiredError's `details.items`. */
+/** P17-1. One item that would take the Shop counter's stock below zero. */
 export const NegativeStockItemDto = z.object({
   itemId: z.string(),
   name: z.string(),
@@ -48,6 +48,26 @@ export const NegativeStockItemDto = z.object({
   requestedMilli: z.number().int(),
 });
 export type NegativeStockItemDto = z.infer<typeof NegativeStockItemDto>;
+
+/**
+ * P17-1 review fix: `sale:create` RESOLVES with this shape (never rejects
+ * with a thrown-error's custom properties) for the two negative-stock
+ * cases. Thrown Error objects are not guaranteed to carry custom
+ * properties (`.code`/`.details`) across Electron's ipcMain.handle ->
+ * ipcRenderer.invoke boundary — a well-known Electron limitation, never
+ * actually verified in this codebase before this fix (the sandbox here
+ * cannot launch real Electron either). A RESOLVED plain object is
+ * guaranteed intact by the Structured Clone Algorithm, so this is the
+ * only shape this data may safely travel in. `NegativeStockBlockedError`/
+ * `NegativeStockConfirmationRequiredError` (packages/core) are still
+ * thrown at the repository layer — the IPC handler (sale.handler.ts's
+ * `runCreateSale`) catches them and resolves this instead.
+ */
+export const NegativeStockOutcome = z.object({
+  negativeStock: z.enum(['blocked', 'confirmationRequired']),
+  items: z.array(NegativeStockItemDto),
+});
+export type NegativeStockOutcome = z.infer<typeof NegativeStockOutcome>;
 
 export const SaleWarnings = z.object({
   creditLimitExceeded: z.boolean(),

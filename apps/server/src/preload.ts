@@ -94,6 +94,7 @@ import type {
   SaleSummaryDto,
   SaleWithLinesInput,
   SaleWithLinesDto,
+  NegativeStockOutcome,
   SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
@@ -307,8 +308,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.grn.csvDryRun, input) as Promise<GrnCsvValidationResult>,
   },
   sale: {
-    create: (input: CreateSaleInput): Promise<CreateSaleAndPrintResult> =>
-      ipcRenderer.invoke(channels.sale.create, input) as Promise<CreateSaleAndPrintResult>,
+    create: (input: CreateSaleInput): Promise<CreateSaleAndPrintResult | NegativeStockOutcome> =>
+      ipcRenderer.invoke(channels.sale.create, input) as Promise<
+        CreateSaleAndPrintResult | NegativeStockOutcome
+      >,
     cancel: (input: CancelSaleInput): Promise<void> =>
       ipcRenderer.invoke(channels.sale.cancel, input) as Promise<void>,
     getById: (id: string): Promise<SaleRecord | null> =>

@@ -77,6 +77,7 @@ export {
   SaleWithLinesDto,
   SaleWithLinesLineDto,
   NegativeStockItemDto,
+  NegativeStockOutcome,
 } from './sale/sale.js';
 
 export {

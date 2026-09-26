@@ -169,6 +169,17 @@ containing a business `if` has the rule in the wrong file.
 - Do not start work belonging to a later phase.
 - Do not fix bugs outside the current task — document them in `PROJECT.md`.
 - If a requirement is ambiguous, **stop and ask**. Do not guess and proceed.
+- **Never run a throwaway verification script against `data/shop-dev.db`
+  (or any real, in-use database file) directly.** Copy it to a temp path
+  first (`cp data/shop-dev.db <tmp>/verify.db`, or `mkdtempSync` + copy)
+  and run the script against the copy. A script that commits real rows —
+  even ones you plan to delete afterward — can leave permanent side
+  effects a `DELETE` cannot undo, such as a consumed, never-reusable
+  document-sequence number (ADR-0012: numbers are never reused, gaps are
+  permanent). Found the hard way in Phase 17, P17-1: a verification
+  script's committed test sale advanced `document_sequence.next_number`
+  past a doc number that then had to stay forever unissued once the test
+  row was deleted.
 
 ### Before ending the session
 

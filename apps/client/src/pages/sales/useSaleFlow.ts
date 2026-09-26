@@ -4,11 +4,13 @@ import type {
   CustomerDto,
   ItemLookups,
   NegativeStockItemDto,
+  NegativeStockOutcome,
   SaleResult,
 } from '@shop/contracts';
 import { Money } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
 import type { CartLine } from './CartTable.js';
+import type { CreateSaleAndPrintResult } from '../../types/electron-api.js';
 import type { LastSaleSummary } from './LastSaleModal.js';
 import type { ConfirmedSale } from './SaleSuccessModal.js';
 import { computeSaleWarningText } from './saleWarnings.js';
@@ -24,14 +26,18 @@ export type PaymentMode = 'cash' | 'credit';
 /** P17-1 (Q17-6). Defaults to 'warn' (matches the server-side default) until the real setting loads. */
 export type NegativeStockPolicy = 'warn' | 'block';
 
-function errorCode(err: unknown): string | undefined {
-  return (err as { code?: string } | undefined)?.code;
-}
-
-function errorItems(err: unknown): readonly NegativeStockItemDto[] {
-  const details = (err as { details?: { items?: readonly NegativeStockItemDto[] } } | undefined)
-    ?.details;
-  return details?.items ?? [];
+/**
+ * P17-1 review fix: `ipc.sale.create` RESOLVES with a discriminated
+ * `NegativeStockOutcome` for the negative-stock cases — it never
+ * rejects for them. A thrown Error's custom properties (`.code`,
+ * `.details`) are not guaranteed to survive Electron's IPC boundary;
+ * only a resolved plain object is (Structured Clone Algorithm). See
+ * `NegativeStockOutcome`'s doc comment in packages/contracts.
+ */
+function isNegativeStockOutcome(
+  result: CreateSaleAndPrintResult | NegativeStockOutcome,
+): result is NegativeStockOutcome {
+  return 'negativeStock' in result;
 }
 
 /**
@@ -222,30 +228,38 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
   // identical input, differing only in acknowledgedNegativeStock.
   async function submitSale(input: CreateSaleInput): Promise<void> {
     try {
-      const result = await ipc.sale.create(input);
-      setLastResult(result);
-      setPrintError(result.printError);
+      const outcome = await ipc.sale.create(input);
+
+      if (isNegativeStockOutcome(outcome)) {
+        if (outcome.negativeStock === 'confirmationRequired') {
+          // Nothing was inserted (thrown pre-insert, inside the
+          // transaction, then converted to this resolved outcome by
+          // the handler) — the cart stays exactly as it is.
+          setNegativeStockItems(outcome.items);
+          setPendingNegativeStockInput(input);
+          setStep('negative-stock-gate');
+          return;
+        }
+        // 'blocked'
+        const names = outcome.items.map((item) => item.name).join(', ');
+        setError(
+          names.length > 0
+            ? `Sale blocked — insufficient stock for: ${names}`
+            : 'Sale blocked — insufficient stock',
+        );
+        return;
+      }
+
+      setLastResult(outcome);
+      setPrintError(outcome.printError);
       // Only the credit-limit warning still opens this gate — negative
-      // stock is now handled pre-insert by submitSale's own catch below.
-      if (result.warnings.creditLimitExceeded) {
+      // stock is handled above.
+      if (outcome.warnings.creditLimitExceeded) {
         setStep('warning-gate');
       } else {
-        finishSuccess(result);
+        finishSuccess(outcome);
       }
     } catch (err) {
-      const code = errorCode(err);
-      if (code === 'NEGATIVE_STOCK_CONFIRMATION_REQUIRED') {
-        // Nothing was inserted (thrown pre-insert, inside the
-        // transaction) — the cart stays exactly as it is.
-        setNegativeStockItems(errorItems(err));
-        setPendingNegativeStockInput(input);
-        setStep('negative-stock-gate');
-        return;
-      }
-      if (code === 'NEGATIVE_STOCK_BLOCKED') {
-        setError(err instanceof Error ? err.message : 'Sale blocked — insufficient stock');
-        return;
-      }
       setError(err instanceof Error ? err.message : 'Sale failed');
     }
   }

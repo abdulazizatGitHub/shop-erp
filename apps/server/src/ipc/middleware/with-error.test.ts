@@ -1,6 +1,10 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { SessionAlreadyOpenError } from '@shop/core';
+import {
+  NegativeStockBlockedError,
+  NegativeStockConfirmationRequiredError,
+  SessionAlreadyOpenError,
+} from '@shop/core';
 import { DbBusyError } from '@shop/db';
 import { toIpcError, withError } from './with-error.js';
 import { setRestoreInProgress } from './restore-state.js';
@@ -38,6 +42,26 @@ describe('toIpcError', () => {
 
     expect(ipcError.code).toBe('SESSION_ALREADY_OPEN');
     expect(ipcError.message).toContain('2026-08-15');
+  });
+
+  it("wraps NegativeStockBlockedError into { code: NEGATIVE_STOCK_BLOCKED, details.items } — defensive/secondary path only (P17-1 review): the real sale:create flow never lets this reach here, see sale.handler.ts's runCreateSale", () => {
+    const items = [{ itemId: 'i1', name: 'Scarce Item', onHandMilli: 5000, requestedMilli: 8000 }];
+    const error = new NegativeStockBlockedError(items);
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('NEGATIVE_STOCK_BLOCKED');
+    expect(ipcError.details).toEqual({ items });
+  });
+
+  it('wraps NegativeStockConfirmationRequiredError into { code: NEGATIVE_STOCK_CONFIRMATION_REQUIRED, details.items } — same defensive/secondary caveat as above', () => {
+    const items = [{ itemId: 'i1', name: 'Scarce Item', onHandMilli: 5000, requestedMilli: 8000 }];
+    const error = new NegativeStockConfirmationRequiredError(items);
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('NEGATIVE_STOCK_CONFIRMATION_REQUIRED');
+    expect(ipcError.details).toEqual({ items });
   });
 
   it('wraps an unknown Error into { code: INTERNAL_ERROR, message }, never a raw stack trace', () => {
