@@ -8,8 +8,10 @@ import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
 import {
+  getNegativeStockPolicy,
   getReceiptPaperSize,
   getShopName,
+  setNegativeStockPolicy,
   setReceiptPaperSize,
   setShopName,
 } from './setting.repository.js';
@@ -71,6 +73,43 @@ describe('receipt paper size setting (P4-1a)', () => {
 
     const value = await getReceiptPaperSize(kysely, TENANT_ID);
     expect(value).toBe('A4');
+  });
+});
+
+describe('negative stock policy setting (P17-1, docs/phases/PHASE_17.md §2.1/§8)', () => {
+  it("defaults to 'warn' when no setting row has ever been written", async () => {
+    const value = await getNegativeStockPolicy(kysely, TENANT_ID);
+    expect(value).toBe('warn');
+
+    const row = rawDb
+      .prepare(
+        `SELECT COUNT(*) AS n FROM setting WHERE tenant_id = ? AND key = 'negativeStockPolicy'`,
+      )
+      .get(TENANT_ID) as { n: number };
+    expect(row.n).toBe(0); // reading the default never writes a row
+  });
+
+  it("returns 'block' after being explicitly set", async () => {
+    await setNegativeStockPolicy(kysely, TENANT_ID, 'block');
+
+    const value = await getNegativeStockPolicy(kysely, TENANT_ID);
+    expect(value).toBe('block');
+
+    const row = rawDb
+      .prepare(`SELECT value FROM setting WHERE tenant_id = ? AND key = 'negativeStockPolicy'`)
+      .get(TENANT_ID) as { value: string };
+    expect(row.value).toBe('block');
+  });
+
+  it('setting it twice updates the same row rather than inserting a duplicate', async () => {
+    await setNegativeStockPolicy(kysely, TENANT_ID, 'block');
+    await setNegativeStockPolicy(kysely, TENANT_ID, 'warn');
+
+    const rows = rawDb
+      .prepare(`SELECT value FROM setting WHERE tenant_id = ? AND key = 'negativeStockPolicy'`)
+      .all(TENANT_ID) as Array<{ value: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.value).toBe('warn');
   });
 });
 

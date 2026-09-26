@@ -36,8 +36,10 @@ export interface ItemRecord {
   readonly trackStock: boolean;
   readonly altUomId: string | null;
   readonly altUomFactorMilli: number | null;
-  /** E-1: total across all warehouses, milli-units. Null = not stock-tracked, or no movements yet. */
+  /** E-1: total across all warehouses, milli-units. Null = not stock-tracked, or no movements yet. Kept all-warehouse deliberately — stock valuation and the Items list both need the unit's total owned stock, custody included (docs/phases/PHASE_17.md §2.1 D17-3). */
   readonly stockOnHandMilli: number | null;
+  /** P17-1 (D17-3): Shop-counter-warehouse-only, milli-units. Null = not stock-tracked, or no movements at the Shop warehouse yet. This is what a counter sale can actually sell — never the all-warehouse figure above. */
+  readonly counterStockMilli: number | null;
 }
 
 export interface ItemSearchQuery {

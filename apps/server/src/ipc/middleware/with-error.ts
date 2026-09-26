@@ -1,5 +1,10 @@
 import { ZodError } from 'zod';
-import { DiscountExceedsSubtotalError, SessionAlreadyOpenError } from '@shop/core';
+import {
+  DiscountExceedsSubtotalError,
+  NegativeStockBlockedError,
+  NegativeStockConfirmationRequiredError,
+  SessionAlreadyOpenError,
+} from '@shop/core';
 import { DbBusyError } from '@shop/db';
 import { isRestoreInProgress } from './restore-state.js';
 
@@ -30,6 +35,22 @@ export function toIpcError(error: unknown): IpcError {
 
   if (error instanceof DiscountExceedsSubtotalError) {
     return { code: 'DISCOUNT_EXCEEDS_SUBTOTAL', message: error.message };
+  }
+
+  if (error instanceof NegativeStockBlockedError) {
+    return {
+      code: 'NEGATIVE_STOCK_BLOCKED',
+      message: error.message,
+      details: { items: error.items },
+    };
+  }
+
+  if (error instanceof NegativeStockConfirmationRequiredError) {
+    return {
+      code: 'NEGATIVE_STOCK_CONFIRMATION_REQUIRED',
+      message: error.message,
+      details: { items: error.items },
+    };
   }
 
   if (error instanceof ZodError) {

@@ -46,6 +46,46 @@ export async function setReceiptPaperSize(
     .execute();
 }
 
+// P17-1 (docs/phases/PHASE_17.md §2.1, Q17-6). Counter sales only —
+// scope enforced by the caller (sale.repository.ts), not here.
+export type NegativeStockPolicy = 'warn' | 'block';
+
+const NEGATIVE_STOCK_POLICY_KEY = 'negativeStockPolicy';
+const DEFAULT_NEGATIVE_STOCK_POLICY: NegativeStockPolicy = 'warn';
+
+function isNegativeStockPolicy(value: string | null): value is NegativeStockPolicy {
+  return value === 'warn' || value === 'block';
+}
+
+/** Read inside the same transaction as the stock check when called from sale.repository.ts (D17-1) — pass the transaction's own Kysely handle, not a fresh connection. */
+export async function getNegativeStockPolicy(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<NegativeStockPolicy> {
+  const row = await db
+    .selectFrom('setting')
+    .select('value')
+    .where('tenantId', '=', tenantId)
+    .where('key', '=', NEGATIVE_STOCK_POLICY_KEY)
+    .executeTakeFirst();
+
+  const storedValue = row?.value ?? null;
+  return isNegativeStockPolicy(storedValue) ? storedValue : DEFAULT_NEGATIVE_STOCK_POLICY;
+}
+
+export async function setNegativeStockPolicy(
+  db: Kysely<Database>,
+  tenantId: string,
+  value: NegativeStockPolicy,
+): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await db
+    .insertInto('setting')
+    .values({ tenantId, key: NEGATIVE_STOCK_POLICY_KEY, value, updatedAt })
+    .onConflict((oc) => oc.columns(['tenantId', 'key']).doUpdateSet({ value, updatedAt }))
+    .execute();
+}
+
 // P4-1c. Placeholder default only — the owner must change this to the
 // real business name before go-live (logged in PROJECT.md). Nothing
 // in the receipt template ever hardcodes a shop name; it always reads

@@ -110,8 +110,10 @@ export {
   setDiscountPkrPresets,
   getDiscountPctPresets,
   setDiscountPctPresets,
+  getNegativeStockPolicy,
+  setNegativeStockPolicy,
 } from './repositories/setting.repository.js';
-export type { ReceiptPaperSize } from './repositories/setting.repository.js';
+export type { ReceiptPaperSize, NegativeStockPolicy } from './repositories/setting.repository.js';
 export { getShopIdentity, setShopIdentity } from './repositories/shop-identity.repository.js';
 export {
   getCustomerLedger,

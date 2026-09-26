@@ -169,6 +169,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       // field is supplied only to satisfy the shared ItemRecord shape, not
       // a real stock lookup for this method.
       stockOnHandMilli: null,
+      counterStockMilli: null,
     };
   }
 
@@ -210,6 +211,15 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         >`(SELECT SUM(qty_milli) FROM v_stock_on_hand WHERE item_id = item.id AND tenant_id = item.tenant_id)`.as(
           'stockOnHandMilli',
         ),
+        // P17-1 (D17-3): Shop-counter-only, never the all-warehouse sum
+        // above — the only figure a counter sale/the sale-screen badge
+        // may read. Mirrors sale.repository.ts's own readStockOnHandMilli
+        // scoping (the tenant's single is_default=1 "Shop" warehouse).
+        sql<number | null>`(SELECT SUM(qty_milli) FROM v_stock_on_hand
+          WHERE item_id = item.id AND tenant_id = item.tenant_id
+            AND warehouse_id = (
+              SELECT id FROM warehouse WHERE tenant_id = item.tenant_id AND is_default = 1
+            ))`.as('counterStockMilli'),
       ])
       .where('item.tenantId', '=', this.tenantId)
       .where('item.deletedAt', 'is', null);
@@ -234,6 +244,19 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       altUomId: row.altUomId,
       altUomFactorMilli: row.altUomFactorMilli,
       stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
+      // trackStock gate, then: null only means "never moved anywhere"
+      // (matches stockOnHandMilli's own null convention — no badge at
+      // all); an item that has moved but has zero rows at the Shop
+      // warehouse specifically (e.g. everything is in a technician's
+      // custody) reads as a real 0, not null, so it shows "Out of
+      // stock" rather than no badge (docs/phases/PHASE_17.md §2.1
+      // D17-3 custody test).
+      counterStockMilli:
+        row.trackStock === 1
+          ? row.stockOnHandMilli === null
+            ? null
+            : (row.counterStockMilli ?? 0)
+          : null,
     }));
   }
 
@@ -254,6 +277,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       altUomId: string | null;
       altUomFactorMilli: number | null;
       stockOnHandMilli: number | null;
+      counterStockMilli: number | null;
     }>`
       SELECT
         item.id                      AS id,
@@ -266,7 +290,12 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         item.track_stock              AS trackStock,
         item.alt_uom_id               AS altUomId,
         item.alt_uom_factor_milli     AS altUomFactorMilli,
-        (SELECT SUM(qty_milli) FROM v_stock_on_hand WHERE item_id = item.id AND tenant_id = item.tenant_id) AS stockOnHandMilli
+        (SELECT SUM(qty_milli) FROM v_stock_on_hand WHERE item_id = item.id AND tenant_id = item.tenant_id) AS stockOnHandMilli,
+        (SELECT SUM(qty_milli) FROM v_stock_on_hand
+          WHERE item_id = item.id AND tenant_id = item.tenant_id
+            AND warehouse_id = (
+              SELECT id FROM warehouse WHERE tenant_id = item.tenant_id AND is_default = 1
+            )) AS counterStockMilli
       FROM sale_line sl
       JOIN sale ON sale.id = sl.sale_id
       JOIN item ON item.id = sl.item_id
@@ -296,6 +325,19 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       altUomId: row.altUomId,
       altUomFactorMilli: row.altUomFactorMilli,
       stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
+      // trackStock gate, then: null only means "never moved anywhere"
+      // (matches stockOnHandMilli's own null convention — no badge at
+      // all); an item that has moved but has zero rows at the Shop
+      // warehouse specifically (e.g. everything is in a technician's
+      // custody) reads as a real 0, not null, so it shows "Out of
+      // stock" rather than no badge (docs/phases/PHASE_17.md §2.1
+      // D17-3 custody test).
+      counterStockMilli:
+        row.trackStock === 1
+          ? row.stockOnHandMilli === null
+            ? null
+            : (row.counterStockMilli ?? 0)
+          : null,
     }));
   }
 }

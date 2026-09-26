@@ -1,4 +1,13 @@
-import { CheckSquare, DatabaseBackup, Percent, Receipt, Store, Tag, Wrench } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckSquare,
+  DatabaseBackup,
+  Percent,
+  Receipt,
+  Store,
+  Tag,
+  Wrench,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface SettingsNavItem {
@@ -45,6 +54,13 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
         title: 'Discounts',
         hint: 'Presets and eligibility',
         icon: Percent,
+      },
+      {
+        key: 'stock-alerts',
+        path: '/settings/sales/stock-alerts',
+        title: 'Stock & Alerts',
+        hint: 'Negative-stock policy for counter sales',
+        icon: AlertTriangle,
       },
     ],
   },

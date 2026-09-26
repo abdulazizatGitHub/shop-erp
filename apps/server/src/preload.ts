@@ -94,6 +94,7 @@ import type {
   SaleSummaryDto,
   SaleWithLinesInput,
   SaleWithLinesDto,
+  SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
   DiscountConfigDto,
@@ -143,6 +144,7 @@ import type {
 import type {
   BusinessUnitOption,
   BrandOption,
+  NegativeStockPolicy,
   ReceiptPaperSize,
   ServiceChargeOption,
   ItemPriceHistoryRow,
@@ -565,6 +567,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.setDiscountPctPresets, input) as Promise<void>,
     getDiscountConfig: (): Promise<DiscountConfigDto> =>
       ipcRenderer.invoke(channels.setting.getDiscountConfig) as Promise<DiscountConfigDto>,
+    getNegativeStockPolicy: (): Promise<NegativeStockPolicy> =>
+      ipcRenderer.invoke(channels.setting.getNegativeStockPolicy) as Promise<NegativeStockPolicy>,
+    setNegativeStockPolicy: (input: SetNegativeStockPolicyInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setNegativeStockPolicy, input) as Promise<void>,
     getShopIdentity: (): Promise<ShopIdentityDto> =>
       ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
     setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>

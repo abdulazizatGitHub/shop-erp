@@ -41,6 +41,101 @@
 
 ---
 
+## [2026-09-26] Session 87 — Phase 17 planning (Rev 1-5) + P17-1 built
+
+**Goal:** Build the Phase 17 Settings-backlog candidate inventory
+(planning only), amend it against owner feedback across three review
+rounds, get scope approved, then build the first approved task, P17-1
+(`negativeStockPolicy`).
+
+**Done:**
+
+- `docs/phases/PHASE_17.md` — five revisions in one session: Rev 1
+  initial inventory; Rev 2 corrected five stale-`PROJECT.md`-derived
+  claims against live code; Rev 3 applied amendments A17-1–A17-5 and
+  performed mandatory pre-code verification (a)–(e) for the
+  negative-stock design, finding P10-1's hard block is client-only, the
+  stock warning has been dead code since P10-1 (computed, never read),
+  the check was per-line not per-item-summed, and the client's
+  `stockOnHandMilli` wrongly spans all warehouses (would include
+  technician custody); Rev 4 resolved both stops with decisions D17-1
+  (Option C — a pre-insert throw + client acknowledgement flag, not a
+  separate dry-run channel or a commit-then-cancel pattern) and D17-3
+  (a new separate `counterStockMilli` field, `stockOnHandMilli`
+  unchanged for its other real consumers); Rev 5 records P17-1 built and
+  verified. Scope APPROVED: T1 (P17-1–P17-5) + P17-7.
+- **P17-1 built**: `negativeStockPolicy` setting
+  (`setting.repository.ts`/`.handler.ts`, `SetNegativeStockPolicyInput`);
+  core predicate `computeNegativeStockItems` + typed errors
+  `NegativeStockBlockedError`/`NegativeStockConfirmationRequiredError`
+  (`packages/core/src/sale/`); `sale.repository.ts`'s `createSale`
+  rewritten to sum requested quantities per item across cart lines
+  (fixing the per-line bug) and check them against the Shop-warehouse
+  on-hand figure before any insert; new `counterStockMilli` field
+  (Shop-warehouse-only) added to `ItemDto`/`ItemRecord` alongside the
+  unchanged all-warehouse `stockOnHandMilli`; `ItemSearchPanel.tsx`/
+  `ItemProductCard.tsx` switched to `counterStockMilli`; `useSaleFlow.ts`
+  gained the Option C confirmation flow (`submitSale`, a new
+  `negative-stock-gate` step, `handleConfirmNegativeStock`/
+  `handleCancelNegativeStock`); new `StockAlertsSettingsSection.tsx`
+  wired into Settings → Sales → Stock & Alerts.
+- `PROJECT.md`: BUG-29 (over-quantity sales committed silently, FIXED by
+  P17-1) and BUG-30 (credit-limit gate's commit-then-cancel shape, known
+  wart, not fixed this phase) logged.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean on first run.
+- `npm test` — **858/858** (baseline 845 + 13 new: 7 in
+  `sale.repository.test.ts`, 3 in `setting.repository.test.ts`, 2 in
+  `item.repository.test.ts` incl. the custody test, 1 net-new in
+  `ItemSearchPanel.test.tsx` which was otherwise rewritten for the
+  policy reversal).
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both clean.
+- Electron's GUI cannot launch in this sandbox (`ELECTRON_RUN_AS_NODE=1`,
+  same documented limitation as Sessions 48+). Verified instead via a
+  throwaway script (`tmp-verify-p17-1.ts`, deleted after use) run
+  directly against the real dev DB (`data/shop-dev.db`) through the
+  actual repositories — confirmed all four required scenarios with real
+  output: custody item reads `stockOnHandMilli=5000`/`counterStockMilli=0`;
+  warn+not-acknowledged throws `NEGATIVE_STOCK_CONFIRMATION_REQUIRED`
+  with the correct item (`onHandMilli:5000, requestedMilli:8000`) and
+  zero new sale rows (74→74); warn+acknowledged commits with
+  `stockBelowZero:true` and stock at -3000 (5000-8000); block+
+  `acknowledgedNegativeStock:true` is still refused
+  (`NEGATIVE_STOCK_BLOCKED`). Dev DB restored to its exact prior state
+  afterward (sale count back to 74, zero leftover test items/warehouses/
+  setting rows) — confirmed by direct query, not assumed.
+
+**Not done / deferred:** P17-2 through P17-5 and P17-7 (approved scope,
+not yet built); P17-6/P17-8 (T2, documented, not built this phase).
+
+**Bugs found:** BUG-29 (FIXED by this session), BUG-30 (logged, known
+wart, not fixed).
+
+**Decisions taken:** D17-1 (Option C for the negative-stock confirmation
+flow), D17-3 (separate `counterStockMilli` field), D17-4 (expense
+category form field corrections — deferred to P17-4).
+
+**Blocked on:** nothing — P17-1 complete, remaining Phase 17 tasks ready.
+
+**Next session should:** build P17-2 (low-stock badge + threshold +
+Dashboard card, with `trackStock`/deleted-item exclusions), per
+`docs/phases/PHASE_17.md` §6/§8.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (858/858)
+
+---
+
 ## [2026-09-26] Session 86 — Phase 16 CLOSED
 
 **Goal:** Close out Phase 16 after P16-3c's approval and the owner's

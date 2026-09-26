@@ -6,6 +6,12 @@ export const SetReceiptPaperSizeInput = z.object({
 });
 export type SetReceiptPaperSizeInput = z.infer<typeof SetReceiptPaperSizeInput>;
 
+/** P17-1 (docs/phases/PHASE_17.md §2.1, Q17-6). Counter sales only. */
+export const SetNegativeStockPolicyInput = z.object({
+  value: z.enum(['warn', 'block']),
+});
+export type SetNegativeStockPolicyInput = z.infer<typeof SetNegativeStockPolicyInput>;
+
 /** P4-1c. Placeholder default ("Shop ERP") until the owner sets the real name. */
 export const SetShopNameInput = z.object({
   value: z.string().trim().min(1),

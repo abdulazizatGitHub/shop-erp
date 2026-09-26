@@ -4153,6 +4153,56 @@ KPI card's logic was out of scope for a visual-structure phase.
 Status: UNFIXED — waiting for a bug-fix phase, or a decision that exact
 zero-only counting is intentional for the KPI card.
 
+### BUG-29: Over-quantity counter sales committed silently with no warning — MEDIUM, FIXED by P17-1
+
+Found in: Phase 17 planning, D17-2, 2026-09-26 — surfaced during
+pre-code verification (A17-1, question (b)) for the negative-stock
+policy setting, not by manual testing.
+Description: `sale.repository.ts` has always computed `warnings.stockBelowZero`
+for a counter sale that oversells an item's on-hand stock. Since Phase
+10's P10-1 (which added the add-to-cart hard block for an already-≤0
+item), the client (`useSaleFlow.ts`) stopped reading this flag at all —
+its own comment says the case is "caught pre-emptively at add-to-cart
+time," which is only true for the already-at-zero case, not for a cart
+whose lines sum past what's on hand starting from a positive balance.
+Impact: A counter sale that takes stock negative mid-transaction
+committed with zero warning to the salesman or the owner, silently,
+since Phase 10 shipped. No data corruption (the sale and stock rows are
+correct), but a real gap in the intended warn-before-oversell behavior.
+Fix: Phase 17's P17-1 replaces this with a single summed-per-item
+predicate (fixing a second bug found alongside this one — the check was
+also per-line, not per-item-summed) and a real pre-insert confirmation
+flow (`NegativeStockConfirmationRequiredError`, Option C — see
+`docs/phases/PHASE_17.md` §2.1).
+Status: FIXED by Phase 17 P17-1, this session.
+
+### BUG-30: Credit-limit warning-gate commits the sale before the owner decides — LOW, known wart, not fixed
+
+Found in: Phase 17, D17-1, 2026-09-26 — noted while choosing the
+negative-stock confirmation design (Option C) and comparing it against
+the credit-limit gate's existing, different shape.
+Description: `useSaleFlow.ts`'s credit-limit warning gate
+(`step === 'warning-gate'`) calls `ipc.sale.create` first — the sale
+fully commits (sale/sale_line/stock_movement/party_ledger all inserted,
+a real invoice number consumed) — and only then shows a "Continue or
+cancel?" dialog. Declining calls `sale:cancel`, which reverses the sale
+via new rows rather than deleting it (correct per DATABASE_RULES.md),
+but still leaves a consumed invoice number and a reversal row pair for
+every declined warning. Phase 17's P17-1 negative-stock gate
+deliberately uses a different, better shape (Option C — validates and
+throws before any insert, nothing to reverse when declined) specifically
+to avoid this for the negative-stock case; see `docs/phases/PHASE_17.md`
+§2.1 D17-1 for the full reasoning, including why Option B (this same
+shape) was rejected for negative stock.
+Impact: Every declined credit-limit warning leaves a permanently unused
+invoice number and a reversal audit trail, purely cosmetic/bookkeeping
+noise — no wrong money or stock.
+Fix: A future phase could move the credit-limit gate to the same
+pre-insert-throw shape P17-1 now uses for negative stock. Not fixed this
+phase — CLAUDE.md §8, don't fix a bug outside the task at hand; the
+credit-limit gate itself was untouched by P17-1.
+Status: UNFIXED — known wart, candidate for a future bug-fix phase.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]

@@ -2,9 +2,11 @@ import { sql, type Kysely } from 'kysely';
 import { formatDisplayDocNumber, Money, newId } from '@shop/shared';
 import {
   computeLineTotalPaisa,
+  computeNegativeStockItems,
   DiscountExceedsSubtotalError,
   isCreditLimitExceeded,
-  isStockBelowZero,
+  NegativeStockBlockedError,
+  NegativeStockConfirmationRequiredError,
   resolvePricePaisa,
   type NewSaleInput,
   type NewSaleResult,
@@ -16,6 +18,7 @@ import {
 } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
+import { getNegativeStockPolicy } from './setting.repository.js';
 
 const SALE_CODE_DOC_TYPE = 'sale';
 const SALE_CODE_PREFIX = 'INV';
@@ -170,12 +173,24 @@ export class KyselySaleRepository implements SaleRepositoryPort {
         }
         const computedLines: ComputedLine[] = [];
         let unitCostMissing = false;
-        let stockBelowZero = false;
+
+        // P17-1 (docs/phases/PHASE_17.md §2.1 D17-1/D17-3): one core
+        // predicate, per item, quantities SUMMED across every cart line
+        // for that item (in base stock milli-units, ADR-0013), read
+        // against the Shop-counter warehouse only. Keyed by itemId so a
+        // repeated item across lines accumulates instead of each line
+        // independently reading the same pre-decrement on-hand figure
+        // (the exact bug verification (c) found). trackStock=false items
+        // are never added to this map — exempt from both policies.
+        const negativeStockCandidates = new Map<
+          string,
+          { name: string; onHandMilli: number; requestedMilli: number }
+        >();
 
         for (const [index, line] of input.lines.entries()) {
           const item = await trx
             .selectFrom('item')
-            .select(['nameEn', 'businessUnitId', 'avgCost'])
+            .select(['nameEn', 'businessUnitId', 'avgCost', 'trackStock'])
             .where('id', '=', line.itemId)
             .where('tenantId', '=', this.tenantId)
             .executeTakeFirst();
@@ -216,8 +231,19 @@ export class KyselySaleRepository implements SaleRepositoryPort {
               ? Math.round((line.quantityMilli * line.saleToStockFactor) / 1000)
               : line.quantityMilli;
 
-          const currentQtyMilli = await this.readStockOnHandMilli(trx, line.itemId, warehouseId);
-          if (isStockBelowZero(currentQtyMilli, stockQuantityMilli)) stockBelowZero = true;
+          if (item.trackStock === 1) {
+            const existing = negativeStockCandidates.get(line.itemId);
+            if (existing) {
+              existing.requestedMilli += stockQuantityMilli;
+            } else {
+              const onHandMilli = await this.readStockOnHandMilli(trx, line.itemId, warehouseId);
+              negativeStockCandidates.set(line.itemId, {
+                name: item.nameEn,
+                onHandMilli,
+                requestedMilli: stockQuantityMilli,
+              });
+            }
+          }
 
           computedLines.push({
             lineNo: index + 1,
@@ -232,6 +258,25 @@ export class KyselySaleRepository implements SaleRepositoryPort {
             saleUomId: line.saleUomId ?? null,
             saleToStockFactor: line.saleToStockFactor ?? null,
           });
+        }
+
+        // P17-1 (D17-1, Option C): the unified predicate, before any
+        // insert in this transaction. The setting is read inside the
+        // same transaction as the check, via `trx` — never a separate
+        // connection.
+        const negativeStockItems = computeNegativeStockItems(
+          [...negativeStockCandidates.entries()].map(([itemId, v]) => ({ itemId, ...v })),
+        );
+        const stockBelowZero = negativeStockItems.length > 0;
+        if (stockBelowZero) {
+          const policy = await getNegativeStockPolicy(trx, this.tenantId);
+          if (policy === 'block') {
+            // acknowledgedNegativeStock can never bypass a block.
+            throw new NegativeStockBlockedError(negativeStockItems);
+          }
+          if (!input.acknowledgedNegativeStock) {
+            throw new NegativeStockConfirmationRequiredError(negativeStockItems);
+          }
         }
 
         const subtotalPaisa = Money.sum(computedLines.map((l) => Money.of(l.lineTotalPaisa)));

@@ -164,6 +164,8 @@ export const channels = {
     getDiscountConfig: 'setting:getDiscountConfig',
     getShopIdentity: 'setting:getShopIdentity',
     setShopIdentity: 'setting:setShopIdentity',
+    getNegativeStockPolicy: 'setting:getNegativeStockPolicy',
+    setNegativeStockPolicy: 'setting:setNegativeStockPolicy',
   },
   print: {
     reprintReceipt: 'print:reprintReceipt',

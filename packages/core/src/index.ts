@@ -193,8 +193,9 @@ export {
   computeLineTotalPaisa,
   isCreditLimitExceeded,
   isStockBelowZero,
+  computeNegativeStockItems,
 } from './sale/sale.js';
-export type { PriceLevelInfo, ItemPriceInfo } from './sale/sale.js';
+export type { PriceLevelInfo, ItemPriceInfo, NegativeStockCandidate } from './sale/sale.js';
 export type {
   SalePaymentMode,
   SaleRepositoryPort,
@@ -206,8 +207,13 @@ export type {
   SaleRecord,
   SaleSearchQuery,
   SaleSummaryRecord,
+  NegativeStockItem,
 } from './sale/sale.repository.port.js';
-export { DiscountExceedsSubtotalError } from './sale/sale.repository.port.js';
+export {
+  DiscountExceedsSubtotalError,
+  NegativeStockBlockedError,
+  NegativeStockConfirmationRequiredError,
+} from './sale/sale.repository.port.js';
 
 export type {
   PaymentMethod,

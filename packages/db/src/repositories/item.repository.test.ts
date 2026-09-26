@@ -251,6 +251,7 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
       altUomId: null,
       altUomFactorMilli: null,
       stockOnHandMilli: null,
+      counterStockMilli: null,
     });
   });
 
@@ -395,6 +396,10 @@ describe('KyselyItemRepository.searchItems — stockOnHandMilli (E-1)', () => {
     const results = await repo.searchItems({ query: 'Tracked Compressor', categoryId: null });
     expect(results).toHaveLength(1);
     expect(results[0]?.stockOnHandMilli).toBe(5000);
+    // Both movements are in the default (Shop) warehouse here, so
+    // counterStockMilli agrees with stockOnHandMilli — divergence is
+    // covered by the custody test below.
+    expect(results[0]?.counterStockMilli).toBe(5000);
   });
 
   it('returns null, not 0, for an item with zero stock_movement rows', async () => {
@@ -411,6 +416,7 @@ describe('KyselyItemRepository.searchItems — stockOnHandMilli (E-1)', () => {
     const results = await repo.searchItems({ query: 'Never Moved Item', categoryId: null });
     expect(results).toHaveLength(1);
     expect(results[0]?.stockOnHandMilli).toBeNull();
+    expect(results[0]?.counterStockMilli).toBeNull();
   });
 
   it('returns null for a non-stock-tracked item even if movements exist', async () => {
@@ -430,6 +436,39 @@ describe('KyselyItemRepository.searchItems — stockOnHandMilli (E-1)', () => {
     const results = await repo.searchItems({ query: 'Service Line Item', categoryId: null });
     expect(results).toHaveLength(1);
     expect(results[0]?.stockOnHandMilli).toBeNull();
+    expect(results[0]?.counterStockMilli).toBeNull();
+  });
+
+  // P17-1 (docs/phases/PHASE_17.md §2.1 D17-3, §8 P17-1 custody test).
+  it('counterStockMilli is Shop-warehouse-only; stockOnHandMilli stays all-warehouse (custody test)', async () => {
+    const item = await repo.createItem({
+      itemCode: null,
+      nameEn: 'Custody Split Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId,
+      trackStock: true,
+      retailPricePaisa: 100,
+    });
+    const technicianWarehouseId = newId();
+    rawDb
+      .prepare(`INSERT INTO warehouse (id, tenant_id, name, is_default) VALUES (?, ?, ?, 0)`)
+      .run(technicianWarehouseId, TENANT_ID, 'Technician — Test');
+
+    // 0 in the Shop warehouse, 5 (5000 milli) in the technician's — the
+    // exact scenario the sale predicate and the cart badge must treat as
+    // 0 at the counter, per D17-1's rule and D17-3's decision to keep
+    // stockOnHandMilli all-warehouse (it still owns 5000 milli of stock).
+    insertStockMovement(item.id, 5000, technicianWarehouseId);
+
+    const results = await repo.searchItems({ query: 'Custody Split Item', categoryId: null });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.stockOnHandMilli).toBe(5000);
+    // Real 0, not null — the item HAS moved (elsewhere), so this is a
+    // genuine empty counter, not a never-tracked item. Only an item with
+    // zero stock_movement rows anywhere (see the "never moved" test
+    // above) gets null.
+    expect(results[0]?.counterStockMilli).toBe(0);
   });
 });
 

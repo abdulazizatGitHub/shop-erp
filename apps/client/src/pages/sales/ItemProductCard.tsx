@@ -54,7 +54,10 @@ export function ItemProductCard({
   selected,
 }: ItemProductCardProps): React.JSX.Element {
   const pill = resolveBusinessUnitPill(item.businessUnitId, lookups);
-  const badge = resolveStockBadge(item.stockOnHandMilli, item.trackStock);
+  // P17-1 (D17-3): counterStockMilli, never the all-warehouse
+  // stockOnHandMilli — this badge must reflect what the counter can
+  // actually sell, not the unit's total owned stock.
+  const badge = resolveStockBadge(item.counterStockMilli, item.trackStock);
   const isRepair = pill?.letter === 'R';
 
   return (

@@ -13,7 +13,7 @@ import type { PaymentMode } from './useSaleFlow.js';
  */
 export function useSaleKeyboardShortcuts(params: {
   readonly cart: readonly CartLine[];
-  readonly step: 'search-item' | 'warning-gate';
+  readonly step: 'search-item' | 'warning-gate' | 'negative-stock-gate';
   readonly confirmedSale: ConfirmedSale | null;
   readonly setConfirmedSale: (sale: ConfirmedSale | null) => void;
   readonly handleCheckout: () => Promise<void>;
@@ -60,7 +60,7 @@ export function useSaleKeyboardShortcuts(params: {
       if (
         event.key === 'F10' &&
         cart.length > 0 &&
-        step !== 'warning-gate' &&
+        step === 'search-item' &&
         confirmedSale === null
       ) {
         event.preventDefault();

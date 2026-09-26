@@ -32,8 +32,22 @@ export const CreateSaleInput = z.object({
   // Sale-level discount off the bill total (not per-line). Deducted from
   // subtotal before it becomes total_amount — see packages/core/src/sale/sale.ts.
   discountPaisa: z.number().int().min(0).default(0),
+  // P17-1 (Option C, docs/phases/PHASE_17.md §2.1 D17-1). Only meaningful
+  // when negativeStockPolicy is 'warn' — the client sets this true only
+  // on a resubmit after the owner confirms the NEGATIVE_STOCK_CONFIRMATION_
+  // REQUIRED dialog. Under 'block' this can never bypass the block.
+  acknowledgedNegativeStock: z.boolean().default(false),
 });
 export type CreateSaleInput = z.infer<typeof CreateSaleInput>;
+
+/** P17-1. One item that would take the Shop counter's stock below zero — carried in a NegativeStockBlockedError/NegativeStockConfirmationRequiredError's `details.items`. */
+export const NegativeStockItemDto = z.object({
+  itemId: z.string(),
+  name: z.string(),
+  onHandMilli: z.number().int(),
+  requestedMilli: z.number().int(),
+});
+export type NegativeStockItemDto = z.infer<typeof NegativeStockItemDto>;
 
 export const SaleWarnings = z.object({
   creditLimitExceeded: z.boolean(),

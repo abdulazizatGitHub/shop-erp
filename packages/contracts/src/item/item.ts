@@ -86,7 +86,16 @@ export const ItemDto = z.object({
   // E-1: total stock on hand across all warehouses, milli-units. Null when
   // the item is not stock-tracked, or has never had a stock_movement row —
   // never 0 for "no movements yet" (see item.repository.ts's searchItems).
+  // Kept all-warehouse deliberately (docs/phases/PHASE_17.md §2.1 D17-3) —
+  // stock valuation and the Items list both need total owned stock,
+  // custody included. Never use this for counter-sellability.
   stockOnHandMilli: z.number().int().nullable(),
+  // P17-1 (D17-3): Shop-counter-warehouse-only, milli-units. Null = not
+  // stock-tracked, or no movements at the Shop warehouse yet. This is
+  // what a counter sale can actually sell — the sale predicate, the POS
+  // cart badge, and ItemSearchPanel's add-to-cart guard all read this,
+  // never stockOnHandMilli above.
+  counterStockMilli: z.number().int().nullable(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
 

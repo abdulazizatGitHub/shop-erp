@@ -38,6 +38,13 @@ export interface NewSaleInput {
    * predate this field don't need updating.
    */
   readonly discountPaisa?: number;
+  /**
+   * P17-1 (Option C, docs/phases/PHASE_17.md §2.1 D17-1). Absent/false
+   * means "not yet acknowledged" — matches discountPaisa's absent-means-
+   * default precedent above. Only meaningful when negativeStockPolicy is
+   * 'warn'; under 'block' this flag can never bypass the block.
+   */
+  readonly acknowledgedNegativeStock?: boolean;
 }
 
 /**
@@ -61,6 +68,53 @@ export interface SaleWarnings {
   readonly creditLimitExceeded: boolean;
   readonly stockBelowZero: boolean;
   readonly unitCostMissing: boolean;
+}
+
+/**
+ * P17-1 (docs/phases/PHASE_17.md §2.1). One item that would take the
+ * Shop counter's stock below zero, quantities already summed across
+ * every cart line for that item, in base stock milli-units.
+ */
+export interface NegativeStockItem {
+  readonly itemId: string;
+  readonly name: string;
+  readonly onHandMilli: number;
+  readonly requestedMilli: number;
+}
+
+/**
+ * Thrown pre-insert, inside the sale transaction, when
+ * negativeStockPolicy is 'block' and at least one item would go
+ * negative. acknowledgedNegativeStock can never bypass this — see
+ * D17-1 Option C.
+ */
+export class NegativeStockBlockedError extends Error {
+  readonly code = 'NEGATIVE_STOCK_BLOCKED';
+  readonly items: readonly NegativeStockItem[];
+
+  constructor(items: readonly NegativeStockItem[]) {
+    super(`Sale blocked — insufficient stock for ${String(items.length)} item(s)`);
+    this.name = 'NegativeStockBlockedError';
+    this.items = items;
+  }
+}
+
+/**
+ * Thrown pre-insert, inside the sale transaction, when
+ * negativeStockPolicy is 'warn' and the sale has not yet been
+ * resubmitted with acknowledgedNegativeStock: true. Nothing is
+ * inserted — the client catches this, shows one confirmation dialog
+ * listing `items`, and resubmits the identical input with the flag set.
+ */
+export class NegativeStockConfirmationRequiredError extends Error {
+  readonly code = 'NEGATIVE_STOCK_CONFIRMATION_REQUIRED';
+  readonly items: readonly NegativeStockItem[];
+
+  constructor(items: readonly NegativeStockItem[]) {
+    super(`Sale requires confirmation — ${String(items.length)} item(s) will go negative`);
+    this.name = 'NegativeStockConfirmationRequiredError';
+    this.items = items;
+  }
 }
 
 export interface NewSaleResult {

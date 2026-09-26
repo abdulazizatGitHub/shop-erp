@@ -288,7 +288,7 @@ describe('KyselySaleRepository.createSale', () => {
     expect(ledgerRows[0]?.['amount']).toBe(1500000);
   });
 
-  it('test 4 — negative stock: warning fires, sale still commits', async () => {
+  it('test 4 — negative stock, warn + acknowledged: warning fires, sale still commits (P17-1)', async () => {
     const businessUnit = rawDb
       .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
       .get(TENANT_ID) as { id: string };
@@ -306,6 +306,9 @@ describe('KyselySaleRepository.createSale', () => {
     });
     insertOpeningStock(scarce.id, 5000); // 5 pieces
 
+    // Default policy is 'warn' (no setting row seeded) — must be
+    // explicitly acknowledged, or this throws (see the dedicated
+    // "not acknowledged" test below).
     const result = await saleRepo.createSale({
       customerId: null,
       warehouseId: null,
@@ -314,6 +317,7 @@ describe('KyselySaleRepository.createSale', () => {
       paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 8,
       notes: null,
       lines: [{ itemId: scarce.id, quantityMilli: 8000, unitPricePaisa: null }],
+      acknowledgedNegativeStock: true,
     });
 
     // 5000 - 8000 = -3000 milli
@@ -323,6 +327,255 @@ describe('KyselySaleRepository.createSale', () => {
     expect(movements).toHaveLength(1);
     expect(movements[0]?.['quantity']).toBe(-8000);
     expect(stockOnHand(scarce.id)).toBe(-3000);
+  });
+
+  describe('P17-1 — negativeStockPolicy (docs/phases/PHASE_17.md §2.1/§8)', () => {
+    async function createScarceItem(openingQuantityMilli: number): Promise<string> {
+      const businessUnit = rawDb
+        .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
+        .get(TENANT_ID) as { id: string };
+      const pieceUom = rawDb
+        .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Piece'`)
+        .get(TENANT_ID) as { id: string };
+      const scarce = await itemRepo.createItem({
+        itemCode: null,
+        nameEn: 'Scarce Item',
+        nameUr: null,
+        businessUnitId: businessUnit.id,
+        stockUomId: pieceUom.id,
+        trackStock: true,
+        retailPricePaisa: RETAIL_UNIT_PRICE_PAISA,
+      });
+      insertOpeningStock(scarce.id, openingQuantityMilli);
+      return scarce.id;
+    }
+
+    function setPolicy(policy: 'warn' | 'block'): void {
+      rawDb
+        .prepare(
+          `INSERT INTO setting (tenant_id, key, value, updated_at) VALUES (?, 'negativeStockPolicy', ?, ?)`,
+        )
+        .run(TENANT_ID, policy, new Date().toISOString());
+    }
+
+    it("default policy is 'warn' when no setting row exists — a fresh DB query confirms no row, not just the getter's default", () => {
+      const row = rawDb
+        .prepare(`SELECT value FROM setting WHERE tenant_id = ? AND key = 'negativeStockPolicy'`)
+        .get(TENANT_ID);
+      expect(row).toBeUndefined();
+    });
+
+    it('warn + NOT acknowledged: throws NegativeStockConfirmationRequiredError, zero rows inserted, items lists correct onHand/requested', async () => {
+      const scarceId = await createScarceItem(5000); // 5 pieces
+
+      let caught: unknown;
+      try {
+        await saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 8,
+          notes: null,
+          lines: [{ itemId: scarceId, quantityMilli: 8000, unitPricePaisa: null }],
+          // acknowledgedNegativeStock omitted — defaults false
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as { code?: string }).code).toBe('NEGATIVE_STOCK_CONFIRMATION_REQUIRED');
+      const items = (
+        caught as {
+          items?: readonly { itemId: string; onHandMilli: number; requestedMilli: number }[];
+        }
+      ).items;
+      expect(items).toHaveLength(1);
+      expect(items?.[0]?.itemId).toBe(scarceId);
+      expect(items?.[0]?.onHandMilli).toBe(5000);
+      expect(items?.[0]?.requestedMilli).toBe(8000);
+
+      // Nothing inserted — thrown before any write in this transaction.
+      const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+      expect(saleCount.n).toBe(0);
+      expect(stockOnHand(scarceId)).toBe(5000); // unchanged
+    });
+
+    it('block + acknowledgedNegativeStock=true: STILL refused — the flag can never bypass a block', async () => {
+      setPolicy('block');
+      const scarceId = await createScarceItem(5000);
+
+      await expect(
+        saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 8,
+          notes: null,
+          lines: [{ itemId: scarceId, quantityMilli: 8000, unitPricePaisa: null }],
+          acknowledgedNegativeStock: true,
+        }),
+      ).rejects.toMatchObject({ code: 'NEGATIVE_STOCK_BLOCKED' });
+
+      const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+      expect(saleCount.n).toBe(0);
+      expect(stockOnHand(scarceId)).toBe(5000);
+    });
+
+    it('a direct call with no acknowledgedNegativeStock flag at all, under warn, is refused — never a silent oversell (closes BUG-29/D17-2)', async () => {
+      const scarceId = await createScarceItem(5000);
+
+      await expect(
+        saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 8,
+          notes: null,
+          lines: [{ itemId: scarceId, quantityMilli: 8000, unitPricePaisa: null }],
+        }),
+      ).rejects.toMatchObject({ code: 'NEGATIVE_STOCK_CONFIRMATION_REQUIRED' });
+
+      const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+      expect(saleCount.n).toBe(0);
+    });
+
+    it('two cart lines of the SAME item, each individually within stock, summed over stock: refused under block (fixes the per-line bug)', async () => {
+      setPolicy('block');
+      // 3 pieces on hand; two lines of 2 each = 4 requested. Neither line
+      // alone (2 <= 3) would trip the old per-line check.
+      const scarceId = await createScarceItem(3000);
+
+      await expect(
+        saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 4,
+          notes: null,
+          lines: [
+            { itemId: scarceId, quantityMilli: 2000, unitPricePaisa: null },
+            { itemId: scarceId, quantityMilli: 2000, unitPricePaisa: null },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: 'NEGATIVE_STOCK_BLOCKED' });
+
+      expect(stockOnHand(scarceId)).toBe(3000); // unchanged
+    });
+
+    it('resulting stock of exactly 0 is ALLOWED under block', async () => {
+      setPolicy('block');
+      const exactId = await createScarceItem(5000); // 5 pieces
+
+      const result = await saleRepo.createSale({
+        customerId: null,
+        warehouseId: null,
+        saleDate: '2026-08-26',
+        paymentMode: 'cash',
+        paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 5,
+        notes: null,
+        lines: [{ itemId: exactId, quantityMilli: 5000, unitPricePaisa: null }],
+      });
+
+      expect(result.warnings.stockBelowZero).toBe(false);
+      expect(stockOnHand(exactId)).toBe(0);
+    });
+
+    it('a trackStock=false item is never warned or blocked, in either mode', async () => {
+      setPolicy('block');
+      const businessUnit = rawDb
+        .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
+        .get(TENANT_ID) as { id: string };
+      const pieceUom = rawDb
+        .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Piece'`)
+        .get(TENANT_ID) as { id: string };
+      const service = await itemRepo.createItem({
+        itemCode: null,
+        nameEn: 'Non-tracked Service Line',
+        nameUr: null,
+        businessUnitId: businessUnit.id,
+        stockUomId: pieceUom.id,
+        trackStock: false,
+        retailPricePaisa: RETAIL_UNIT_PRICE_PAISA,
+      });
+      // No opening stock at all — a trackStock=false item with zero
+      // on-hand must still never trip either policy.
+
+      const result = await saleRepo.createSale({
+        customerId: null,
+        warehouseId: null,
+        saleDate: '2026-08-26',
+        paymentMode: 'cash',
+        paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA * 3,
+        notes: null,
+        lines: [{ itemId: service.id, quantityMilli: 3000, unitPricePaisa: null }],
+      });
+
+      expect(result.warnings.stockBelowZero).toBe(false);
+    });
+
+    it('a multi-unit line (ADR-0013) is compared in base stock milli-units, not the sale-entered unit', async () => {
+      // Item sells in Cylinder (alt unit) but stock is tracked in Kg
+      // (stock_uom) — a 1-cylinder sale converts to a large kg amount,
+      // which is what must be compared against on-hand kg, not "1".
+      const businessUnit = rawDb
+        .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
+        .get(TENANT_ID) as { id: string };
+      const kgUom = rawDb
+        .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Kg'`)
+        .get(TENANT_ID) as { id: string };
+      const cylinderUom = rawDb
+        .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Cylinder'`)
+        .get(TENANT_ID) as { id: string };
+      const gasItem = await itemRepo.createItem({
+        itemCode: null,
+        nameEn: 'Refrigerant Gas',
+        nameUr: null,
+        businessUnitId: businessUnit.id,
+        stockUomId: kgUom.id,
+        trackStock: true,
+        retailPricePaisa: RETAIL_UNIT_PRICE_PAISA,
+        altUomId: cylinderUom.id,
+        altUomFactorMilli: 13600, // 1 cylinder = 13.6 kg, same fixture as Phase 2/9
+      });
+      insertOpeningStock(gasItem.id, 10000); // 10 kg on hand
+
+      let caught: unknown;
+      try {
+        await saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA,
+          notes: null,
+          lines: [
+            {
+              itemId: gasItem.id,
+              quantityMilli: 1000, // 1 cylinder, in sale_uom
+              unitPricePaisa: null,
+              saleUomId: cylinderUom.id,
+              saleToStockFactor: 13600,
+            },
+          ],
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      // 1 cylinder x 13,600 / 1000 = 13,600 milli-kg requested — well
+      // past the 10,000 milli-kg on hand, even though "1" (the raw sale
+      // quantity) is far below "10". Proves the comparison used the
+      // converted stock_uom amount, not the raw sale-unit quantity.
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as { code?: string }).code).toBe('NEGATIVE_STOCK_CONFIRMATION_REQUIRED');
+      const items = (caught as { items?: readonly { requestedMilli: number }[] }).items;
+      expect(items?.[0]?.requestedMilli).toBe(13600);
+    });
   });
 
   it('test 6 — business_unit_id on sale_line matches item.business_unit_id', async () => {

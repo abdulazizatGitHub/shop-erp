@@ -131,6 +131,7 @@ export function SalePage(): React.JSX.Element {
                   if (flow.cart.length > 0) setCheckoutModalOpen(true);
                 }}
                 onError={flow.setError}
+                negativeStockPolicy={flow.negativeStockPolicy}
               />
             </div>
 
@@ -238,6 +239,29 @@ export function SalePage(): React.JSX.Element {
         }}
       >
         {flow.warningMessages.join(' ')} Continue anyway or cancel the sale?
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={flow.step === 'negative-stock-gate'}
+        title="Stock will go negative"
+        confirmVariant="warning"
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          void flow.handleConfirmNegativeStock();
+        }}
+        onCancel={flow.handleCancelNegativeStock}
+      >
+        <p className="mb-2">These items will go below zero stock at the counter:</p>
+        <ul className="list-disc pl-5">
+          {flow.negativeStockItems.map((item) => (
+            <li key={item.itemId}>
+              {item.name} — on hand {String(Math.floor(item.onHandMilli / 1000))}, requested{' '}
+              {String(Math.floor(item.requestedMilli / 1000))}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2">Continue anyway or cancel?</p>
       </ConfirmDialog>
 
       <HelpShortcutsModal

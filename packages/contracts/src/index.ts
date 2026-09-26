@@ -76,6 +76,7 @@ export {
   SaleWithLinesInput,
   SaleWithLinesDto,
   SaleWithLinesLineDto,
+  NegativeStockItemDto,
 } from './sale/sale.js';
 
 export {
@@ -195,6 +196,7 @@ export {
 
 export {
   SetReceiptPaperSizeInput,
+  SetNegativeStockPolicyInput,
   SetShopNameInput,
   SetDiscountApplyWalkinInput,
   SetDiscountApplyWholesaleInput,

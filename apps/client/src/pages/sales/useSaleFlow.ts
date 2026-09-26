@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CreateSaleInput, CustomerDto, ItemLookups, SaleResult } from '@shop/contracts';
+import type {
+  CreateSaleInput,
+  CustomerDto,
+  ItemLookups,
+  NegativeStockItemDto,
+  SaleResult,
+} from '@shop/contracts';
 import { Money } from '@shop/shared';
 import { ipc } from '../../lib/ipc.js';
 import type { CartLine } from './CartTable.js';
@@ -13,8 +19,20 @@ import { usePricePreview } from './usePricePreview.js';
 import { useReceiptPrinting } from './useReceiptPrinting.js';
 import { useSaleKeyboardShortcuts } from './useSaleKeyboardShortcuts.js';
 
-type Step = 'search-item' | 'warning-gate';
+type Step = 'search-item' | 'warning-gate' | 'negative-stock-gate';
 export type PaymentMode = 'cash' | 'credit';
+/** P17-1 (Q17-6). Defaults to 'warn' (matches the server-side default) until the real setting loads. */
+export type NegativeStockPolicy = 'warn' | 'block';
+
+function errorCode(err: unknown): string | undefined {
+  return (err as { code?: string } | undefined)?.code;
+}
+
+function errorItems(err: unknown): readonly NegativeStockItemDto[] {
+  const details = (err as { details?: { items?: readonly NegativeStockItemDto[] } } | undefined)
+    ?.details;
+  return details?.items ?? [];
+}
 
 /**
  * The sale screen's own state machine — customer, payment, checkout/
@@ -67,6 +85,9 @@ export interface SaleFlow {
   readonly lastSale: LastSaleSummary | null;
   readonly warningTitle: string;
   readonly warningMessages: readonly string[];
+  /** P17-1 (Q17-6). Counter sales only. */
+  readonly negativeStockPolicy: NegativeStockPolicy;
+  readonly negativeStockItems: readonly NegativeStockItemDto[];
   readonly paymentModeRef: React.RefObject<HTMLDivElement>;
   readonly amountPaidRef: React.RefObject<HTMLInputElement>;
   readonly handleCheckout: () => Promise<void>;
@@ -74,6 +95,10 @@ export interface SaleFlow {
   readonly handlePrintInvoice: () => Promise<void>;
   readonly finishSuccess: (result: SaleResult) => void;
   readonly handleCancelAfterWarning: (saleId: string) => Promise<void>;
+  /** Resubmits the pending sale with acknowledgedNegativeStock: true (Option C, D17-1). */
+  readonly handleConfirmNegativeStock: () => Promise<void>;
+  /** Nothing was ever committed — just closes the dialog, cart stays intact. */
+  readonly handleCancelNegativeStock: () => void;
 }
 
 /** onRequestCheckout: when supplied, F10 opens the checkout modal instead of submitting directly — threaded through unchanged to useSaleKeyboardShortcuts. */
@@ -92,6 +117,22 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [negativeStockPolicy, setNegativeStockPolicyState] = useState<NegativeStockPolicy>('warn');
+  const [negativeStockItems, setNegativeStockItems] = useState<readonly NegativeStockItemDto[]>([]);
+  const [pendingNegativeStockInput, setPendingNegativeStockInput] =
+    useState<CreateSaleInput | null>(null);
+
+  // P17-1 (Q17-6): fetched once on mount, defaults to 'warn' (the same
+  // server-side default) until it loads or if the fetch fails — matches
+  // the "never over-block before the real value arrives" rule.
+  useEffect(() => {
+    ipc.setting
+      .getNegativeStockPolicy()
+      .then(setNegativeStockPolicyState)
+      .catch(() => {
+        // stays 'warn' — safe default, not fatal.
+      });
+  }, []);
   const { reprinting, invoicePrinting, handleReprint, handlePrintInvoice } = useReceiptPrinting(
     confirmedSale,
     setPrintError,
@@ -176,6 +217,39 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
     setStep('search-item');
   }
 
+  // P17-1 (Option C, D17-1): shared by the initial checkout and the
+  // negative-stock confirm-resubmit — both call sale:create with an
+  // identical input, differing only in acknowledgedNegativeStock.
+  async function submitSale(input: CreateSaleInput): Promise<void> {
+    try {
+      const result = await ipc.sale.create(input);
+      setLastResult(result);
+      setPrintError(result.printError);
+      // Only the credit-limit warning still opens this gate — negative
+      // stock is now handled pre-insert by submitSale's own catch below.
+      if (result.warnings.creditLimitExceeded) {
+        setStep('warning-gate');
+      } else {
+        finishSuccess(result);
+      }
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'NEGATIVE_STOCK_CONFIRMATION_REQUIRED') {
+        // Nothing was inserted (thrown pre-insert, inside the
+        // transaction) — the cart stays exactly as it is.
+        setNegativeStockItems(errorItems(err));
+        setPendingNegativeStockInput(input);
+        setStep('negative-stock-gate');
+        return;
+      }
+      if (code === 'NEGATIVE_STOCK_BLOCKED') {
+        setError(err instanceof Error ? err.message : 'Sale blocked — insufficient stock');
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Sale failed');
+    }
+  }
+
   async function handleCheckout(): Promise<void> {
     setError(null);
     let paidAmountPaisa: number;
@@ -203,22 +277,29 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
         saleToStockFactor: line.saleToStockFactor,
       })),
       discountPaisa,
+      acknowledgedNegativeStock: false,
     };
-    try {
-      const result = await ipc.sale.create(input);
-      setLastResult(result);
-      setPrintError(result.printError);
-      // P10-1: stock going below zero is now caught pre-emptively at
-      // add-to-cart time (ItemSearchPanel's hard block) — it no longer
-      // opens this warning-gate. Only the credit-limit warning still does.
-      if (result.warnings.creditLimitExceeded) {
-        setStep('warning-gate');
-      } else {
-        finishSuccess(result);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sale failed');
-    }
+    await submitSale(input);
+  }
+
+  async function handleConfirmNegativeStock(): Promise<void> {
+    if (!pendingNegativeStockInput) return;
+    const input: CreateSaleInput = {
+      ...pendingNegativeStockInput,
+      acknowledgedNegativeStock: true,
+    };
+    setPendingNegativeStockInput(null);
+    setNegativeStockItems([]);
+    setStep('search-item');
+    await submitSale(input);
+  }
+
+  function handleCancelNegativeStock(): void {
+    // Nothing was ever committed — no cancel IPC call needed, unlike
+    // handleCancelAfterWarning's credit-limit path.
+    setPendingNegativeStockInput(null);
+    setNegativeStockItems([]);
+    setStep('search-item');
   }
 
   async function handleCancelAfterWarning(saleId: string): Promise<void> {
@@ -289,6 +370,8 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
     lastSale,
     warningTitle,
     warningMessages,
+    negativeStockPolicy,
+    negativeStockItems,
     paymentModeRef,
     amountPaidRef,
     handleCheckout,
@@ -296,5 +379,7 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
     handlePrintInvoice,
     finishSuccess,
     handleCancelAfterWarning,
+    handleConfirmNegativeStock,
+    handleCancelNegativeStock,
   };
 }

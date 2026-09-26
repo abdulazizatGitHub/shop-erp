@@ -29,6 +29,16 @@ export interface ItemSearchPanelProps {
   readonly onConfirmLine: (item: ItemDto, quantityMilli: number, saleUnit: SaleUnit) => void;
   readonly onCheckoutTrigger: () => void;
   readonly onError: (message: string) => void;
+  /**
+   * P17-1 (Q17-6). 'block' keeps P10-1's exact add-time hard block for a
+   * ≤0-counter-stock item; 'warn' deliberately reverses it (an item
+   * already at counterStockMilli<=0 becomes addable, with the server's
+   * confirmation dialog handling the rest at commit time — see
+   * useSaleFlow.ts). Defaults to 'warn' while the setting is still
+   * loading, matching the server-side default so nothing is ever
+   * over-blocked before the real value arrives.
+   */
+  readonly negativeStockPolicy: 'warn' | 'block';
 }
 
 /** Left-panel item search: filter tabs, POS product card grid (E-4), and the inline qty step. No cart/checkout logic — that stays in SalePage. */
@@ -38,6 +48,7 @@ export function ItemSearchPanel({
   onConfirmLine,
   onCheckoutTrigger,
   onError,
+  negativeStockPolicy,
 }: ItemSearchPanelProps): React.JSX.Element {
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [pendingItem, setPendingItem] = useState<ItemDto | null>(null);
@@ -105,12 +116,19 @@ export function ItemSearchPanel({
 
   function confirmPending(): void {
     if (!pendingItem) return;
-    // P10-1 hard block: mirrors resolveStockBadge's own out-of-stock
-    // condition exactly (null = not tracked or never moved, not "zero" —
-    // owner-confirmed this stays addable, only a confirmed <=0 balance
-    // blocks). Defense in depth — onSelect below already keeps an
-    // out-of-stock item from ever reaching pendingItem in the first place.
-    if (pendingItem.stockOnHandMilli !== null && pendingItem.stockOnHandMilli <= 0) return;
+    // P17-1 (Q17-6): scoped to counterStockMilli (Shop-warehouse-only,
+    // never the all-warehouse stockOnHandMilli — see PHASE_17.md §2.1
+    // D17-3), and only actually blocks when the policy is 'block'. Under
+    // 'warn' this is a no-op — the item is addable, matching P10-1's
+    // deliberate reversal; the server's confirmation dialog handles the
+    // rest at commit time. Defense in depth — onSelect below already
+    // keeps a block-mode out-of-stock item from ever reaching pendingItem.
+    if (
+      negativeStockPolicy === 'block' &&
+      pendingItem.counterStockMilli !== null &&
+      pendingItem.counterStockMilli <= 0
+    )
+      return;
     let quantityMilli: number;
     try {
       quantityMilli = Qty.fromUnits(qtyInput);
@@ -161,10 +179,16 @@ export function ItemSearchPanel({
         </div>
       }
       onSelect={(item) => {
-        // P10-1 hard block: an out-of-stock item (marked via the
-        // "Out of stock" badge on its card, resolveStockBadge.ts) cannot
-        // be selected at all — no override, no inline qty row opens.
-        if (item.stockOnHandMilli !== null && item.stockOnHandMilli <= 0) return;
+        // P17-1 (Q17-6): only 'block' refuses selection outright; under
+        // 'warn' an out-of-stock item is selectable (the badge still
+        // shows "Out of stock" — see ItemProductCard.tsx's own
+        // counterStockMilli-based badge).
+        if (
+          negativeStockPolicy === 'block' &&
+          item.counterStockMilli !== null &&
+          item.counterStockMilli <= 0
+        )
+          return;
         setPendingItem(item);
         setQtyInput('1');
         setSaleUnit('stock');

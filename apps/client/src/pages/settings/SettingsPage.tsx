@@ -6,6 +6,7 @@ import { ServiceChargesTab } from './job/ServiceChargesTab.js';
 import { BackupSettingsSection } from './sections/BackupSettingsSection.js';
 import { DiscountsSettingsSection } from './sections/DiscountsSettingsSection.js';
 import { InvoiceReceiptsSettingsSection } from './sections/InvoiceReceiptsSettingsSection.js';
+import { StockAlertsSettingsSection } from './sections/StockAlertsSettingsSection.js';
 import { ShopSettingsSection } from './sections/ShopSettingsSection.js';
 import { CommissionRefreshContext } from './CommissionRefreshContext.js';
 import { SettingsDirtyContext } from './SettingsDirtyContext.js';
@@ -75,6 +76,17 @@ export function SettingsPage(): React.JSX.Element {
                     description="Owner-configured discount presets and eligibility."
                   >
                     <DiscountsSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/sales/stock-alerts"
+                element={
+                  <SettingsSectionFrame
+                    title="Stock & Alerts"
+                    description="Negative-stock policy for counter sales."
+                  >
+                    <StockAlertsSettingsSection />
                   </SettingsSectionFrame>
                 }
               />

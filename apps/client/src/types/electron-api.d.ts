@@ -352,6 +352,12 @@ export interface SetReceiptPaperSizeInput {
   readonly value: ReceiptPaperSize;
 }
 
+export type NegativeStockPolicy = 'warn' | 'block';
+
+export interface SetNegativeStockPolicyInput {
+  readonly value: NegativeStockPolicy;
+}
+
 export interface SetShopNameInput {
   readonly value: string;
 }
@@ -610,6 +616,8 @@ export interface ElectronApi {
     readonly getDiscountPctPresets: () => Promise<readonly string[]>;
     readonly setDiscountPctPresets: (input: SetDiscountPctPresetsInput) => Promise<void>;
     readonly getDiscountConfig: () => Promise<DiscountConfigDto>;
+    readonly getNegativeStockPolicy: () => Promise<NegativeStockPolicy>;
+    readonly setNegativeStockPolicy: (input: SetNegativeStockPolicyInput) => Promise<void>;
     readonly getShopIdentity: () => Promise<ShopIdentityDto>;
     readonly setShopIdentity: (input: SetShopIdentityInput) => Promise<void>;
   };
