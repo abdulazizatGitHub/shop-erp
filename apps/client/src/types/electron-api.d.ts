@@ -359,6 +359,10 @@ export interface SetNegativeStockPolicyInput {
   readonly value: NegativeStockPolicy;
 }
 
+export interface SetDefaultLowStockThresholdInput {
+  readonly value: number;
+}
+
 export interface SetShopNameInput {
   readonly value: string;
 }
@@ -438,6 +442,7 @@ export interface ElectronApi {
     readonly getPrices: (input: ItemGetPricesInput) => Promise<ItemPricesDto>;
     readonly topSelling: (input: ItemTopSellingInput) => Promise<readonly ItemDto[]>;
     readonly priceHistory: (input: ItemIdInput) => Promise<readonly ItemPriceHistoryRecord[]>;
+    readonly lowStockCount: () => Promise<number>;
   };
   readonly customer: {
     readonly create: (input: CreateCustomerInput) => Promise<{ id: string; partyCode: string }>;
@@ -621,6 +626,10 @@ export interface ElectronApi {
     readonly getDiscountConfig: () => Promise<DiscountConfigDto>;
     readonly getNegativeStockPolicy: () => Promise<NegativeStockPolicy>;
     readonly setNegativeStockPolicy: (input: SetNegativeStockPolicyInput) => Promise<void>;
+    readonly getDefaultLowStockThreshold: () => Promise<number>;
+    readonly setDefaultLowStockThreshold: (
+      input: SetDefaultLowStockThresholdInput,
+    ) => Promise<void>;
     readonly getShopIdentity: () => Promise<ShopIdentityDto>;
     readonly setShopIdentity: (input: SetShopIdentityInput) => Promise<void>;
   };

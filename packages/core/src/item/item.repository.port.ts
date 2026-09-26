@@ -40,6 +40,8 @@ export interface ItemRecord {
   readonly stockOnHandMilli: number | null;
   /** P17-1 (D17-3): Shop-counter-warehouse-only, milli-units. Null = not stock-tracked, or no movements at the Shop warehouse yet. This is what a counter sale can actually sell — never the all-warehouse figure above. */
   readonly counterStockMilli: number | null;
+  /** P17-2 (docs/phases/PHASE_17.md §2.2): item.reorder_level, milli-units. Null means "use the shop-wide default low-stock threshold". */
+  readonly reorderLevelMilli: number | null;
 }
 
 export interface ItemSearchQuery {

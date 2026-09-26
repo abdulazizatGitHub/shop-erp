@@ -148,6 +148,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         'itemPrice.price as retailPricePaisa',
         'item.altUomId',
         'item.altUomFactorMilli',
+        'item.reorderLevel',
       ])
       .where('item.id', '=', id)
       .where('item.tenantId', '=', this.tenantId)
@@ -170,6 +171,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       // a real stock lookup for this method.
       stockOnHandMilli: null,
       counterStockMilli: null,
+      reorderLevelMilli: row.reorderLevel,
     };
   }
 
@@ -220,6 +222,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
             AND warehouse_id = (
               SELECT id FROM warehouse WHERE tenant_id = item.tenant_id AND is_default = 1
             ))`.as('counterStockMilli'),
+        'item.reorderLevel',
       ])
       .where('item.tenantId', '=', this.tenantId)
       .where('item.deletedAt', 'is', null);
@@ -257,6 +260,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
             ? null
             : (row.counterStockMilli ?? 0)
           : null,
+      reorderLevelMilli: row.reorderLevel,
     }));
   }
 
@@ -278,6 +282,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       altUomFactorMilli: number | null;
       stockOnHandMilli: number | null;
       counterStockMilli: number | null;
+      reorderLevel: number | null;
     }>`
       SELECT
         item.id                      AS id,
@@ -295,7 +300,8 @@ export class KyselyItemRepository implements ItemRepositoryPort {
           WHERE item_id = item.id AND tenant_id = item.tenant_id
             AND warehouse_id = (
               SELECT id FROM warehouse WHERE tenant_id = item.tenant_id AND is_default = 1
-            )) AS counterStockMilli
+            )) AS counterStockMilli,
+        item.reorder_level             AS reorderLevel
       FROM sale_line sl
       JOIN sale ON sale.id = sl.sale_id
       JOIN item ON item.id = sl.item_id
@@ -338,6 +344,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
             ? null
             : (row.counterStockMilli ?? 0)
           : null,
+      reorderLevelMilli: row.reorderLevel,
     }));
   }
 }

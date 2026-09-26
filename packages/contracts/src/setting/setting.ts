@@ -12,6 +12,12 @@ export const SetNegativeStockPolicyInput = z.object({
 });
 export type SetNegativeStockPolicyInput = z.infer<typeof SetNegativeStockPolicyInput>;
 
+/** P17-2 (docs/phases/PHASE_17.md §2.2, S17-ITEM-2). Milli-units — used when an item's own reorder_level is null. */
+export const SetDefaultLowStockThresholdInput = z.object({
+  value: z.number().int().nonnegative(),
+});
+export type SetDefaultLowStockThresholdInput = z.infer<typeof SetDefaultLowStockThresholdInput>;
+
 /** P4-1c. Placeholder default ("Shop ERP") until the owner sets the real name. */
 export const SetShopNameInput = z.object({
   value: z.string().trim().min(1),

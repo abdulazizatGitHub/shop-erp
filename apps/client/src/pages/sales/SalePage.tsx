@@ -132,6 +132,7 @@ export function SalePage(): React.JSX.Element {
                 }}
                 onError={flow.setError}
                 negativeStockPolicy={flow.negativeStockPolicy}
+                defaultLowStockThresholdMilli={flow.defaultLowStockThresholdMilli}
               />
             </div>
 

@@ -9,9 +9,10 @@ import {
   type ItemLookups,
   type ItemPricesDto,
 } from '@shop/contracts';
-import { createItem, searchItems, topSellingItems } from '@shop/core';
+import { createItem, isLowStock, searchItems, topSellingItems } from '@shop/core';
 import {
   createKyselyDb,
+  getDefaultLowStockThresholdMilli,
   getItemPriceHistory,
   getItemPrices,
   KyselyItemRepository,
@@ -30,6 +31,35 @@ export interface ItemHandlerDeps {
   readonly dbPath: string;
   readonly tenantId: string;
   readonly deviceCode: string;
+}
+
+/**
+ * P17-2 (docs/phases/PHASE_17.md §2.2, S17-DASH-1). Extracted as a plain
+ * function so it can be tested directly (matching
+ * customer-balance-import.handler.ts's precedent) — no electron mocking.
+ * Deliberately computed here (core's pure isLowStock), not in SQL —
+ * CLAUDE.md §3.7, no business logic in SQL.
+ */
+export async function runLowStockCount(deps: ItemHandlerDeps): Promise<number> {
+  const db = openDatabase(deps.dbPath);
+  try {
+    const kysely = createKyselyDb(db);
+    const repo = new KyselyItemRepository(kysely, deps.tenantId, deps.deviceCode);
+    const [items, defaultThresholdMilli] = await Promise.all([
+      searchItems(repo, { query: '', categoryId: null }),
+      getDefaultLowStockThresholdMilli(kysely, deps.tenantId),
+    ]);
+    return items.filter((item) =>
+      isLowStock(
+        item.trackStock,
+        item.counterStockMilli,
+        item.reorderLevelMilli,
+        defaultThresholdMilli,
+      ),
+    ).length;
+  } finally {
+    db.close();
+  }
 }
 
 export function registerItemHandlers(deps: ItemHandlerDeps): void {
@@ -122,5 +152,10 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
         db.close();
       }
     }),
+  );
+
+  ipcMain.handle(
+    channels.item.lowStockCount,
+    withError((): Promise<number> => runLowStockCount(deps)),
   );
 }

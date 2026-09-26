@@ -4,30 +4,30 @@ import type { ItemDto, ItemLookups } from '@shop/contracts';
 import {
   Button,
   EmptyState,
-  MoneyDisplay,
   PageHeader,
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeaderCell,
   TableRow,
   TextInput,
   useToast,
 } from '@shop/ui';
-import { BusinessUnitPill } from '../../components/shared/BusinessUnitPill.js';
-import { resolveStockBadge } from '../../components/shared/StockBadge.js';
+import { isLowStock } from '../../components/shared/StockBadge.js';
 import { ipc } from '../../lib/ipc.js';
 import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
 import { ImportOpeningStockModal } from './ImportOpeningStockModal.js';
 import { ItemPriceHistoryModal } from './ItemPriceHistoryModal.js';
+import { ItemsTableRow } from './ItemsTableRow.js';
 
 export function ItemsPage(): React.JSX.Element {
   const { showToast } = useToast();
   const [lookups, setLookups] = useState<ItemLookups | null>(null);
   const [items, setItems] = useState<readonly ItemDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [defaultLowStockThresholdMilli, setDefaultLowStockThresholdMilli] = useState(0);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importOpeningStockOpen, setImportOpeningStockOpen] = useState(false);
@@ -58,15 +58,36 @@ export function ItemsPage(): React.JSX.Element {
         });
       });
     loadItems();
+    // P17-2: read-only, no toast on failure — the threshold silently
+    // falls back to 0 (the safe default), same pattern as useSaleFlow.ts.
+    ipc.setting
+      .getDefaultLowStockThreshold()
+      .then(setDefaultLowStockThresholdMilli)
+      .catch(() => {
+        // stays 0
+      });
   }, []);
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (q.length === 0) return items;
-    return items.filter(
-      (item) => item.nameEn.toLowerCase().includes(q) || item.itemCode.toLowerCase().includes(q),
-    );
-  }, [items, searchQuery]);
+    let result = items;
+    if (q.length > 0) {
+      result = result.filter(
+        (item) => item.nameEn.toLowerCase().includes(q) || item.itemCode.toLowerCase().includes(q),
+      );
+    }
+    if (lowStockOnly) {
+      result = result.filter((item) =>
+        isLowStock(
+          item.counterStockMilli,
+          item.trackStock,
+          item.reorderLevelMilli,
+          defaultLowStockThresholdMilli,
+        ),
+      );
+    }
+    return result;
+  }, [items, searchQuery, lowStockOnly, defaultLowStockThresholdMilli]);
 
   const uomName = (id: string): string => lookups?.uoms.find((u) => u.id === id)?.name ?? id;
 
@@ -109,15 +130,29 @@ export function ItemsPage(): React.JSX.Element {
           have changed their look too. See PROJECT.md §2.5. */}
       <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
         <h2 className="mb-3 text-lg font-semibold text-ink">Item catalogue</h2>
-        <TextInput
-          variant="search"
-          icon={<Search size={16} strokeWidth={1.5} />}
-          placeholder="Search by name or code…"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-          }}
-        />
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <TextInput
+              variant="search"
+              icon={<Search size={16} strokeWidth={1.5} />}
+              placeholder="Search by name or code…"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+              }}
+            />
+          </div>
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm text-ink-muted">
+            <input
+              type="checkbox"
+              checked={lowStockOnly}
+              onChange={(e) => {
+                setLowStockOnly(e.target.checked);
+              }}
+            />
+            Low stock only
+          </label>
+        </div>
         <div className="mt-4">
           {items.length === 0 ? (
             <div className="flex items-center justify-center py-16">
@@ -152,52 +187,16 @@ export function ItemsPage(): React.JSX.Element {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredItems.map((item) => {
-                  const stockBadge = resolveStockBadge(item.stockOnHandMilli, item.trackStock);
-                  return (
-                    <TableRow key={item.id} zebra={false} hover="neutral">
-                      <TableCell className="py-3">
-                        <span className="inline-flex items-center rounded border border-line bg-surface-page px-2 py-0.5 font-mono text-xs text-ink-faint">
-                          {item.itemCode}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-3">{item.nameEn}</TableCell>
-                      <TableCell className="py-3">
-                        <BusinessUnitPill businessUnitId={item.businessUnitId} lookups={lookups} />
-                      </TableCell>
-                      <TableCell className="py-3">{uomName(item.stockUomId)}</TableCell>
-                      <TableCell className="py-3">
-                        {stockBadge ? (
-                          <span className={`text-sm font-medium ${stockBadge.className}`}>
-                            {stockBadge.label}
-                          </span>
-                        ) : (
-                          <span className="text-ink-faint">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3 text-right">
-                        {item.retailPricePaisa !== null ? (
-                          <MoneyDisplay paisaValue={item.retailPricePaisa} />
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3">
-                        {item.altUomId ? uomName(item.altUomId) : '—'}
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setHistoryItem(item);
-                          }}
-                        >
-                          History
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {filteredItems.map((item) => (
+                  <ItemsTableRow
+                    key={item.id}
+                    item={item}
+                    lookups={lookups}
+                    uomName={uomName}
+                    defaultLowStockThresholdMilli={defaultLowStockThresholdMilli}
+                    onHistoryClick={setHistoryItem}
+                  />
+                ))}
               </TableBody>
             </Table>
           )}

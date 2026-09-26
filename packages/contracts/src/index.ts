@@ -198,6 +198,7 @@ export {
 export {
   SetReceiptPaperSizeInput,
   SetNegativeStockPolicyInput,
+  SetDefaultLowStockThresholdInput,
   SetShopNameInput,
   SetDiscountApplyWalkinInput,
   SetDiscountApplyWholesaleInput,

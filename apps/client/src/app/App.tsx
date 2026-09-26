@@ -69,7 +69,13 @@ export function App(): React.JSX.Element {
             {tab === 'settings' && <SettingsPage />}
             {tab === 'staff' && <StaffPage />}
             {tab === 'expenses' && <ExpensesPage />}
-            {tab === 'dashboard' && <DashboardPage />}
+            {tab === 'dashboard' && (
+              <DashboardPage
+                onNavigateToItems={() => {
+                  setTab('items');
+                }}
+              />
+            )}
             {tab === 'attendance' && <AttendancePage />}
           </main>
         </div>

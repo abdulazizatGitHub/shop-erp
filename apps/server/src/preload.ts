@@ -95,6 +95,7 @@ import type {
   SaleWithLinesInput,
   SaleWithLinesDto,
   NegativeStockOutcome,
+  SetDefaultLowStockThresholdInput,
   SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
   SetShopNameInput,
@@ -200,6 +201,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.item.priceHistory, input) as Promise<
         readonly ItemPriceHistoryRow[]
       >,
+    lowStockCount: (): Promise<number> =>
+      ipcRenderer.invoke(channels.item.lowStockCount) as Promise<number>,
   },
   customer: {
     create: (input: CreateCustomerInput): Promise<CreateCustomerResult> =>
@@ -574,6 +577,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getNegativeStockPolicy) as Promise<NegativeStockPolicy>,
     setNegativeStockPolicy: (input: SetNegativeStockPolicyInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setNegativeStockPolicy, input) as Promise<void>,
+    getDefaultLowStockThreshold: (): Promise<number> =>
+      ipcRenderer.invoke(channels.setting.getDefaultLowStockThreshold) as Promise<number>,
+    setDefaultLowStockThreshold: (input: SetDefaultLowStockThresholdInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setDefaultLowStockThreshold, input) as Promise<void>,
     getShopIdentity: (): Promise<ShopIdentityDto> =>
       ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
     setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>

@@ -18,7 +18,7 @@ import {
 } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
-import { getNegativeStockPolicy } from './setting.repository.js';
+import { getNegativeStockPolicy } from './stock-alerts-setting.repository.js';
 
 const SALE_CODE_DOC_TYPE = 'sale';
 const SALE_CODE_PREFIX = 'INV';

@@ -7,7 +7,6 @@ import {
   SetDiscountPctPresetsInput,
   SetDiscountPkrEnabledInput,
   SetDiscountPkrPresetsInput,
-  SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
   SetShopIdentityInput,
   SetShopNameInput,
@@ -21,7 +20,6 @@ import {
   getDiscountPctPresets,
   getDiscountPkrEnabled,
   getDiscountPkrPresets,
-  getNegativeStockPolicy,
   getReceiptPaperSize,
   getShopIdentity,
   getShopName,
@@ -32,11 +30,9 @@ import {
   setDiscountPctPresets,
   setDiscountPkrEnabled,
   setDiscountPkrPresets,
-  setNegativeStockPolicy,
   setReceiptPaperSize,
   setShopIdentity,
   setShopName,
-  type NegativeStockPolicy,
   type ReceiptPaperSize,
 } from '@shop/db';
 import type { Kysely } from 'kysely';
@@ -147,30 +143,9 @@ export function registerSettingHandlers(deps: SettingHandlerDeps): void {
     }),
   );
 
-  ipcMain.handle(
-    channels.setting.getNegativeStockPolicy,
-    withError(async (): Promise<NegativeStockPolicy> => {
-      const db = openDatabase(deps.dbPath);
-      try {
-        return await getNegativeStockPolicy(createKyselyDb(db), deps.tenantId);
-      } finally {
-        db.close();
-      }
-    }),
-  );
-
-  ipcMain.handle(
-    channels.setting.setNegativeStockPolicy,
-    withError(async (_event, raw: unknown): Promise<void> => {
-      const input = SetNegativeStockPolicyInput.parse(raw);
-      const db = openDatabase(deps.dbPath);
-      try {
-        await setNegativeStockPolicy(createKyselyDb(db), deps.tenantId, input.value);
-      } finally {
-        db.close();
-      }
-    }),
-  );
+  // P17-1/P17-2 negativeStockPolicy/defaultLowStockThreshold handlers
+  // moved to stock-alerts-setting.handler.ts (registerStockAlertsSettingHandlers,
+  // called separately from main.ts) once this file crossed 300 lines.
 
   ipcMain.handle(
     channels.setting.getShopName,

@@ -96,6 +96,11 @@ export const ItemDto = z.object({
   // cart badge, and ItemSearchPanel's add-to-cart guard all read this,
   // never stockOnHandMilli above.
   counterStockMilli: z.number().int().nullable(),
+  // P17-2 (docs/phases/PHASE_17.md §2.2). The owner-set per-item
+  // low-stock threshold, milli-units — item.reorder_level, populated
+  // today only via CSV import ("Low Stock Alert Qty"). Null means "use
+  // the shop-wide default" (see setting:getDefaultLowStockThreshold).
+  reorderLevelMilli: z.number().int().nullable(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
 

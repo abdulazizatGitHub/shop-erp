@@ -41,6 +41,95 @@
 
 ---
 
+## [2026-09-26] Session 88 — Phase 17 P17-2 built: low-stock badge, Dashboard widget
+
+**Goal:** Build P17-2 (low-stock badge switched to `counterStockMilli` +
+Items-list dual-figure display + Dashboard low-stock card), per owner
+scope additions on top of `docs/phases/PHASE_17.md` §2.2/§8.
+
+**Done:**
+
+- `packages/core/src/item/low-stock.ts` (new): pure `isLowStock`
+  predicate — flagged at `counterStockMilli<=reorderLevelMilli` (falling
+  back to the shop default when null); excludes `trackStock=false` and a
+  `counterStockMilli=null` item (never moved); a confirmed `0` (moved,
+  but zero at Shop specifically — the custody case) IS flagged.
+- `reorderLevelMilli`/`counterStockMilli` added end-to-end
+  (contracts → core → db) to `ItemDto`/`ItemRecord` and all 3
+  `item.repository.ts` query methods.
+- `item.handler.ts`'s `runLowStockCount` (new plain function, IPC channel
+  `item:lowStockCount`) computes the Dashboard count server-side using
+  `@shop/core`'s `isLowStock` (client can't import `@shop/core`,
+  lint-enforced).
+- Client-side `isLowStock` duplicate added to
+  `apps/client/src/components/shared/StockBadge.tsx`, and
+  `resolveStockBadge` rewritten to use it — replacing the old **hardcoded
+  5-unit** threshold. Shared by both `ItemsPage.tsx`'s badge and the POS
+  `ItemProductCard.tsx`'s badge (same component).
+- `ItemsPage.tsx` — badge now reads `counterStockMilli` (Shop-only, per
+  P17-1's D17-3); new "Low stock only" filter checkbox; new
+  `ItemsTableRow.tsx` (extracted, also fixes a 307-line file-size
+  overage) renders the dual-figure line "Shop: X · With technicians: Y"
+  when they differ.
+- New `LowStockWidget.tsx` on `DashboardPage.tsx`, click navigates to the
+  Items tab (`App.tsx` wiring) — no cross-tab pre-filter (deliberately
+  not reintroducing the pattern removed as dead code in P15-5).
+- `StockAlertsSettingsSection.tsx` extended with a "Default low-stock
+  qty" field (`setDefaultLowStockThresholdMilli`).
+- File-size splits to stay under CLAUDE.md §9's ~300-line convention:
+  `setting.repository.ts`/`.handler.ts` split into new
+  `stock-alerts-setting.repository.ts`/`.handler.ts`.
+- `docs/phases/PHASE_17.md` — §2.2 records the dual-figure display rule
+  and custody test; §8 P17-2 criteria rewritten to match what was built;
+  §8 P17-4 gained the new v_owner_drawings/v_unit_direct_expense
+  exclusion criterion (documentation only — P17-4 itself not built);
+  §6 status table and header updated, P17-2 marked DONE.
+- `PROJECT.md` — new open question Q-DRAWING: no seeded owner-drawing
+  category exists; how are drawings recorded today (owner to answer).
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **894/894** (up from 858: 6 in `low-stock.test.ts`, 6 in
+  `item.handler.test.ts` (new file, incl. the custody scenario), 8 in
+  `StockBadge.test.ts` (new file), 4 in `LowStockWidget.test.tsx` (new
+  file), plus custody-test and `counterStockMilli` assertion additions in
+  `item.repository.test.ts`).
+- `npm run build --workspace=@shop/client` and `--workspace=@shop/server`
+  — both clean.
+- Electron's GUI cannot launch in this sandbox — the custody scenario
+  (0 in Shop, 5 with a technician → flagged, counted on the dashboard,
+  both figures shown on the Items list) was verified via the automated
+  tests above (real temp DB, no mocking, for `item.repository.test.ts`
+  and `item.handler.test.ts`); the actual running-app click-through
+  remains outstanding, same as P17-1.
+
+**Not done / deferred:** P17-3 through P17-5 and P17-7 (approved scope,
+not yet built).
+
+**Bugs found:** none new.
+
+**Decisions taken:** none new (implements D17-3 from Session 87).
+
+**Blocked on:** nothing — P17-2 complete, remaining Phase 17 tasks ready.
+
+**Next session should:** build P17-3 (shared `useRowsPerPage()` hook for
+report tables), per `docs/phases/PHASE_17.md` §6/§8. **STOP after P17-2
+was this session's own instruction — do not start P17-3 without a fresh
+go-ahead.**
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (894/894)
+
+---
+
 ## [2026-09-26] Session 87 — Phase 17 planning (Rev 1-5) + P17-1 built
 
 **Goal:** Build the Phase 17 Settings-backlog candidate inventory

@@ -19,6 +19,7 @@ export const channels = {
     getPrices: 'item:getPrices',
     topSelling: 'item:topSelling',
     priceHistory: 'item:priceHistory',
+    lowStockCount: 'item:lowStockCount',
   },
   party: {
     create: 'party:create',
@@ -166,6 +167,8 @@ export const channels = {
     setShopIdentity: 'setting:setShopIdentity',
     getNegativeStockPolicy: 'setting:getNegativeStockPolicy',
     setNegativeStockPolicy: 'setting:setNegativeStockPolicy',
+    getDefaultLowStockThreshold: 'setting:getDefaultLowStockThreshold',
+    setDefaultLowStockThreshold: 'setting:setDefaultLowStockThreshold',
   },
   print: {
     reprintReceipt: 'print:reprintReceipt',

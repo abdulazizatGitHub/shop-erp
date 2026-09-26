@@ -94,6 +94,8 @@ export interface SaleFlow {
   /** P17-1 (Q17-6). Counter sales only. */
   readonly negativeStockPolicy: NegativeStockPolicy;
   readonly negativeStockItems: readonly NegativeStockItemDto[];
+  /** P17-2. Shop-wide fallback for an item's low-stock badge when its own reorderLevelMilli is null. */
+  readonly defaultLowStockThresholdMilli: number;
   readonly paymentModeRef: React.RefObject<HTMLDivElement>;
   readonly amountPaidRef: React.RefObject<HTMLInputElement>;
   readonly handleCheckout: () => Promise<void>;
@@ -127,6 +129,7 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
   const [negativeStockItems, setNegativeStockItems] = useState<readonly NegativeStockItemDto[]>([]);
   const [pendingNegativeStockInput, setPendingNegativeStockInput] =
     useState<CreateSaleInput | null>(null);
+  const [defaultLowStockThresholdMilli, setDefaultLowStockThresholdMilli] = useState(0);
 
   // P17-1 (Q17-6): fetched once on mount, defaults to 'warn' (the same
   // server-side default) until it loads or if the fetch fails — matches
@@ -137,6 +140,17 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
       .then(setNegativeStockPolicyState)
       .catch(() => {
         // stays 'warn' — safe default, not fatal.
+      });
+  }, []);
+
+  // P17-2 (docs/phases/PHASE_17.md §2.2): same fetch-once-on-mount
+  // pattern, defaults to 0 (the same server-side default) until loaded.
+  useEffect(() => {
+    ipc.setting
+      .getDefaultLowStockThreshold()
+      .then(setDefaultLowStockThresholdMilli)
+      .catch(() => {
+        // stays 0 — safe default, not fatal.
       });
   }, []);
   const { reprinting, invoicePrinting, handleReprint, handlePrintInvoice } = useReceiptPrinting(
@@ -386,6 +400,7 @@ export function useSaleFlow(onRequestCheckout?: () => void): SaleFlow {
     warningMessages,
     negativeStockPolicy,
     negativeStockItems,
+    defaultLowStockThresholdMilli,
     paymentModeRef,
     amountPaidRef,
     handleCheckout,

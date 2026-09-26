@@ -6,6 +6,7 @@ export type {
   ItemRecord,
   ItemSearchQuery,
 } from './item/item.repository.port.js';
+export { isLowStock } from './item/low-stock.js';
 
 export { parseCsv } from './import/csv.js';
 export type { ParsedCsvRow, ParseCsvResult } from './import/csv.js';

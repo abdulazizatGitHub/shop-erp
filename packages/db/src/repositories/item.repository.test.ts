@@ -252,6 +252,7 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
       altUomFactorMilli: null,
       stockOnHandMilli: null,
       counterStockMilli: null,
+      reorderLevelMilli: null,
     });
   });
 
