@@ -45,8 +45,6 @@ export interface ItemProductCardProps {
   readonly lookups: ItemLookups | null;
   /** SearchSelect's renderItem(item, highlighted) — true while this card is keyboard-highlighted or has its inline qty row held/active. */
   readonly selected: boolean;
-  /** P17-2 — shop-wide fallback when item.reorderLevelMilli is null. */
-  readonly defaultLowStockThresholdMilli: number;
 }
 
 /** E-4: POS-style product card — placeholder icon, name, code, stock badge, price, type pill. Presentational only; selection/hold logic stays in SearchSelect/ItemSearchPanel. */
@@ -54,18 +52,13 @@ export function ItemProductCard({
   item,
   lookups,
   selected,
-  defaultLowStockThresholdMilli,
 }: ItemProductCardProps): React.JSX.Element {
   const pill = resolveBusinessUnitPill(item.businessUnitId, lookups);
   // P17-1 (D17-3): counterStockMilli, never the all-warehouse
   // stockOnHandMilli — this badge must reflect what the counter can
-  // actually sell, not the unit's total owned stock.
-  const badge = resolveStockBadge(
-    item.counterStockMilli,
-    item.trackStock,
-    item.reorderLevelMilli,
-    defaultLowStockThresholdMilli,
-  );
+  // actually sell, not the unit's total owned stock. isLowStock is
+  // server-computed (P17-2 review fix) — never re-derived here.
+  const badge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.isLowStock);
   const isRepair = pill?.letter === 'R';
 
   return (

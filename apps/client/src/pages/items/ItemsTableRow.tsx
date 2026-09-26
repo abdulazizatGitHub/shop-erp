@@ -7,7 +7,6 @@ export interface ItemsTableRowProps {
   readonly item: ItemDto;
   readonly lookups: ItemLookups | null;
   readonly uomName: (id: string) => string;
-  readonly defaultLowStockThresholdMilli: number;
   readonly onHistoryClick: (item: ItemDto) => void;
 }
 
@@ -26,15 +25,9 @@ export function ItemsTableRow({
   item,
   lookups,
   uomName,
-  defaultLowStockThresholdMilli,
   onHistoryClick,
 }: ItemsTableRowProps): React.JSX.Element {
-  const stockBadge = resolveStockBadge(
-    item.counterStockMilli,
-    item.trackStock,
-    item.reorderLevelMilli,
-    defaultLowStockThresholdMilli,
-  );
+  const stockBadge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.isLowStock);
   const technicianMilli =
     item.stockOnHandMilli !== null && item.counterStockMilli !== null
       ? item.stockOnHandMilli - item.counterStockMilli

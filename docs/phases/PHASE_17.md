@@ -294,14 +294,38 @@ technicians: Y` (`Y = stockOnHandMilli − counterStockMilli`; the line is
   Items — no cross-tab pre-filter wiring, since that exact pattern was
   deliberately removed as dead code in P15-5; the owner toggles the
   filter themselves once there.
-- The Dashboard count (`runLowStockCount` in `item.handler.ts`) is
-  computed **server-side** using `@shop/core`'s `isLowStock`, since
-  `apps/client` may never import `@shop/core` (lint-enforced,
-  `eslint.config.js` line ~109). The Items-list badge/filter therefore use
-  a small, independently-maintained client copy of the same predicate in
-  `apps/client/src/components/shared/StockBadge.tsx` — both are
-  unit-tested against the same exclusion and custody cases to keep them
-  from silently diverging.
+- **Review fix — one rule, one place (not two implementations):** the
+  first build had a second, client-side `isLowStock` copy in
+  `StockBadge.tsx` (required, it was argued, since `apps/client` may
+  never import `@shop/core`). Correctly rejected on review: a DTO field
+  doesn't need to import the function that computed it. `isLowStock` is
+  now a plain `boolean` on `ItemDto`, computed exactly once —
+  `item.repository.ts`'s `searchItems`/`topSellingItems`/`getItemById`,
+  calling `@shop/core`'s `isLowStock` against `counterStockMilli` + the
+  shop-wide default threshold (one settings read per query call, via
+  `getDefaultLowStockThresholdMilli`). Every consumer (Items-list badge,
+  Items-list filter, POS badge, `runLowStockCount`'s Dashboard count)
+  reads this one field; none of them re-derive the rule.
+  `StockBadge.tsx`'s `resolveStockBadge` no longer takes a threshold at
+  all — it renders `isLowStock` plus `counterStockMilli` (for the unit
+  count and the "exactly 0" out-of-stock wording), nothing else.
+  `defaultLowStockThresholdMilli` accordingly stopped being threaded
+  through `useSaleFlow.ts`→`SalePage.tsx`→`ItemSearchPanel.tsx`→
+  `ItemProductCard.tsx` and through `ItemsPage.tsx`→`ItemsTableRow.tsx` —
+  none of those five files need it any more.
+- **"Low stock only" has no server round-trip, and that's provably safe:**
+  the filter is `items.filter((item) => item.isLowStock)` — a boolean
+  read, not a business rule. `ItemsPage.tsx`'s `loadItems()` calls
+  `item:search` with `query:''`/`categoryId:null` once per page load
+  (P4.5-3's existing convention); `item.repository.ts`'s `searchItems` SQL
+  has no `LIMIT`/`OFFSET` anywhere, so that one call always returns the
+  entire catalogue — there is no page boundary for the Items-list filter
+  and `runLowStockCount`'s Dashboard count to disagree across. Proved,
+  not just argued: `item.handler.test.ts`'s new test seeds 30 items (more
+  than any assumed UI page size) with low-stock items scattered through
+  the insertion order, then asserts the client-side-equivalent filtered
+  count and `runLowStockCount()`'s count are both exactly 8 (hand-derived:
+  `ceil(30/4)`) and therefore equal to each other.
 
 ### 2.3 Suppliers / Purchase Orders & GRN
 
@@ -840,12 +864,21 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       counted**; `trackStock=false` and deleted-item exclusions (A17-2)
       are not counted; an item above both its own and the shop default
       threshold is not counted; shop-default-threshold fallback case is
-      counted. `StockBadge.test.ts` (8 tests, new file): `resolveStockBadge`
-      (Items-list/POS badge) mirrors the same rule and exclusions,
-      confirming the old hardcoded 5-unit threshold is gone; client-side
-      `isLowStock` duplicate (required since `apps/client` cannot import
-      `@shop/core`, `eslint.config.js` line ~109) matches `@shop/core`'s
-      predicate on every shared case including custody. `LowStockWidget.test.tsx`
+      counted. **Review fix — one rule, one place:** `isLowStock` is now a
+      plain `boolean` field on `ItemDto`, computed exactly once in
+      `item.repository.ts` (via `@shop/core`'s `isLowStock`); the earlier
+      build's client-side `isLowStock` duplicate in `StockBadge.tsx` is
+      gone — `resolveStockBadge` (4 tests, `StockBadge.test.ts`) only
+      renders the server-computed field plus `counterStockMilli` for
+      display formatting, confirming the old hardcoded 5-unit threshold
+      stays gone without re-deriving the rule client-side.
+      `item.handler.test.ts` gained a 7th test proving the "Low stock
+      only" filter and the Dashboard count can never disagree: 30 items
+      (larger than any assumed UI page size) with low-stock items
+      scattered through the insertion order — `item.repository.ts`'s
+      `searchItems` SQL has no `LIMIT`/`OFFSET` at all, so both the
+      filtered-list count and `runLowStockCount()` are hand-verified at
+      exactly 8 (`ceil(30/4)`) and therefore equal. `LowStockWidget.test.tsx`
       (4 tests): renders the count from a mocked IPC response, singular
       wording at exactly 1, click navigates via `onNavigateToItems`, error
       state on a rejected call. UI action (owner click-through): clicking

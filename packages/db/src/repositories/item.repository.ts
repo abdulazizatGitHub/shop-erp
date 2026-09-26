@@ -1,5 +1,6 @@
 import { sql, type Kysely } from 'kysely';
 import { formatDisplayDocNumber, newId } from '@shop/shared';
+import { isLowStock } from '@shop/core';
 import type {
   ItemRecord,
   ItemRepositoryPort,
@@ -8,6 +9,7 @@ import type {
   NewItemResult,
 } from '@shop/core';
 import type { Database } from '../kysely-schema.js';
+import { getDefaultLowStockThresholdMilli } from './stock-alerts-setting.repository.js';
 
 const ITEM_CODE_DOC_TYPE = 'item';
 const ITEM_CODE_PREFIX = 'ITM';
@@ -172,6 +174,10 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       stockOnHandMilli: null,
       counterStockMilli: null,
       reorderLevelMilli: row.reorderLevel,
+      // counterStockMilli is always null here, and @shop/core's isLowStock
+      // excludes a null counterStockMilli unconditionally — no threshold
+      // fetch needed to know this is always false for this method.
+      isLowStock: false,
     };
   }
 
@@ -234,19 +240,12 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       q = q.where('item.categoryId', '=', query.categoryId);
     }
 
-    const rows = await q.execute();
-    return rows.map((row) => ({
-      id: row.id,
-      itemCode: row.itemCode,
-      nameEn: row.nameEn,
-      nameUr: row.nameUr,
-      businessUnitId: row.businessUnitId,
-      stockUomId: row.stockUomId,
-      retailPricePaisa: row.retailPricePaisa,
-      trackStock: row.trackStock === 1,
-      altUomId: row.altUomId,
-      altUomFactorMilli: row.altUomFactorMilli,
-      stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
+    const [rows, defaultThresholdMilli] = await Promise.all([
+      q.execute(),
+      getDefaultLowStockThresholdMilli(this.db, this.tenantId),
+    ]);
+    return rows.map((row) => {
+      const trackStock = row.trackStock === 1;
       // trackStock gate, then: null only means "never moved anywhere"
       // (matches stockOnHandMilli's own null convention — no badge at
       // all); an item that has moved but has zero rows at the Shop
@@ -254,14 +253,33 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       // custody) reads as a real 0, not null, so it shows "Out of
       // stock" rather than no badge (docs/phases/PHASE_17.md §2.1
       // D17-3 custody test).
-      counterStockMilli:
-        row.trackStock === 1
-          ? row.stockOnHandMilli === null
-            ? null
-            : (row.counterStockMilli ?? 0)
-          : null,
-      reorderLevelMilli: row.reorderLevel,
-    }));
+      const counterStockMilli = trackStock
+        ? row.stockOnHandMilli === null
+          ? null
+          : (row.counterStockMilli ?? 0)
+        : null;
+      return {
+        id: row.id,
+        itemCode: row.itemCode,
+        nameEn: row.nameEn,
+        nameUr: row.nameUr,
+        businessUnitId: row.businessUnitId,
+        stockUomId: row.stockUomId,
+        retailPricePaisa: row.retailPricePaisa,
+        trackStock,
+        altUomId: row.altUomId,
+        altUomFactorMilli: row.altUomFactorMilli,
+        stockOnHandMilli: trackStock ? row.stockOnHandMilli : null,
+        counterStockMilli,
+        reorderLevelMilli: row.reorderLevel,
+        isLowStock: isLowStock(
+          trackStock,
+          counterStockMilli,
+          row.reorderLevel,
+          defaultThresholdMilli,
+        ),
+      };
+    });
   }
 
   async topSellingItems(limit: number): Promise<readonly ItemRecord[]> {
@@ -319,18 +337,9 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       LIMIT ${limit}
     `.execute(this.db);
 
-    return result.rows.map((row) => ({
-      id: row.id,
-      itemCode: row.itemCode,
-      nameEn: row.nameEn,
-      nameUr: row.nameUr,
-      businessUnitId: row.businessUnitId,
-      stockUomId: row.stockUomId,
-      retailPricePaisa: row.retailPricePaisa,
-      trackStock: row.trackStock === 1,
-      altUomId: row.altUomId,
-      altUomFactorMilli: row.altUomFactorMilli,
-      stockOnHandMilli: row.trackStock === 1 ? row.stockOnHandMilli : null,
+    const defaultThresholdMilli = await getDefaultLowStockThresholdMilli(this.db, this.tenantId);
+    return result.rows.map((row) => {
+      const trackStock = row.trackStock === 1;
       // trackStock gate, then: null only means "never moved anywhere"
       // (matches stockOnHandMilli's own null convention — no badge at
       // all); an item that has moved but has zero rows at the Shop
@@ -338,13 +347,32 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       // custody) reads as a real 0, not null, so it shows "Out of
       // stock" rather than no badge (docs/phases/PHASE_17.md §2.1
       // D17-3 custody test).
-      counterStockMilli:
-        row.trackStock === 1
-          ? row.stockOnHandMilli === null
-            ? null
-            : (row.counterStockMilli ?? 0)
-          : null,
-      reorderLevelMilli: row.reorderLevel,
-    }));
+      const counterStockMilli = trackStock
+        ? row.stockOnHandMilli === null
+          ? null
+          : (row.counterStockMilli ?? 0)
+        : null;
+      return {
+        id: row.id,
+        itemCode: row.itemCode,
+        nameEn: row.nameEn,
+        nameUr: row.nameUr,
+        businessUnitId: row.businessUnitId,
+        stockUomId: row.stockUomId,
+        retailPricePaisa: row.retailPricePaisa,
+        trackStock,
+        altUomId: row.altUomId,
+        altUomFactorMilli: row.altUomFactorMilli,
+        stockOnHandMilli: trackStock ? row.stockOnHandMilli : null,
+        counterStockMilli,
+        reorderLevelMilli: row.reorderLevel,
+        isLowStock: isLowStock(
+          trackStock,
+          counterStockMilli,
+          row.reorderLevel,
+          defaultThresholdMilli,
+        ),
+      };
+    });
   }
 }

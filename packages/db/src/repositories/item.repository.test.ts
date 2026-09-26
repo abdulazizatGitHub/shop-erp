@@ -253,6 +253,7 @@ describe('KyselyItemRepository.getItemById / searchItems', () => {
       stockOnHandMilli: null,
       counterStockMilli: null,
       reorderLevelMilli: null,
+      isLowStock: false,
     });
   });
 
@@ -470,6 +471,11 @@ describe('KyselyItemRepository.searchItems — stockOnHandMilli (E-1)', () => {
     // zero stock_movement rows anywhere (see the "never moved" test
     // above) gets null.
     expect(results[0]?.counterStockMilli).toBe(0);
+    // P17-2 review fix: isLowStock is computed here, not re-derived by
+    // any consumer — the custody case (0 at Shop, real stock elsewhere)
+    // is flagged under the default 0 threshold, same as
+    // item.handler.test.ts's runLowStockCount custody case.
+    expect(results[0]?.isLowStock).toBe(true);
   });
 });
 

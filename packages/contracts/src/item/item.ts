@@ -101,6 +101,10 @@ export const ItemDto = z.object({
   // today only via CSV import ("Low Stock Alert Qty"). Null means "use
   // the shop-wide default" (see setting:getDefaultLowStockThreshold).
   reorderLevelMilli: z.number().int().nullable(),
+  // P17-2 review fix. Computed server-side (`@shop/core`'s `isLowStock`,
+  // against counterStockMilli + the shop-wide default threshold) — the
+  // client only renders this, it never re-derives the rule itself.
+  isLowStock: z.boolean(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
 

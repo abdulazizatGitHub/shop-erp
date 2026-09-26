@@ -19,7 +19,6 @@ vi.mock('../../lib/ipc.js', () => ({
         pctPresets: [],
       }),
       getNegativeStockPolicy: vi.fn().mockResolvedValue('warn'),
-      getDefaultLowStockThreshold: vi.fn().mockResolvedValue(0),
     },
     sale: {
       create: vi.fn(),
@@ -66,7 +65,6 @@ beforeEach(() => {
     pctPresets: [],
   });
   vi.mocked(ipc.setting.getNegativeStockPolicy).mockResolvedValue('warn');
-  vi.mocked(ipc.setting.getDefaultLowStockThreshold).mockResolvedValue(0);
   vi.mocked(ipc.sale.cancel).mockResolvedValue(undefined);
 });
 

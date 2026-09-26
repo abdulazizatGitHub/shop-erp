@@ -30,6 +30,7 @@ function makeItem(overrides: Partial<ItemDto>): ItemDto {
     stockOnHandMilli: 10000,
     counterStockMilli: 10000,
     reorderLevelMilli: null,
+    isLowStock: false,
     ...overrides,
   };
 }
@@ -60,7 +61,6 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
         onCheckoutTrigger={() => {}}
         onError={() => {}}
         negativeStockPolicy="block"
-        defaultLowStockThresholdMilli={0}
       />,
     );
 
@@ -94,7 +94,6 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
         onCheckoutTrigger={() => {}}
         onError={() => {}}
         negativeStockPolicy="warn"
-        defaultLowStockThresholdMilli={0}
       />,
     );
 
@@ -126,7 +125,6 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
         onCheckoutTrigger={() => {}}
         onError={() => {}}
         negativeStockPolicy="block"
-        defaultLowStockThresholdMilli={0}
       />,
     );
 
@@ -165,7 +163,6 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
         onCheckoutTrigger={() => {}}
         onError={() => {}}
         negativeStockPolicy="block"
-        defaultLowStockThresholdMilli={0}
       />,
     );
 

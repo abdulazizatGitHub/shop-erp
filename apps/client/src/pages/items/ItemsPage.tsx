@@ -13,7 +13,6 @@ import {
   TextInput,
   useToast,
 } from '@shop/ui';
-import { isLowStock } from '../../components/shared/StockBadge.js';
 import { ipc } from '../../lib/ipc.js';
 import { AddItemModal } from './AddItemModal.js';
 import { ImportItemsModal } from './ImportItemsModal.js';
@@ -27,7 +26,6 @@ export function ItemsPage(): React.JSX.Element {
   const [items, setItems] = useState<readonly ItemDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [defaultLowStockThresholdMilli, setDefaultLowStockThresholdMilli] = useState(0);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importOpeningStockOpen, setImportOpeningStockOpen] = useState(false);
@@ -58,16 +56,16 @@ export function ItemsPage(): React.JSX.Element {
         });
       });
     loadItems();
-    // P17-2: read-only, no toast on failure — the threshold silently
-    // falls back to 0 (the safe default), same pattern as useSaleFlow.ts.
-    ipc.setting
-      .getDefaultLowStockThreshold()
-      .then(setDefaultLowStockThresholdMilli)
-      .catch(() => {
-        // stays 0
-      });
   }, []);
 
+  // P17-2 review fix: `isLowStock` is a plain server-computed field on
+  // ItemDto (item.repository.ts, via @shop/core's isLowStock) — filtering
+  // on it here is a trivial boolean check, not a re-derivation of the
+  // rule. No pagination exists on this list (loadItems fetches the whole
+  // catalogue in one call, no LIMIT anywhere in searchItems' SQL — see
+  // item.repository.ts), so this filter always runs over the exact same
+  // complete set runLowStockCount() counts over (item.handler.test.ts's
+  // "spans more than one page" test proves the two can never disagree).
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let result = items;
@@ -77,17 +75,10 @@ export function ItemsPage(): React.JSX.Element {
       );
     }
     if (lowStockOnly) {
-      result = result.filter((item) =>
-        isLowStock(
-          item.counterStockMilli,
-          item.trackStock,
-          item.reorderLevelMilli,
-          defaultLowStockThresholdMilli,
-        ),
-      );
+      result = result.filter((item) => item.isLowStock);
     }
     return result;
-  }, [items, searchQuery, lowStockOnly, defaultLowStockThresholdMilli]);
+  }, [items, searchQuery, lowStockOnly]);
 
   const uomName = (id: string): string => lookups?.uoms.find((u) => u.id === id)?.name ?? id;
 
@@ -193,7 +184,6 @@ export function ItemsPage(): React.JSX.Element {
                     item={item}
                     lookups={lookups}
                     uomName={uomName}
-                    defaultLowStockThresholdMilli={defaultLowStockThresholdMilli}
                     onHistoryClick={setHistoryItem}
                   />
                 ))}

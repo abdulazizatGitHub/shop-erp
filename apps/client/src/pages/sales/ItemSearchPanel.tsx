@@ -39,8 +39,6 @@ export interface ItemSearchPanelProps {
    * over-blocked before the real value arrives.
    */
   readonly negativeStockPolicy: 'warn' | 'block';
-  /** P17-2 — shop-wide fallback for the product-card stock badge when an item's own reorderLevelMilli is null. */
-  readonly defaultLowStockThresholdMilli: number;
 }
 
 /** Left-panel item search: filter tabs, POS product card grid (E-4), and the inline qty step. No cart/checkout logic — that stays in SalePage. */
@@ -51,7 +49,6 @@ export function ItemSearchPanel({
   onCheckoutTrigger,
   onError,
   negativeStockPolicy,
-  defaultLowStockThresholdMilli,
 }: ItemSearchPanelProps): React.JSX.Element {
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [pendingItem, setPendingItem] = useState<ItemDto | null>(null);
@@ -246,12 +243,7 @@ export function ItemSearchPanel({
             </span>
           </div>
         ) : (
-          <ItemProductCard
-            item={item}
-            lookups={lookups}
-            selected={highlighted}
-            defaultLowStockThresholdMilli={defaultLowStockThresholdMilli}
-          />
+          <ItemProductCard item={item} lookups={lookups} selected={highlighted} />
         )
       }
       renderEmpty={() => <EmptyState message="No items found" />}

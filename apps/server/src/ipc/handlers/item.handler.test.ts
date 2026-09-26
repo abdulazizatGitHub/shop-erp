@@ -4,6 +4,7 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@shop/shared';
+import { searchItems } from '@shop/core';
 import {
   openDatabase,
   migrate,
@@ -206,4 +207,56 @@ describe('runLowStockCount', () => {
     const count = await runLowStockCount(deps);
     expect(count).toBe(1);
   });
+
+  it(
+    'review fix: with low-stock items scattered across a catalogue larger than any assumed page ' +
+      "size, the Items list's client-side filter (item.isLowStock, no re-derivation) and the " +
+      'Dashboard count agree exactly — because item.repository.ts.searchItems has no LIMIT/OFFSET ' +
+      'at all (confirmed by reading the SQL), there is no page boundary for either side to disagree ' +
+      'across',
+    async () => {
+      const db = openDatabase(dbPath);
+      const itemRepo = new KyselyItemRepository(createKyselyDb(db), TENANT_ID, DEVICE_CODE);
+      const itemIds: string[] = [];
+      // 30 items — comfortably larger than any typical UI page size (10-25).
+      for (let i = 0; i < 30; i++) {
+        // Every 4th item is low stock (0 qty, default threshold 0);
+        // deliberately scattered through the insertion order, not
+        // clustered at either end.
+        const item = await itemRepo.createItem({
+          itemCode: null,
+          nameEn: `Bulk Item ${String(i).padStart(2, '0')}`,
+          nameUr: null,
+          businessUnitId,
+          stockUomId: pieceUomId,
+          trackStock: true,
+          retailPricePaisa: 100000,
+        });
+        itemIds.push(item.id);
+      }
+      db.close();
+      for (let i = 0; i < itemIds.length; i++) {
+        const id = itemIds[i];
+        if (id === undefined) continue;
+        // Every 4th item stays at 0 (low stock); the rest get real stock.
+        insertStockMovement(id, warehouseId, i % 4 === 0 ? 0 : 50000);
+      }
+
+      const readDb = openDatabase(dbPath);
+      const readRepo = new KyselyItemRepository(createKyselyDb(readDb), TENANT_ID, DEVICE_CODE);
+      const items = await searchItems(readRepo, { query: '', categoryId: null });
+      readDb.close();
+
+      expect(items).toHaveLength(30);
+      const expectedLowStockCount = itemIds.filter((_, i) => i % 4 === 0).length;
+      expect(expectedLowStockCount).toBe(8); // hand-calculated: ceil(30/4) = 8 (indices 0,4,...,28)
+
+      const filteredListCount = items.filter((item) => item.isLowStock).length;
+      const dashboardCount = await runLowStockCount(deps);
+
+      expect(filteredListCount).toBe(expectedLowStockCount);
+      expect(dashboardCount).toBe(expectedLowStockCount);
+      expect(filteredListCount).toBe(dashboardCount);
+    },
+  );
 });
