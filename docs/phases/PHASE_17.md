@@ -6,21 +6,28 @@
 **Branch:** main
 **No code, no migrations, no schema changes were written for this document.**
 
+**Revision note (this pass):** the first draft of this document relied on
+stale `PROJECT.md` prose for several claims (attendance schema, commission
+storage, expense-category filtering, overhead-split consumers, low-stock
+semantics, paper-size wiring, negative-stock scope). Every item below was
+re-verified against the live code before this revision. Corrections are
+called out inline where they change a conclusion from the first draft.
+Owner answers to §7 are recorded and marked ANSWERED.
+
 ---
 
 ## 1. Goal
 
 Every module in the sidebar (Sales/POS, Items, Suppliers, Purchase Orders &
 GRN, Customers, Reports, Expenses, Staff & Attendance, Custody, Dashboard,
-printing/documents) has been checked against the codebase for hardcoded
-business policy that an owner would plausibly want to change, cross-checked
-against every earlier owner discussion already recorded in `PROJECT.md`
-(the "Settings Backlog" section, §Open Questions, "Future Feature Requests"),
-and turned into a single scoped, tiered inventory the owner can approve
-section by section. This document is that inventory. It decides nothing by
-itself — every T1/T2 item still needs an explicit owner go-ahead before any
-code is written, and Q17-1 through Q17-N (§7) are open questions for the
-owner, not decisions.
+printing/documents) has been checked against the **live code** for
+hardcoded business policy that an owner would plausibly want to change,
+cross-checked against every earlier owner discussion already recorded in
+`PROJECT.md`, and turned into a single scoped, tiered inventory. This
+document is that inventory, revised once against direct verification.
+Every T1/T2 item still needs an explicit owner go-ahead before any code is
+written — the five original open questions (Q17-1–Q17-5) have now been
+answered by the owner and are recorded as ANSWERED in §7.
 
 Go-live preparation (Phase 5's remaining exit criteria — parallel run,
 pull-the-plug test, staff training) is explicitly **not** covered here; it
@@ -37,105 +44,233 @@ table with add/edit/deactivate · MIG = needs a new migration.
 
 ### 2.1 Sales / POS
 
-| ID         | Setting                                                                             | Source                                                                                                                                     | Today's behaviour                                                                                                                                               | Proposed control & default                                                                                                                       | Storage                                    | Money/stock impact & history protection                                                                                                                                                                                | Effort | Tier     |
-| ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
-| S17-SALE-1 | Negative-stock policy at sale time (warn vs block)                                  | `packages/core/src/sale/sale.ts:61`; `docs/PROJECT_STRUCTURE.md:233` names an intended (never built) `packages/policies/negative-stock.ts` | Always allowed, always warns via `ConfirmDialog` (BUG-Y). Never blocks.                                                                                         | Settings toggle `negativeStockPolicy: 'warn' \| 'block'`, default `'warn'` (= today's behaviour, unchanged)                                      | KV (`setting.key = 'negativeStockPolicy'`) | No history rewrite — this only gates the NEXT sale's warning-gate step; nothing about `stock_movement` changes. A sale already committed under "warn" stays valid forever even if the owner later switches to "block". | S      | T1       |
-| S17-SALE-2 | POS/product grid default (owner-pinned vs recent items)                             | Phase 8 open item (owner discussion, chat-derived — not in PROJECT.md by that name)                                                        | No grid exists at all — Sales screen is search-only (`SalePage.tsx`, `ItemSearchPanel.tsx`). Confirmed by grep: zero `ProductGrid`/`pinned`/`recentItems` hits. | **Reject for T1/T2** — see §3. Building a grid is a UI feature, not a setting; a "default view" setting is meaningless until the feature exists. | —                                          | —                                                                                                                                                                                                                      | —      | T3       |
-| S17-SALE-3 | Rows-per-page for reference-data lists reused on Sales (e.g. item search page size) | Not requested by owner; found only via code audit                                                                                          | No pagination exists on the search-driven item picker (it's a live-filtered dropdown, not a paged list)                                                         | Reject — no matching UI to configure                                                                                                             | —                                          | —                                                                                                                                                                                                                      | —      | Rejected |
+**Correction (was inaccurate in the first draft):** two distinct
+mechanisms exist for stock-going-negative, not one. (1) Phase 10 (P10-1)
+already hard-blocks adding an item whose _current_ `stockOnHandMilli <= 0`
+to the cart at all (`ItemSearchPanel.tsx`, matching `resolveStockBadge()`'s
+`<= 0` condition) — this is permanent, already shipped, and **is not
+touched by anything in this phase**. (2) A cart line that starts from
+positive stock but is quantitied beyond what's actually on hand is still
+only **warned**, never blocked, at commit time: `isStockBelowZero`
+(`packages/core/src/sale/sale.ts:61-64`), called once from
+`packages/db/src/repositories/sale.repository.ts:220`, feeding
+`warnings.stockBelowZero` (`sale.repository.ts:427`) — the sale still
+commits and stock goes negative. S17-SALE-1 below is about mechanism (2)
+only.
+
+| ID         | Setting                                                                                                     | Source                                                                                            | Today's behaviour                                                                                                                                                                      | Proposed control & default                                                                                                                                                  | Storage                                    | Money/stock impact & history protection                                                                                                                                     | Effort | Tier     |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
+| S17-SALE-1 | Negative-stock policy for a counter sale whose requested quantity exceeds on-hand stock (mechanism 2 above) | `packages/core/src/sale/sale.ts:61-64`; `packages/db/src/repositories/sale.repository.ts:220,427` | Always allowed, always warns via `ConfirmDialog`. Never blocks. (The separate already-at-zero case, mechanism 1, is already hard-blocked since Phase 10 and is unaffected either way.) | Settings toggle `negativeStockPolicy: 'warn' \| 'block'`, default `'warn'` (= today's behaviour, unchanged). **Scope: counter sales only** — see the code-path table below. | KV (`setting.key = 'negativeStockPolicy'`) | No history rewrite — gates only the NEXT counter sale's commit step. A sale already committed under 'warn' stays valid forever even if the owner later switches to 'block'. | M      | T1       |
+| S17-SALE-2 | POS/product grid default (owner-pinned vs recent items)                                                     | Phase 8 open item (owner discussion, chat-derived)                                                | No grid exists at all — Sales screen is search-only. Confirmed by grep: zero `ProductGrid`/`pinned`/`recentItems` hits.                                                                | **Reject for T1/T2** — see §3.                                                                                                                                              | —                                          | —                                                                                                                                                                           | —      | T3       |
+| S17-SALE-3 | Rows-per-page for reference-data lists reused on Sales                                                      | Not requested; code audit only                                                                    | No pagination exists on the search-driven item picker                                                                                                                                  | Reject — no matching UI to configure                                                                                                                                        | —                                          | —                                                                                                                                                                           | —      | Rejected |
+
+**Exact code-path scope for the 'block' mode (C17-7), verified:**
+
+| Code path                                | File:line                                               | Movement type           | Affected by 'block'?                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Counter sale line                        | `sale.repository.ts:220,339`                            | `sale`                  | **Yes — the only path this setting touches.** When `'block'`, the transaction throws instead of setting `warnings.stockBelowZero = true`; `SalePage.tsx` must show a hard error for this one case (the credit-limit warning path, `isCreditLimitExceeded`, is a separate flag and stays a warn-only `ConfirmDialog`, untouched). |
+| Issue part to technician custody         | `job-part.repository.ts:132` (`issuePartsToTechnician`) | `transfer_out`          | **No.** Has no stock check today at all (confirmed by reading the function in full) — stays exactly as-is.                                                                                                                                                                                                                       |
+| Issue part to a job                      | `job-part.repository.ts:316` (`issuePartsToJob`)        | `job_issue`             | **No.** Same — no check exists, none added.                                                                                                                                                                                                                                                                                      |
+| Internal transfer (Spare Parts → Repair) | `internal-transfer.repository.ts:172`                   | `transfer_out`          | **No.** No check exists, none added.                                                                                                                                                                                                                                                                                             |
+| GRN cancellation reversal                | `grn.repository.ts:656`                                 | `purchase_cancellation` | **No.** No check exists, none added — a reversal must always be allowed to post regardless of resulting stock level.                                                                                                                                                                                                             |
+| Purchase cancellation reversal           | `purchase.repository.ts:384`                            | `purchase_return`       | **No.** Same reasoning as above.                                                                                                                                                                                                                                                                                                 |
 
 ### 2.2 Items / Stock
 
-| ID         | Setting                                                                                 | Source                                                                                                                                                                                                                                                                           | Today's behaviour                                                                                                                    | Proposed control & default                                                                                                                                                                                                                                                                                                                                                                             | Storage                                                             | Money/stock impact & history protection                                  | Effort | Tier |
-| ---------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ---- |
-| S17-ITEM-1 | Low-stock alert — per-item reorder level already exists in schema but is never surfaced | `packages/db/src/kysely-schema.ts:30` (`reorderLevel`), `item-import.ts:41,268-325` (CSV column already maps into it); PROJECT.md:4223-4224 (S-B1, described as "not yet in schema" — **stale**, the column exists and is populated by import, only the UI read path is missing) | `reorderLevel` is stored per item (settable via import) but never read by any screen — no low-stock badge, no alert, no list filter. | Items list gets a "Low stock" badge/filter reading `qtyOnHand <= reorderLevel` (existing column, no new setting needed for the threshold itself — it is already per-item data, correctly not shop-wide). Optionally add ONE Settings toggle: "Show low-stock badge in Items list", default ON (=today's _absence_ of the badge is the true baseline, so default must be chosen carefully — see Q17-3). | REF (existing `item.reorder_level` column) + one KV toggle if built | Read-only — no money/stock write path touched at all. Zero history risk. | S      | T1   |
-| S17-ITEM-2 | Low-stock alert default threshold when an item has no `reorderLevel` set                | Same as above                                                                                                                                                                                                                                                                    | No fallback — a null `reorderLevel` item is simply never flagged                                                                     | Settings numeric field: "Default low-stock qty (used when an item has no reorder level set)", default `0` (= today's effective behaviour: an item with no threshold is never flagged)                                                                                                                                                                                                                  | KV                                                                  | Read-only. No history risk.                                              | S      | T1   |
+**Correction (C17-5):** the first draft said low-stock items are "never
+flagged" with no stated rule for when the feature is built. The rule is
+now fixed by owner answer (Q17-3): flagged when
+`qty_on_hand <= item.reorder_level`, or `<= shop default` when
+`reorder_level` is `NULL`; shop default = `0` (so an out-of-stock or
+negative item is always flagged even with no reorder level set). Today,
+nothing reads `reorderLevel` in any UI at all — that part of the original
+finding still holds.
+
+| ID         | Setting                                                              | Source                                                                                                                                          | Today's behaviour                                                                 | Proposed control & default                                                                                                                                                                                                                                                                                     | Storage                                                                                                | Money/stock impact & history protection | Effort | Tier |
+| ---------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- | ------ | ---- |
+| S17-ITEM-1 | Low-stock badge on the Items list, rule per C17-5                    | `packages/db/src/kysely-schema.ts:30` (`reorderLevel`), `item-import.ts:41,268-325` (CSV already populates it); confirmed zero UI read anywhere | `reorderLevel` stored per item, populated by CSV import, never read by any screen | Items list badge/filter: flagged when `qtyOnHand <= reorderLevel` (or `<= 0` when `reorderLevel` is null). **Default ON** (Q17-3, ANSWERED) — a purely informational badge carries no transactional risk, and hiding real already-present low-stock data by default would be a worse surprise than showing it. | REF (existing `item.reorder_level` column) + one KV toggle to hide the badge if the owner wants it off | Read-only. Zero history risk.           | S      | T1   |
+| S17-ITEM-2 | Shop-wide default low-stock threshold when `reorder_level` is `NULL` | Same as above                                                                                                                                   | No fallback exists — a null-threshold item is never flagged today                 | Settings numeric field "Default low-stock qty" — **default `0`** (Q17-3, ANSWERED, matches C17-5's rule exactly)                                                                                                                                                                                               | KV                                                                                                     | Read-only. Zero history risk.           | S      | T1   |
 
 ### 2.3 Suppliers / Purchase Orders & GRN
 
-| ID        | Setting                                                               | Source                                               | Today's behaviour                                                                                                                                               | Proposed control & default                                                                                                                                     | Storage                                             | Money/stock impact & history protection | Effort | Tier |
-| --------- | --------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------- | ------ | ---- |
-| S17-PUR-1 | Purchase/GRN/Purchase-Order document print paper size                 | Code audit (not previously requested)                | `purchase-pdf.ts:45` hardcodes `size: 'A4'` regardless of the existing Settings A4/A5 toggle that already governs sale receipts (`setting.repository.ts:12-15`) | Extend the existing `receiptPaperSize` read to purchase-order/GRN print paths — no new setting, this is a bug-fix/consistency item, not a new control          | KV (existing key, wire it into a second print path) | None — print-time only, no data write   | S      | T2   |
-| S17-PUR-2 | Supplier/Customer/Purchase settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B3/S-B4 ("deferred") | No Settings section exists for either module                                                                                                                    | See §3 — rejected as too vague to scope without the owner naming a specific control; PROJECT.md's own entries for these say "deferred", not "define this list" | —                                                   | —                                       | —      | T3   |
+| ID        | Setting                                                               | Source                                               | Today's behaviour                                         | Proposed control & default                            | Storage           | Money/stock impact & history protection | Effort | Tier |
+| --------- | --------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------- | ----------------- | --------------------------------------- | ------ | ---- |
+| S17-PUR-1 | Purchase/GRN document print paper size                                | Code audit                                           | See §2.9 S17-PRINT-2b — folded there to avoid duplication | —                                                     | KV (existing key) | Print-time only                         | S      | T2   |
+| S17-PUR-2 | Supplier/Customer/Purchase settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B3/S-B4 ("deferred") | No Settings section exists for either module              | Rejected — too vague to scope without a named control | —                 | —                                       | —      | T3   |
 
 ### 2.4 Customers
 
-| ID        | Setting                                             | Source                                          | Today's behaviour                 | Proposed control & default                                                                                                                                     | Storage | Money/stock impact & history protection | Effort | Tier |
-| --------- | --------------------------------------------------- | ----------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------- | ------ | ---- |
-| S17-CUS-1 | Customer settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B2 ("deferred") | No Settings section for Customers | Rejected for T1/T2 — nothing concrete named. Credit-limit default is already per-customer, nullable (`customer.ts:16,40`), already correct — no change needed. | —       | —                                       | —      | T3   |
+| ID        | Setting                                             | Source                                          | Today's behaviour                 | Proposed control & default                                                                 | Storage | Money/stock impact & history protection | Effort | Tier |
+| --------- | --------------------------------------------------- | ----------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ | ------- | --------------------------------------- | ------ | ---- |
+| S17-CUS-1 | Customer settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B2 ("deferred") | No Settings section for Customers | Rejected — credit-limit default is already per-customer, nullable, correctly not shop-wide | —       | —                                       | —      | T3   |
 
 ### 2.5 Reports
 
-| ID        | Setting                                      | Source                                                                                      | Today's behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Proposed control & default                                                                                                                                                                                                                                                   | Storage                                                             | Money/stock impact & history protection     | Effort                                                                                                                                       | Tier     |
-| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| S17-REP-1 | Rows per page across every report/list table | PROJECT.md:253,1002,4238-4241 (S-B5); `docs/phases/PHASE_11.md:61` (explicit deferral note) | 11 separate hardcoded `const ROWS_PER_PAGE = 10;` copies (`DailySalesReport.tsx:27`, `CashBookReport.tsx:34`, `JobsPage.tsx:36`, `BestPerformersTable.tsx:15`, `ItemsSoldTable.tsx:15`, `WageMonthReport.tsx:35`, `ReceivablesAgingReport.tsx:26`, `ExpensesReport.tsx:37`, `JobSplitReport.tsx:35`, `StockValuationReport.tsx:27`); `CustomerLedgerTable.tsx:41` uses `15` — an unexplained, pre-existing inconsistency to flag, not silently normalize away (see Q17-2). | One Settings numeric field, "Rows per page" (10/25/50 choices), default `10` (= today's behaviour everywhere except the Customer ledger table, which is a pre-existing inconsistency the owner should be told about, not one this phase silently "fixes" by picking a side). | KV (`setting.key = 'rowsPerPage'`), read once at each table's mount | Read-only display setting. No history risk. | M — touches 11+ files, each a one-line constant replaced with a shared read, but each file must be verified independently per Golden Rule #4 | T1       |
-| S17-REP-2 | Report date format                           | PROJECT.md §Settings Backlog, S-B5                                                          | Fixed format, not owner-facing today                                                                                                                                                                                                                                                                                                                                                                                                                                       | Rejected for T1 — no concrete owner complaint on record, bundling it with ROWS_PER_PAGE would blur one task into two; revisit only if the owner raises it                                                                                                                    | —                                                                   | —                                           | —                                                                                                                                            | T3       |
-| S17-REP-3 | Report default date range                    | PROJECT.md §Settings Backlog, S-B5                                                          | Every report defaults to "This Month" via `DateRangeSelector.tsx:20-27`'s hardcoded `PRESETS` list (5 presets: today/thisWeek/thisMonth/thisQuarter/thisYear)                                                                                                                                                                                                                                                                                                              | Rejected for T1/T2 — the 5 presets themselves are a UI feature (already flexible), not a hidden policy; "which preset is pre-selected" is cosmetic, not a business variation an owner would plausibly ask to change per CLAUDE.md §Settings rule 2                           | —                                                                   | —                                           | —                                                                                                                                            | Rejected |
+| ID        | Setting                                      | Source                                                                                      | Today's behaviour                                                                                                                                                                                                                                                                                                                                                                                                        | Proposed control & default                                                                                                                                                                                                                                                                          | Storage                                                             | Money/stock impact & history protection     | Effort                                                                                               | Tier     |
+| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------- |
+| S17-REP-1 | Rows per page across every report/list table | PROJECT.md:253,1002,4238-4241 (S-B5); `docs/phases/PHASE_11.md:61` (explicit deferral note) | 11 separate hardcoded `const ROWS_PER_PAGE = 10;` copies (`DailySalesReport.tsx:27`, `CashBookReport.tsx:34`, `JobsPage.tsx:36`, `BestPerformersTable.tsx:15`, `ItemsSoldTable.tsx:15`, `WageMonthReport.tsx:35`, `ReceivablesAgingReport.tsx:26`, `ExpensesReport.tsx:37`, `JobSplitReport.tsx:35`, `StockValuationReport.tsx:27`); `CustomerLedgerTable.tsx:41` uses `15` — an unexplained, pre-existing inconsistency | One Settings numeric field, "Rows per page" (10/25/50 choices). **Default `10` everywhere, including `CustomerLedgerTable` (Q17-2, ANSWERED)** — this is a deliberate, owner-approved behavior change for that one table (15→10), removing the unexplained inconsistency rather than enshrining it. | KV (`setting.key = 'rowsPerPage'`), read once at each table's mount | Read-only display setting. No history risk. | M — touches 12 files (11 reports + the ledger table), each independently verified per Golden Rule #4 | T1       |
+| S17-REP-2 | Report date format                           | PROJECT.md §Settings Backlog, S-B5                                                          | Fixed format, not owner-facing today                                                                                                                                                                                                                                                                                                                                                                                     | Rejected — no concrete owner complaint on record                                                                                                                                                                                                                                                    | —                                                                   | —                                           | —                                                                                                    | T3       |
+| S17-REP-3 | Report default date range                    | PROJECT.md §Settings Backlog, S-B5                                                          | Every report defaults to "This Month" via `DateRangeSelector.tsx:20-27`'s hardcoded `PRESETS` list                                                                                                                                                                                                                                                                                                                       | Rejected — cosmetic UI default, not a business-policy variation                                                                                                                                                                                                                                     | —                                                                   | —                                           | —                                                                                                    | Rejected |
 
 ### 2.6 Expenses
 
-| ID        | Setting                                                                     | Source                                                                                                                           | Today's behaviour                                                                                                                                                                                                                                                                       | Proposed control & default                                                                                                                                                                                                                                                                                                                             | Storage                                                                       | Money/stock impact & history protection                                                                                                                                                                                             | Effort                          | Tier                  |
-| --------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------- |
-| S17-EXP-1 | Manage expense categories from Settings                                     | PROJECT.md §Settings Backlog, S-B7 ("current behaviour acceptable — deferred")                                                   | `expense_category` table exists (`0001_init.sql:493`, columns `kind`, `is_billable`, `is_owner_drawing`, `sort_order`) with 6 bootstrap-seeded rows (`bootstrap.ts:44-51`), editable only by direct DB access — no repository write path, no Settings UI                                | New Settings section "Expense Categories" — list/create/edit/deactivate, mirroring the Service Charges/Brands pattern from Phase 16 exactly. Default = today's 6 seeded categories, unchanged, nothing re-tagged.                                                                                                                                      | REF (`expense_category`, needs a repository write path — currently read-only) | Existing `expense` rows keep their `expense_category_id` FK untouched; deactivating a category (soft `deleted_at`, per DATABASE_RULES.md §3) never edits historical expense rows, only hides the category from new-expense pickers. | M                               | T1                    |
-| S17-EXP-2 | Manage payment methods from Settings                                        | Owner discussion (chat-derived) + PROJECT.md's general phrasing "manage ... payment methods from Settings"                       | No payment-method reference table exists at all — `CreatePaymentInput['method']` is a closed Zod enum (`cash`/`bank`/`easypaisa`/`jazzcash`/`cheque`), hardcoded in `PaymentMethodToggle.tsx:7-17`; `advance.repository.ts:21` separately hardcodes advances to always post as `'cash'` | Rejected for T1 — turning a closed enum into owner-editable reference data means every consumer (payment recording, receipts, reports' cash-vs-method breakdowns) must handle an open-ended method list; that is a schema-and-report-wide change disguised as a "settings" ask. Flag to owner as its own future task, not bundled into Phase 17 T1/T2. | REF if ever built                                                             | N/A                                                                                                                                                                                                                                 | L                               | T3                    |
-| S17-EXP-3 | Q10 — `parts_share_bp` allocation for SHARED categories (electricity, rent) | PROJECT.md §Open Questions Q10 (`PROJECT.md:4328`); `bootstrap.ts:39-42` ("No `parts_share_bp` is set on any row... stays OPEN") | Every `expense_category` row has an `allocationMethod`/split-basis-points column that is never set on any seeded row — Repair-vs-Spare-Parts overhead split for shared costs is undefined                                                                                               | See Q17-1 (§7) — this is an **owner decision**, not a UI-design question: what split percentage, and does it vary by category? Once decided, the control itself is a plain numeric field per SHARED category (already has a column to hold it) — no new table, no migration.                                                                           | REF (existing column, currently unset)                                        | Snapshot-safe by construction: `parts_share_bp` only affects future overhead-report calculations, never rewrites a posted `expense` row.                                                                                            | S (once the split % is decided) | T1 (blocked on Q17-1) |
+**Correction (C17-3):** verified every report/view query that joins
+`expense_category` — none of `v_unit_direct_expense`
+(`0003_shared_overhead.sql:81-92`), `v_overhead_pool` (`:94-106`),
+`v_owner_drawings` (`:127-135`), or `getExpenseSummaryReport`
+(`report.repository.ts:579-593`) filters `ec.deleted_at IS NULL`. The
+**only** query that does is `listCategories()`
+(`expense.repository.ts:174-184`) — correctly, since that is the
+create-expense-form category picker, which should hide inactive
+categories from new use while every report keeps showing history
+regardless. **Conclusion: reusing the existing `deleted_at` column for
+deactivation is safe — no new `is_active` migration is needed**, unlike
+the concern this correction anticipated (contrast with Brand, which has
+no separate `is_active` either and uses the identical pattern). Also
+confirmed: `expense_category` has zero repository write path today
+(`expense.handler.ts` exposes exactly 4 read-only channels: `create` (for
+expenses, not categories), `list`, `listCategories`, `listBusinessUnits` —
+no category create/update/toggle channel exists).
+
+| ID        | Setting                                                                                           | Source                                                                         | Today's behaviour                                                                                                                                   | Proposed control & default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Storage                                                                       | Money/stock impact & history protection                                                                                                                                                                                            | Effort | Tier                                           |
+| --------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------- |
+| S17-EXP-1 | Manage expense categories from Settings                                                           | PROJECT.md §Settings Backlog, S-B7 ("current behaviour acceptable — deferred") | `expense_category` (6 bootstrap-seeded rows, `bootstrap.ts:44-51`) has no repository write path at all — only a read for the expense-entry dropdown | New Settings section "Expense Categories" — list/create/edit(name-only-once-referenced)/deactivate, mirroring the Service Charges/Brands pattern (Phase 16) exactly. Default = today's 6 seeded categories, unchanged. **Rule (Q17-5, ANSWERED):** deactivation always allowed (soft, existing `deleted_at`); once ANY expense references a category, only its `name` stays editable — `kind`/`is_billable`/`is_owner_drawing`/`allocation_method`/`business_unit_id` lock. Enforced by a new core check (e.g. `assertExpenseCategoryFieldsLocked`), following the exact precedent of `assertCommissionModeConsistent` (`packages/core/src/job/service-charge.service.ts:21-84`) — logic lives in `packages/core`, never a DB constraint (CLAUDE.md §3.7). | REF (`expense_category`, needs a repository write path — currently read-only) | Deactivating a category never edits a historical `expense` row's `category_id` — confirmed no report filters `deleted_at`, so reports keep showing the historical amount for the period it occurred in, exactly as Q17-5 requires. | M      | T1                                             |
+| S17-EXP-2 | Manage payment methods from Settings (full open-ended reference-data version)                     | Owner discussion (chat-derived)                                                | No payment-method reference table exists — `CreatePaymentInput['method']` is a closed Zod enum                                                      | Rejected for T1 — turning the closed enum into open reference data ripples into payment recording, receipts, and every cash-vs-method report. See S17-EXP-4 below for the smaller, accepted version of this ask.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                                                                             | —                                                                                                                                                                                                                                  | L      | T3                                             |
+| S17-EXP-3 | Q10 — `parts_share_bp` allocation for SHARED categories (electricity, rent)                       | PROJECT.md §Open Questions Q10; `bootstrap.ts:39-42`                           | Every `expense_category` row has `allocation_method`/`parts_share_bp` columns, always `NULL` on every seeded row                                    | **Corrected tier (C17-4): moved to T3.** Verified there is no live consumer: `v_overhead_pool` (`0003_shared_overhead.sql:94-106`) only `SELECT`s/`GROUP BY`s `parts_share_bp` as a passthrough column alongside `SUM(e.amount)` — no SQL or application code anywhere performs the actual bp-split arithmetic. Nothing shows the owner a real split number today. Reason for T3: **no consumer — belongs with a future unit P&L overhead report**, not this settings inventory. The 50/50 recommendation from the first draft is withdrawn — split percentages are the owner's decision alone, to be made when that report is actually built.                                                                                                             | REF (existing columns, currently unset)                                       | N/A — not built this phase                                                                                                                                                                                                         | —      | T3 (Q17-1, ANSWERED: do not build in Phase 17) |
+| S17-EXP-4 | Enable/disable the existing 5 fixed payment methods from Settings (hide unused ones from pickers) | Code audit (C17-8)                                                             | `PaymentMethodToggle.tsx:12-16` hardcodes cash/bank/easypaisa/jazzcash/cheque with no enable/disable concept                                        | New KV boolean per method (e.g. `paymentMethodJazzcashEnabled`), all default `true` (= today's behaviour, every method shown). Follows the exact precedent already shipped in `DiscountsSettingsSection.tsx` (`getDiscountPkrEnabled`/`setDiscountPkrEnabled`, lines 43-44, 98-99, 164, 188) — a KV toggle gating which options render, no schema/enum change.                                                                                                                                                                                                                                                                                                                                                                                             | KV                                                                            | `CreatePaymentInput['method']` stays a closed union — hiding a method from the picker never touches a stored historical `payment.method` value.                                                                                    | S      | T2                                             |
 
 ### 2.7 Staff & Attendance
 
-| ID          | Setting                                          | Source                                                                  | Today's behaviour                     | Proposed control & default                                                                                                                               | Storage | Money/stock impact & history protection | Effort | Tier |
-| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------- | ------ | ---- |
-| S17-STAFF-1 | Staff settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B6 ("deferred")                         | No Settings section                   | Rejected — nothing concrete named beyond the general request; commission rate is already per-technician (`party.commission_bp`), correctly not shop-wide | —       | —                                       | —      | T3   |
-| S17-STAFF-2 | Attendance settings                              | PROJECT.md §Settings Backlog, S-B8 ("no schema support yet — deferred") | No `attendance` schema support at all | Rejected — a settings screen cannot precede the schema it configures                                                                                     | —       | —                                       | —      | T3   |
+**Correction (C17-1): the first draft's claim that Attendance "has no
+schema support" was wrong** — it relied on stale `PROJECT.md` prose
+instead of the live code. Attendance is fully built (Phase 7):
+
+- Schema: `packages/db/src/migrations/0001_init.sql:627-640` — `attendance`
+  table, `status` (`present | half_day | absent | leave | holiday`),
+  `wage_earned INTEGER NOT NULL DEFAULT 0` (paisa).
+- `wage_earned` is a **snapshot**, not a live-derived value — computed once
+  by the pure function `computeDayWage` (`packages/core/src/payroll/wage.service.ts:12-24`)
+  and written at save time by `saveAttendanceBatch`
+  (`packages/core/src/payroll/attendance.service.ts:47`), persisted as a
+  plain column (`attendance.repository.ts:76,85,131` — read back with no
+  aggregation). **Confirmed: changing any of the settings below only
+  affects future attendance entries — a previously saved `wage_earned`
+  value is never rewritten.**
+- UI: `apps/client/src/pages/attendance/AttendancePage.tsx` — a `CYCLE`
+  array (lines 21-29) and `STATUS_LABEL`/`STATUS_CLASSES` maps (lines
+  31-45), both `Record<AttendanceStatus, string>` typed against the one
+  canonical Zod enum, `packages/contracts/src/attendance/attendance.ts:8`
+  — exhaustive, not duplicated.
+
+| ID          | Setting                                          | Source                                                                                                                                                      | Today's behaviour                                                                                                                      | Proposed control & default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Storage | Money/stock impact & history protection                                                                                         | Effort | Tier     |
+| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
+| S17-STAFF-1 | Staff settings (owner's general Phase 4 request) | PROJECT.md §Settings Backlog, S-B6 ("deferred")                                                                                                             | No Settings section                                                                                                                    | **Corrected reasoning (C17-2):** `party.commission_bp` (the old per-technician rate) was **retired by ADR-0015/Phase 16** — it is still round-tripped by `party.repository.ts`/`AddStaffModal.tsx` but always forced to `0` and never read by any wage/commission calculation. Commission today is configured **per service charge**, already built in Settings → Jobs → Service Charges. There is no remaining shop-wide/per-technician default rate to expose here. Rejected — nothing concrete left to add. | —       | —                                                                                                                               | —      | T3       |
+| S17-STAFF-2 | Half-day wage fraction                           | `packages/core/src/payroll/wage.service.ts:19` — `Math.floor(wageRatePaisa / 2)`                                                                            | Hardcoded 0.5× (floored), applied to every `half_day` attendance entry                                                                 | Settings numeric field "Half-day wage fraction (%)" — **default `50`** (= today's behaviour exactly)                                                                                                                                                                                                                                                                                                                                                                                                           | KV      | `wage_earned` is a save-time snapshot (see above) — changing this setting never rewrites a past attendance row's `wage_earned`. | S      | T2       |
+| S17-STAFF-3 | Whether Leave / Holiday are paid                 | `packages/core/src/payroll/wage.service.ts:14-23` — `holiday` grouped with `present` (paid 1.0×, "shop closed"); `leave` grouped with `absent` (0×, unpaid) | Hardcoded: Holiday paid in full, Leave unpaid                                                                                          | Two Settings toggles — "Pay staff for Holiday" (**default ON**), "Pay staff for Leave" (**default OFF**) — both equal today's behaviour exactly                                                                                                                                                                                                                                                                                                                                                                | KV      | Same snapshot protection as S17-STAFF-2                                                                                         | S      | T2       |
+| S17-STAFF-4 | Weekly off day                                   | Grepped `weeklyOff`/`weekly_off`/`dayOff`/`sunday` (case-insensitive) across `packages/core`, `packages/db`, whole repo — zero matches                      | **Does not exist at all** — every calendar day is manually entered as one of the 5 statuses; there is no auto-marked recurring day off | Rejected for T1/T2 — this is a genuine feature gap (a new auto-marking concept), not a hardcoded value to flip. Would need its own schema/UI design.                                                                                                                                                                                                                                                                                                                                                           | —       | —                                                                                                                               | L      | T3       |
+| S17-STAFF-5 | Attendance status list (P/H/A/L/Ho)              | `packages/contracts/src/attendance/attendance.ts:8`                                                                                                         | Already a single canonical Zod enum, consumed (not redeclared) everywhere it's used, including the UI's own presentation maps          | Nothing to fix — reject, already correctly implemented                                                                                                                                                                                                                                                                                                                                                                                                                                                         | —       | —                                                                                                                               | —      | Rejected |
 
 ### 2.8 Custody
 
-| ID         | Setting          | Source                                                                                   | Today's behaviour                                                  | Proposed control & default                                                           | Storage | Money/stock impact & history protection | Effort | Tier     |
-| ---------- | ---------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------- | --------------------------------------- | ------ | -------- |
-| S17-CUST-1 | Custody settings | PROJECT.md §Settings Backlog, S-B9 ("ADR-0006 governs this — no Settings UI needed yet") | Custody reconciliation is noted, never auto-deducted, per ADR-0006 | Rejected — the owner's own prior ADR already settled this; no new control identified | —       | —                                       | —      | Rejected |
+| ID         | Setting          | Source                                                       | Today's behaviour                                                  | Proposed control & default                                | Storage | Money/stock impact & history protection | Effort | Tier     |
+| ---------- | ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------------------------------- | ------- | --------------------------------------- | ------ | -------- |
+| S17-CUST-1 | Custody settings | PROJECT.md §Settings Backlog, S-B9 ("ADR-0006 governs this") | Custody reconciliation is noted, never auto-deducted, per ADR-0006 | Rejected — the owner's own prior ADR already settled this | —       | —                                       | —      | Rejected |
 
 ### 2.9 Printing & documents
 
-| ID          | Setting                                                                                           | Source                                                                                                                                                       | Today's behaviour                                                                                                                                                                                                              | Proposed control & default                                                                                                                                                                                                                                                                                                               | Storage           | Money/stock impact & history protection | Effort                                                                   | Tier               |
-| ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
-| S17-PRINT-1 | Thermal printer option alongside A4/A5                                                            | PROJECT.md:959-963 ("deferred — pending hardware arrival"), PROJECT.md:1009-1013, PROJECT.md:4325 (Q7, OPEN: "Thermal printer model — blocks: print driver") | No thermal/ESC-POS code exists at all; confirmed zero `80mm`/`thermal` hits anywhere in the repo                                                                                                                               | Rejected for T1/T2, confirmed still correctly blocked — the owner has not purchased the hardware yet (Q7 still OPEN) and CLAUDE.md rule 2 requires a real, present business variation, not a speculative one. Revisit the moment hardware is confirmed.                                                                                  | —                 | —                                       | —                                                                        | T3 (blocked on Q7) |
-| S17-PRINT-2 | Extend the existing A4/A5 setting to purchase-order/GRN/payment-receipt/customer-statement prints | Code audit — same finding as S17-PUR-1                                                                                                                       | `purchase-pdf.ts:45`, `invoice-pdf.ts:11`, `payment-receipt-pdf.ts:36`, `customer-statement-pdf.ts:33` all hardcode `'A4'`, ignoring the Settings toggle that already exists and correctly governs the sale-receipt print path | Wire the existing `receiptPaperSize` setting into these four print functions — no new control, a bug-fix/consistency pass under the existing setting's own intent                                                                                                                                                                        | KV (existing key) | Print-time only. Zero history impact.   | M (4 files, each needs its own layout check at A5 width before shipping) | T2                 |
-| S17-PRINT-3 | Document number prefix customization (ADR-0012)                                                   | ADR-0012; code audit of `SALE_CODE_PREFIX` etc. across 10+ repository files                                                                                  | Prefixes (`INV`, `CUS`, `SUP`, `RCP`, `PMT`, `PUR`, `PO`, `GRN`, `IT`, `EXP`, `ITM`, `JOB`, `STF`) are compile-time constants, one per repository file, never owner-configurable                                               | Rejected for T1/T2 — ADR-0012 deliberately fixed these; changing to owner-editable prefixes risks breaking `formatDisplayDocNumber`/`packages/shared/src/id.ts` parsing assumptions and touches 12+ files for a control no shop owner has asked for. Flag as a "reopen ADR-0012" question only if the owner explicitly asks (see Q17-4). | —                 | —                                       | L                                                                        | T3                 |
-| S17-PRINT-4 | 2-up printing                                                                                     | PROJECT.md Future Feature Requests (~line 1006-1008)                                                                                                         | Not built                                                                                                                                                                                                                      | Rejected for T1/T2 per PROJECT.md's own "not scheduled to any phase"                                                                                                                                                                                                                                                                     | —                 | —                                       | —                                                                        | T3                 |
+**Correction (C17-6):** verified all 4 print files individually. All are
+**fully hardcoded** to `'A4'` with the `receiptPaperSize` setting never
+entering their call chain at all (confirmed by reading each handler:
+`invoice.handler.ts`, the payment-receipt/customer-statement branches of
+`print.handler.ts`, and `purchase-print.handler.ts` — none reference
+`getReceiptPaperSize`). Split by daily-use frequency per the owner's
+correction: invoice + payment receipt are generated on **every sale /
+every payment received**; purchase orders and customer statements are
+occasional.
+
+| ID           | Setting                                                                                                                       | Source                                                                                                                                                                                | Today's behaviour                                                            | Proposed control & default                                                                                                                                                                                                                | Storage           | Money/stock impact & history protection | Effort                                                                                  | Tier                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| S17-PRINT-2a | Wire the existing `receiptPaperSize` setting into **sale invoice + payment receipt** prints (daily customer-facing documents) | `apps/server/src/printing/invoice-pdf.ts:10-12` (no size parameter at all, hardcoded `'A4'`); `payment-receipt-pdf.ts:12,36` (hardcoded `'A4'`)                                       | Both always print A4 regardless of the existing Settings A4/A5 toggle        | Thread `getReceiptPaperSize(kysely, tenantId)` through `invoice.handler.ts` and the payment-receipt branch of `print.handler.ts`, exactly as the existing reprint-receipt path already does (`print.handler.ts:56`, `sale.handler.ts:59`) | KV (existing key) | Print-time only. Zero history impact.   | S                                                                                       | **T1** (promoted — daily customer-facing documents) |
+| S17-PRINT-2b | Wire the same setting into **purchase-order + customer-statement** prints                                                     | `purchase-pdf.ts:45` (doesn't even accept a size parameter — own hardcoded `PDFDocument({ size: 'A4' })` and hardcoded `MARGIN`); `customer-statement-pdf.ts:7,33` (hardcoded `'A4'`) | Both always print A4                                                         | Same wiring approach, into `purchase-print.handler.ts` and the customer-statement branch of `print.handler.ts`                                                                                                                            | KV (existing key) | Print-time only. Zero history impact.   | M (purchase-pdf.ts needs a size parameter added first, plus an A5 layout check on both) | T2                                                  |
+| S17-PRINT-1  | Thermal printer option alongside A4/A5                                                                                        | PROJECT.md:959-963,1009-1013,4325 (Q7, OPEN)                                                                                                                                          | No thermal/ESC-POS code exists at all — confirmed zero `80mm`/`thermal` hits | Rejected for T1/T2 — hardware not yet purchased (Q7 still OPEN)                                                                                                                                                                           | —                 | —                                       | —                                                                                       | T3                                                  |
+| S17-PRINT-3  | Document number prefix customization (ADR-0012)                                                                               | ADR-0012; 12+ hardcoded prefix constants across repository files                                                                                                                      | Prefixes are compile-time constants, never owner-configurable                | Rejected — ADR-0012 deliberately fixed this; no owner request to reopen it                                                                                                                                                                | —                 | —                                       | L                                                                                       | T3                                                  |
+| S17-PRINT-4  | 2-up printing                                                                                                                 | PROJECT.md Future Feature Requests                                                                                                                                                    | Not built                                                                    | Rejected — "not scheduled to any phase" per PROJECT.md itself                                                                                                                                                                             | —                 | —                                       | —                                                                                       | T3                                                  |
 
 ### 2.10 Dashboard
 
-No candidates found. No hardcoded dashboard-specific business policy was located by the STEP 2 grep, and no owner request references Dashboard settings by name. Not listed as a rejected item because there was nothing to reject — flagged here only so the module isn't silently skipped.
+**Correction (C17-5):** the first draft wrongly reported "no candidates
+found." The owner requested dashboard stock warnings back in Phase 4 —
+this was missed in the original pass. `apps/client/src/pages/dashboard/DashboardPage.tsx`
+is 20 lines and renders exactly one widget, `<CashSessionWidget />`; no
+low-stock or stock-warning card exists anywhere in that directory.
+
+| ID         | Setting                             | Source                                | Today's behaviour                                                                      | Proposed control & default                                                                                                                                                                                                                                                                                                             | Storage                                          | Money/stock impact & history protection | Effort | Tier                           |
+| ---------- | ----------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------- | ------ | ------------------------------ |
+| S17-DASH-1 | "Low stock: N items" dashboard card | Owner request, Phase 4 (chat-derived) | No such card exists — `DashboardPage.tsx` has exactly one widget (`CashSessionWidget`) | New `LowStockWidget.tsx`, following `CashSessionWidget.tsx`'s exact shape (own file, `useState`/`useEffect`-on-mount IPC call, `<Card>` wrapper), reading the same low-stock rule as S17-ITEM-1/2. Links to the Items list pre-filtered to low-stock items. **Default: shown** (Q17-3, ANSWERED — same reasoning as the badge itself). | None of its own — reads live item/threshold data | Read-only. Zero history risk.           | S      | T1 (bundled with S17-ITEM-1/2) |
 
 ---
 
 ## 3. Rejected candidates (one-line reason each)
 
-- **S17-SALE-2 POS grid default** — the feature (a pinned/recent-items grid) doesn't exist; a "default view" setting for a nonexistent screen is not a setting, it's a feature request.
-- **S17-SALE-3 Item-search page size** — no paginated list exists on the Sales screen to configure.
-- **S17-PUR-2 generic Supplier/PO settings** — PROJECT.md itself marks these "deferred" with no concrete control named; nothing to scope.
-- **S17-CUS-1 generic Customer settings** — same as above; credit limit (the one real candidate) is already correctly per-customer.
-- **S17-REP-2 report date format** — no owner complaint on record; cosmetic.
-- **S17-REP-3 report default date-range preset** — cosmetic UI default, not a business-policy variation.
-- **S17-EXP-2 payment-method reference data** — would ripple into payment recording, receipts, and every cash-vs-method report; too large to fold into a "settings" ask.
-- **S17-STAFF-1 generic Staff settings** — nothing concrete named; commission is already correctly per-technician.
-- **S17-STAFF-2 Attendance settings** — schema doesn't exist yet; can't configure what isn't built.
-- **S17-CUST-1 Custody settings** — ADR-0006 already settled this; no new control identified.
-- **S17-PRINT-1 thermal printing** — hardware not yet purchased (Q7 still OPEN); building the toggle now would be speculative.
-- **S17-PRINT-3 document-number prefix customization** — ADR-0012 deliberately fixed this; no owner request to reopen it.
-- **S17-PRINT-4 2-up printing** — PROJECT.md itself says "not scheduled to any phase."
+- **S17-SALE-2 POS grid default** — the feature doesn't exist; a "default
+  view" setting for a nonexistent screen is a feature request, not a
+  setting.
+- **S17-SALE-3 Item-search page size** — no paginated list exists to
+  configure.
+- **S17-PUR-2 generic Supplier/PO settings** — PROJECT.md marks these
+  "deferred" with no concrete control named.
+- **S17-CUS-1 generic Customer settings** — same; credit limit (the one
+  real candidate) is already correctly per-customer.
+- **S17-REP-2 report date format** — no owner complaint on record;
+  cosmetic.
+- **S17-REP-3 report default date-range preset** — cosmetic UI default,
+  not a business-policy variation.
+- **S17-EXP-2 open-ended payment-method reference data** — would ripple
+  into payment recording, receipts, and every cash-vs-method report; the
+  smaller enable/disable version is accepted as S17-EXP-4 instead.
+- **S17-STAFF-1 generic Staff settings** — commission is no longer
+  per-technician (ADR-0015 retired `party.commission_bp`); it's already
+  configured per service charge, already built.
+- **S17-STAFF-4 weekly off day** — a genuine feature gap (no schema/code
+  exists at all), not a hardcoded value to flip.
+- **S17-STAFF-5 attendance status list** — already a single canonical Zod
+  enum, consumed everywhere else with no duplication; nothing to fix.
+- **S17-CUST-1 Custody settings** — ADR-0006 already settled this.
+- **S17-PRINT-1 thermal printing** — hardware not yet purchased (Q7 still
+  OPEN); would be speculative to build now.
+- **S17-PRINT-3 document-number prefix customization** — ADR-0012
+  deliberately fixed this; no owner request to reopen it.
+- **S17-PRINT-4 2-up printing** — PROJECT.md itself says "not scheduled to
+  any phase."
+- **`CANCELLATION_REASON_LABELS`** (evaluated per C17-8, not previously
+  assessed) — used only for two UI-label consumers
+  (`CancelJobModal.tsx`, `job-history-events.ts`), never in any
+  reporting/analytics query; the underlying `CancellationReason` enum is
+  closed in `@shop/contracts`, so an editable label map alone wouldn't let
+  the owner add new reasons. Fixed taxonomy, not a setting.
 
 ---
 
 ## 4. Deferred to other phases
 
-- **Permissions / "who is allowed to do X"** — ADR-0009 is explicit: permissions are code, not data. Any "who can approve a commission claim" / "who can edit a posted expense" control belongs to a future **auth phase**, not Settings. (Already flagged in PROJECT.md as BUG-ADR9 for Commission Approvals access control — Phase 16.)
-- **Go-live preparation** (parallel run, pull-the-plug test, staff training, Urdu cheat sheet) — Phase 5's own remaining exit criteria; explicitly out of scope for this planning phase per the kickoff prompt.
-- **Cloud sync / multi-device, multi-tenancy beyond `tenant_id`, double-entry accounting, FBR e-invoicing, analytics dashboards, barcode scanning, mobile app** — CLAUDE.md §10, unchanged, not reopened by anything found this phase.
+- **Permissions / "who is allowed to do X"** — ADR-0009 is explicit:
+  permissions are code, not data. Belongs to a future **auth phase**, not
+  Settings (already flagged as BUG-ADR9 for Commission Approvals — Phase
+  16).
+- **Overhead split (`parts_share_bp`, Q10)** — moved to T3 per C17-4:
+  no live consumer exists today; belongs with a future unit P&L overhead
+  report, when the owner is ready to set real percentages. Not part of
+  Phase 17 (Q17-1, ANSWERED: do not build).
+- **Go-live preparation** (parallel run, pull-the-plug test, staff
+  training, Urdu cheat sheet) — Phase 5's own remaining exit criteria;
+  explicitly out of scope here.
+- **Cloud sync / multi-device, multi-tenancy beyond `tenant_id`,
+  double-entry accounting, FBR e-invoicing, analytics dashboards, barcode
+  scanning, mobile app** — CLAUDE.md §10, unchanged, not reopened.
 
 ---
 
 ## 5. Proposed Settings navigation
-
-Additions to `apps/client/src/pages/settings/settingsNav.config.ts` (existing four groups — General, Sales, Jobs, Data — kept unchanged; two new groups added, one new item added to an existing group):
 
 ```
 General            (unchanged)
@@ -144,29 +279,31 @@ General            (unchanged)
 
 Sales
   Discounts                     (existing)
-  Stock & Alerts                (NEW — S17-SALE-1, S17-ITEM-1, S17-ITEM-2)
+  Stock & Alerts                (NEW, T1 — S17-SALE-1, S17-ITEM-1, S17-ITEM-2)
+  Payment Methods                (NEW, T2 — S17-EXP-4)
 
 Jobs               (unchanged)
   Service Charges
   Brands
   Commission Approvals
 
-Expenses           (NEW GROUP)
+Expenses            (NEW GROUP, T1)
   Categories                    (NEW — S17-EXP-1)
-  Overhead Split                (NEW — S17-EXP-3, blocked on Q17-1)
+  (No "Overhead Split" section — not built this phase, see §4/Q17-1)
 
-Reports            (NEW GROUP)
-  Display                       (NEW — S17-REP-1, rows per page)
+Staff              (NEW GROUP, T2 — optional this phase)
+  Payroll                        (NEW — S17-STAFF-2 half-day fraction, S17-STAFF-3 leave/holiday paid)
+
+Reports            (NEW GROUP, T1)
+  Display                       (NEW — S17-REP-1 rows per page)
 
 Data               (unchanged)
   Backup & Restore
 ```
 
-"Stock & Alerts" is placed under the existing **Sales** group rather than a
-new "Items" group — both its settings (negative-stock policy, low-stock
-badge/threshold) are read at sale time or on the Items list, and Phase 17's
-own inventory found no other Items-module setting to justify a standalone
-group. Revisit if a later phase adds more Items settings.
+The Dashboard's "Low stock: N items" card (S17-DASH-1) is **not** a
+Settings-nav item — it's a Dashboard widget reading the same threshold
+configured under Sales → Stock & Alerts.
 
 ---
 
@@ -175,100 +312,140 @@ group. Revisit if a later phase adds more Items settings.
 Build order matches dependency order (schema/repository before IPC before
 UI), same convention as every prior phase's task table.
 
-| Task ID | Description                                                                                                | Files likely touched                                                                                                                                                                                                                                                                                                          | Migration?                           | Depends on                          | Effort |
-| ------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------- | ------ |
-| P17-1   | `negativeStockPolicy` setting (S17-SALE-1)                                                                 | `setting.repository.ts`, `setting.handler.ts`, `packages/contracts/src/setting/setting.ts`, `SalePage.tsx` (read the flag at the warning-gate step), new `sections/StockAlertsSettingsSection.tsx`                                                                                                                            | No                                   | —                                   | S      |
-| P17-2   | Low-stock badge + default-threshold setting (S17-ITEM-1, S17-ITEM-2)                                       | `item.repository.ts` (read path only), Items list component, `setting.repository.ts`/`setting.handler.ts`, `StockAlertsSettingsSection.tsx` (same section as P17-1)                                                                                                                                                           | No                                   | P17-1 (shares the new section file) | S      |
-| P17-3   | Rows-per-page setting (S17-REP-1)                                                                          | `setting.repository.ts`, `setting.handler.ts`, new `sections/ReportsDisplaySettingsSection.tsx`, then one-line edits to all 11 files listed in §2.5, plus `CustomerLedgerTable.tsx`'s `15` (owner decision needed first — Q17-2)                                                                                              | No                                   | Q17-2 answered                      | M      |
-| P17-4   | Expense Categories Settings section (S17-EXP-1)                                                            | new `job-client.repository.ts`-style `expense-category.repository.ts` (write path: create/update/toggle `deleted_at`), new contracts, new IPC channels (`expenseCategory:list/create/update/toggle`), new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx` exactly, per Phase 16 precedent) | No — table and columns already exist | —                                   | M      |
-| P17-5   | Overhead split (`parts_share_bp`) field (S17-EXP-3)                                                        | `expense-category.repository.ts` (extend P17-4's write path with the split field), new `OverheadSplitTab.tsx`                                                                                                                                                                                                                 | No — column already exists           | Q17-1 answered, P17-4               | S      |
-| P17-6   | Wire existing `receiptPaperSize` into purchase/GRN/payment-receipt/customer-statement prints (S17-PRINT-2) | `purchase-pdf.ts`, `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `customer-statement-pdf.ts` — each needs its own A5 layout check                                                                                                                                                                                               | No                                   | — (T2, can run independently)       | M      |
+### T1
 
-**Settings-nav wiring** (adding the two new groups/items from §5) is folded
-into whichever of P17-1/P17-3/P17-4 lands first — no separate task.
+| Task ID | Description                                                                               | Files likely touched                                                                                                                                                                                                                                                                                                | Migration?                                                           | Depends on                               | Effort |
+| ------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------- | ------ |
+| P17-1   | `negativeStockPolicy` setting, scoped to counter sales only (S17-SALE-1)                  | `setting.repository.ts`, `setting.handler.ts`, `packages/contracts/src/setting/setting.ts`, `sale.repository.ts:220` (throw instead of warn-only when `'block'`), `SalePage.tsx` (hard-error path for this one case; credit-limit warning path untouched), new `sections/StockAlertsSettingsSection.tsx`            | No                                                                   | —                                        | M      |
+| P17-2   | Low-stock badge + default threshold + Dashboard card (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (read path), Items list component, new/extended item-list IPC filter, `setting.repository.ts`/`setting.handler.ts`, `StockAlertsSettingsSection.tsx` (shared with P17-1), new `DashboardLowStockWidget.tsx` + `DashboardPage.tsx` wiring                                                       | No                                                                   | P17-1 (shares the settings section file) | M      |
+| P17-3   | Rows-per-page setting, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)  | `setting.repository.ts`, `setting.handler.ts`, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 report files + `CustomerLedgerTable.tsx`                                                                                                                                                  | No                                                                   | —                                        | M      |
+| P17-4   | Expense Categories Settings section (S17-EXP-1)                                           | New `expense-category.repository.ts` (write path: create/update-if-unused/name-only-update/toggle `deleted_at`), new core enforcement check (`assertExpenseCategoryFieldsLocked`), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx` exactly) | No — `deleted_at` already exists, safe to reuse (verified, see §2.6) | —                                        | M      |
+| P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)         | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                       | No                                                                   | —                                        | S      |
 
-**Total effort estimate:** T1 tasks (P17-1, P17-2, P17-3, P17-4, P17-5) ≈
-S+S+M+M+S — roughly **2–3 focused sessions**, similar in size to a single
-Phase-16-style sub-phase. P17-6 (T2) is a separate, independently-schedulable
-half-day pass since it touches only print layout, no settings storage.
+**Total T1 effort estimate:** M+M+M+M+S ≈ **3 focused sessions**, similar
+cadence to Phase 16's multi-sub-phase build.
+
+### T2 (optional this phase — independently schedulable)
+
+| Task ID | Description                                                                            | Files likely touched                                                                                                                                             | Migration? | Effort |
+| ------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ |
+| P17-6   | Wire `receiptPaperSize` into purchase-order + customer-statement prints (S17-PRINT-2b) | `purchase-pdf.ts` (needs a size parameter added first), `customer-statement-pdf.ts`, `purchase-print.handler.ts`, `print.handler.ts` (customer-statement branch) | No         | M      |
+| P17-7   | Enable/disable payment methods (S17-EXP-4)                                             | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                        | No         | S      |
+| P17-8   | Half-day wage fraction + Leave/Holiday paid toggles (S17-STAFF-2, S17-STAFF-3)         | `wage.service.ts` (read settings instead of hardcoded constants), `setting.repository.ts`/`setting.handler.ts`, new `sections/PayrollSettingsSection.tsx`        | No         | S      |
+
+**T2 total:** M+S+S — a separate half-day-to-one-day pass.
+
+**Settings-nav wiring** (the new groups/items from §5) is folded into
+whichever of P17-1/P17-3/P17-4 lands first — no separate task.
 
 ---
 
-## 7. Owner decisions needed
+## 7. Owner decisions — ANSWERED
 
-**Q17-1 — Overhead split (Q10 carried forward).** What basis-points split
-should `parts_share_bp` use for SHARED expense categories (electricity,
-rent), and does it need to vary per category or is one shop-wide number
-enough? _Recommendation:_ start with one shop-wide default (e.g. 50/50,
-`5000` bp) editable per category from the new Overhead Split section, so
-the owner can override electricity vs. rent independently later without a
-second migration — the column already exists per category, so this costs
-nothing extra to support now.
+**Q17-1 — Overhead split.** **ANSWERED:** Do not build the overhead split
+in Phase 17. Percentages will come from the owner when the overhead
+report is actually built. → S17-EXP-3 moved to T3; P17-5 (the original
+overhead-split task) removed from the T1 plan entirely.
 
-**Q17-2 — Rows-per-page: normalize the Customer ledger table's `15` to `10`,
-or make `15` the shop-wide default?** The audit found `CustomerLedgerTable.tsx`
-already uses `15` while every report uses `10`, with no record of why.
-_Recommendation:_ default the new setting to `10` (matching the vast
-majority of existing tables) and let the Customer ledger table read the
-same setting like everything else — a silent behavior change for that one
-table, but one that removes an unexplained inconsistency rather than
-enshrining it. Flag to the owner before building, not after.
+**Q17-2 — Rows-per-page default.** **ANSWERED:** Default `10` everywhere,
+including `CustomerLedgerTable` (its pre-existing `15` is normalized down,
+a deliberate, approved behavior change for that one table). → P17-3 built
+accordingly.
 
-**Q17-3 — Low-stock badge: does the owner want it ON by default the moment
-this ships, or OFF until they've reviewed which items actually have a
-`reorderLevel` set?** Today, nothing is flagged (functionally "off"). Turning
-the badge on by default could surface a large number of already-low items
-the first day it ships, from data entered via CSV import without the owner
-realizing thresholds were being read. _Recommendation:_ default ON, since
-CLAUDE.md's own default-preserving rule is about not changing computed
-_money or stock behaviour_ — a purely informational badge carries no
-transactional risk, and hiding real, already-present low-stock data by
-default would be a worse surprise later.
+**Q17-3 — Low-stock badge default + dashboard card.** **ANSWERED:** Badge
+ON by default, rule per C17-5 (flagged at `qty_on_hand <= reorder_level`,
+or `<= 0` when `reorder_level` is null), plus the Dashboard "Low stock: N
+items" card, also default-shown. → S17-ITEM-1, S17-ITEM-2, S17-DASH-1
+built accordingly.
 
-**Q17-4 — Negative-stock default: confirm `warn` (today's only behaviour)
-is still correct, or does the owner now want `block` as the default given
-how close go-live is?** _Recommendation:_ keep `warn` as default (per
-CLAUDE.md rule 1 — default must equal today's behaviour) and let the owner
-flip to `block` explicitly once they've seen a few real negative-stock
-warnings in daily use.
+**Q17-4 — Negative-stock default + block scope.** **ANSWERED:** Default
+`'warn'`. `'block'` applies to **counter sales only** — see the exact
+code-path table in §2.1. → S17-SALE-1 built accordingly; job-issue,
+internal-transfer, and both cancellation-reversal paths are explicitly
+unaffected.
 
-**Q17-5 — Expense Categories: should deactivating a category with existing
-`expense` rows against it be allowed (soft-deactivate only, per DATABASE_RULES.md,
-never a hard delete), or should the UI block deactivation until the owner
-confirms no _recent_ expense used it?** _Recommendation:_ allow deactivation
-unconditionally (soft-deactivate, `deleted_at`) — this matches the Brands/
-Service-Charges precedent from Phase 16 exactly, and past `expense` rows
-keep their FK regardless.
+**Q17-5 — Expense category deactivation + field-locking.** **ANSWERED:**
+Deactivation always allowed (soft, via the existing `deleted_at` column —
+confirmed safe, no new `is_active` migration needed). Once any expense
+references a category, only its `name` stays editable; reports keep
+showing the historical amount for the period it occurred in regardless of
+the category's later deactivation. → S17-EXP-1 built accordingly, enforced
+by a new core check.
 
 ---
 
 ## 8. Exit criteria
 
-Placeholder — this phase is **PLANNING ONLY**. Exit criteria for Phase 17's
-actual build sub-phases (P17-1 through P17-6) will be written once the
-owner has:
+Placeholder promoted to real, task-specific criteria for the approved T1
+tasks. Each names its own verification method, per CLAUDE.md §6 — no
+"looks correct" entries. This phase (the planning document itself) closes
+once the owner has approved the scope above; the criteria below apply to
+the _build_ sub-phase that follows, listed here so the next session can
+pick them up without re-deriving them.
 
-1. Answered Q17-1 through Q17-5.
-2. Approved the T1 scope in §2 (or requested changes to which items are T1
-   vs T2 vs T3).
-3. Approved the navigation change in §5.
+- [ ] **P17-1** — `sale.repository.test.ts`: a new test seeds a positive-
+      stock item, requests more than on-hand with `negativeStockPolicy='block'`,
+      and asserts the transaction throws with no `stock_movement` row
+      inserted (hand-calculated before/after stock delta in the test
+      comment); a second test with `'warn'` (default) asserts the sale
+      still commits with `warnings.stockBelowZero === true`. Query: on a
+      fresh migrated DB, `SELECT value FROM setting WHERE key='negativeStockPolicy'`
+      returns no row, and the getter's default is confirmed `'warn'`. UI
+      action: on the shop machine (or a render test), attempting a
+      blocked sale shows a plain error, not the old warn-and-continue
+      dialog; `ItemSearchPanel.test.tsx` (Phase 10's existing hard-block
+      test) still passes unmodified, confirming mechanism (1) is
+      untouched.
+- [ ] **P17-2** — Repository test: an item with `reorderLevel=5` and
+      `qtyOnHand<=5` (via a real seeded `stock_movement` sum) is flagged;
+      an item with `reorderLevel=NULL` and `qtyOnHand=0` is also flagged
+      (shop default `0`); an item above its threshold is not — all
+      hand-verified against a real temp DB. Render test: `LowStockWidget.tsx`
+      shows the correct count from a mocked IPC response. UI action:
+      clicking the Dashboard card navigates to the Items list pre-filtered
+      to low-stock items.
+- [ ] **P17-3** — All 11 existing report-table tests plus a
+      `CustomerLedgerTable` render test still pass after switching from a
+      local constant to the shared setting read, with the setting
+      defaulted to `10`. Query: a fresh DB has no `rowsPerPage` key and
+      every table falls back to `10`, confirmed by direct query. UI
+      action: changing Settings → Reports → Display → "Rows per page" to
+      `25` and reloading a report table shows 25 rows (manual
+      verification on the shop machine per CLAUDE.md §6).
+- [ ] **P17-4** — Repository tests: create a category; edit its name only
+      (succeeds); attempt to edit `kind`/`isBillable`/`isOwnerDrawing` on
+      a category already referenced by a real seeded `expense` row
+      (rejected with the new typed error); deactivate a category with
+      existing expenses (soft, `deletedAt` set) and confirm
+      `expense:list`/`getExpenseSummaryReport` still return the same
+      historical rows/totals unchanged (hand-calculated total in the test
+      comment). UI action: Settings → Expenses → Categories shows
+      list/create/edit/deactivate, matching the Brands/Service-Charges
+      shell exactly.
+- [ ] **P17-5** — Unit test: `renderInvoicePdf`/`renderPaymentReceiptPdf`
+      each accept and thread through a page-size parameter (test asserts
+      the parameter reaches the underlying `PDFDocument` call). UI
+      action / manual print: with `receiptPaperSize='A5'`, printing a
+      sale invoice and a payment receipt both render at A5 dimensions;
+      with the default `'A4'`, both are visually unchanged from today.
+- [ ] `npm run verify` exits 0 after every task above, count pasted each
+      time (Golden Rule #4 — one thing at a time, verified before the
+      next begins).
+- [ ] `PROJECT.md` and `PROGRESS.md` updated per CLAUDE.md §7 before this
+      phase (the build sub-phase) is called complete.
 
-Until then, this document has no exit criteria of its own beyond: paste the
-owner's answers into an updated version of this file, and confirm the task
-breakdown in §6 still matches what was approved before any code is written.
+Until the owner approves this scope and the build sub-phase actually
+starts, this section is the agreed target — not yet satisfied by anything
+in the repository today.
 
 ---
 
-## Appendix — PHASES.md gap found this phase
+## Appendix — PHASES.md gap (now fixed)
 
-Phases 13, 14, and 15 had detailed `docs/phases/PHASE_13.md` /
-`PHASE_14.md` / `PHASE_15.md` files but **no entry at all** in
-`docs/PHASES.md`'s main plan (which jumped from Phase 12 straight to Phase
-16). Short entries for 13, 14, and 15 have been added to `docs/PHASES.md`
-in this same session — see the diff pasted after this document.
-
-**Also found, not fixed (out of the explicit Phase 13–16 ask):** Phases 9
-and 10 have the same gap — `docs/phases/PHASE_9.md` and `PHASE_10.md`
-exist on disk but `docs/PHASES.md` has no `## Phase 9` / `## Phase 10`
-heading either. Left untouched since the kickoff prompt named only 13–16;
-flagging here so it isn't silently missed.
+Phases 9, 10, 13, 14, and 15 all had detailed `docs/phases/PHASE_N.md`
+files but no entry in `docs/PHASES.md`'s main plan. Short entries for
+**all five** (9, 10, 13, 14, 15) have been added to `docs/PHASES.md` in
+this session (C17-9) — the first draft of this document only added 13–15
+and merely flagged 9/10 as "also missing, left untouched." That gap is now
+closed; `docs/PHASES.md` has a continuous entry for every phase from 0
+through 16.

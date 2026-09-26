@@ -175,6 +175,81 @@ features.**
 
 ---
 
+## Phase 9 — Purchase Orders + Goods Receipt Notes (GRN)
+
+Splits the shop's single-step "purchase" flow into two explicit stages: a
+Purchase Order (what was ordered, no prices, no stock/ledger impact) and a
+Goods Receipt Note (what actually arrived, at what cost — this is where
+stock moves and the supplier ledger updates). One PO can have multiple
+GRNs (partial deliveries); a GRN line can be unplanned. Batch/lot tracking
+was explicitly dropped by owner decision for this phase.
+
+- Migration 0014 — `purchase_order`, `purchase_order_line`, `grn`,
+  `grn_line`, `item_price_history` (5 new tables), 2 new
+  `document_sequence` rows
+- Backend: core ports + typed domain errors, both repositories, IPC +
+  contracts, existing `purchase`/`purchase_line` untouched (read-only
+  historical data from this migration forward)
+- P9U-0–P9U-9: UI — old one-step Purchases screen removed; new
+  Purchase Orders / GRN / item-price-history screens
+- P9C-0–P9C-6: GRN CSV bulk import with a stateful-across-rows
+  remaining-quantity dry-run check
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 492/492 (baseline 464)
+- [x] `.tables`/`document_sequence` confirmed against the real dev DB;
+      existing `purchase` rows (PUR-0001/PUR-0002) unchanged
+- [x] A cylinder→kg UoM-converting GRN line produces the correct
+      per-kg cost — hand-calculated and matched against a real
+      `stock_movement` row
+- [x] GRN cancellation reverses stock and ledger with the exact
+      opposite-sign row, verified against a real DB
+- [x] CSV dry-run's remaining-quantity check is stateful within one file
+      — verified live against a real DB
+
+See `docs/phases/PHASE_9.md` for full sub-phase detail, design decisions,
+and verification output.
+
+---
+
+## Phase 10 — Reports & Finance Redesign
+
+The owner opens the single Reports tab and immediately sees where the
+business stands: every report is chart-backed, has its own date-range
+selector with quick presets, and exports to CSV in one click. Reports are
+visually split into "Operational" and "Financial" groups on the same page.
+Separately, the sale screen can no longer add a zero/negative-stock item
+to the cart under any circumstance — hard-blocked and marked "Out of
+Stock," replacing the old warn-and-allow modal for that specific case.
+
+- P10-1: Hard-block adding a `quantityMilli <= 0` item to the sale cart;
+  narrowed the existing warning-gate `ConfirmDialog` to credit-limit only
+- P10-2: Widened `report:dailySales`/`report:unitPl` to `{ from, to }`;
+  added `report:stockPerformance`/`report:expenseSummary`
+- P10-3: Reports page restructured into Operational/Financial groups;
+  shared `DateRangeSelector` (6 presets) built
+- P10-4: recharts-based charts added to all 8 report tabs
+- P10-5: Shared `downloadCsv` utility + Export CSV button on every tab
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 515/515 (baseline 464)
+- [x] A render test proves a `quantityMilli=0` item cannot be added to
+      the cart; zero remaining `BUG-Y`/`negativeStock`/`belowZero`
+      references in `apps/client/src` — confirmed by grep
+- [x] `report:dailySales`/`report:unitPl` accept `{ from, to }` —
+      hand-calculated paisa sums pasted
+- [x] `DateRangeSelector`'s "This Month" preset produces the correct
+      `from`/`to` for a fixed test date
+- [x] Every report tab's Export CSV button is disabled on empty data —
+      render test output pasted
+
+See `docs/phases/PHASE_10.md` for full sub-phase detail, design
+decisions, and verification output.
+
+---
+
 ## Phase 11 — Reports UI Polish & Navigation Redesign
 
 The owner navigates to reports through an expandable sidebar group, every
