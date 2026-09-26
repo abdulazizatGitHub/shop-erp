@@ -258,6 +258,110 @@ and verification output.
 
 ---
 
+## Phase 13 — Customer Ledger, Invoice Modal, Payment Receipt, Customer Statement
+
+The owner and staff can open any customer's record and see their complete
+financial history in a single chronological ledger with a running balance,
+click any row to view the full invoice or payment receipt, generate and
+print a dated account statement, and add new customers directly from the
+Customers screen. Every printed document draws its shop identity header/
+footer from one source of truth (`ShopIdentity`).
+
+- CL-0a/CL-0b: Shop identity backend + settings update; shared
+  `DocumentHeader`/`DocumentFooter`/`DocumentSection` components
+- CL-1–CL-4: Customer ledger query (window-function running balance),
+  contracts, IPC, `sale:getWithLines`
+- CL-5–CL-9: Customer detail page, sale invoice modal, payment receipt
+  document + modal, customer statement PDF, add-customer form
+- CL-10: Customer balance import converted to renderer-read CSV (Option B),
+  matching the supplier-balance-import pattern
+- Post-completion polish series: CSV ledger export, payment modal redesign,
+  customer-screen card consistency pass
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 602/602 (baseline 569)
+- [x] Customer detail page, sale invoice modal, payment receipt modal,
+      customer statement modal, add-customer modal all owner-confirmed on
+      the shop machine (2026-09-20)
+- [x] `sale_line.description` snapshot used everywhere — no live item join
+      in historical document display
+- [x] Customer balance import handler has zero `dialog.showOpenDialog`/
+      `readFileSync` references — confirmed by grep
+
+See `docs/phases/PHASE_13.md` for full sub-phase detail, design decisions,
+and verification output.
+
+---
+
+## Phase 14 — Jobs Module Redesign (UI/UX)
+
+A repair job can be created in under 30 seconds at intake, its status
+reflects what has physically happened rather than a manually-set dropdown,
+two technicians can be assigned to one job, a cancelled job closes cleanly
+with its parts returned to stock, and the job card shows a unified
+chronological history.
+
+- P14-1: Multi-technician schema (`job_technician`, migration 0015)
+- P14-2: Job intake redesign — customer search-or-create with phone dedup
+- P14-3: Status auto-transitions on real actions (part issued, diagnosis
+  saved), manual dropdown removed
+- P14-4: Cancel job — reversing stock movement, one transaction
+- P14-5: Multi-technician assignment panel
+- P14-6: Diagnosed fault field (`job:updateDiagnosis`)
+- P14-7: Job list — overdue/stale indicators, search, print-from-list
+- P14-8: Unified History panel
+- V1–V5/F1–F3/G1–G6: visual/UX polish passes (brand dropdown, delivery
+  modal redesign, status-picker removal, "Client" terminology)
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 627/627 (baseline 602)
+- [x] Two technicians assigned to a real job, verified against a live DB
+- [x] Cancelling a job with an unreturned part reverses stock via a new
+      `job_return` row with the exact negative of the original quantity
+- [x] A full lifecycle (create → assign → issue part → diagnose → unassign
+      → deliver) produces a correctly time-ordered History panel
+
+See `docs/phases/PHASE_14.md` for full sub-phase detail, design decisions,
+and verification output.
+
+---
+
+## Phase 15 — Job Client Table + On-site Jobs + Awaiting Parts Flow
+
+Job clients are stored in their own `job_client` table, entirely separate
+from the Spare Parts ledger's `party` customers. A job records whether work
+happens in-shop or on-site, capturing the client's address at intake. Staff
+can mark a job "awaiting parts" with a required reason; issuing a part to
+that job auto-advances it to in-progress.
+
+- P15-1: `job_client` migration (0016) + `job.job_client_id`
+- P15-2: `job-client` repository, contracts, IPC
+- P15-3: Link job creation to `job_client`, denormalized reads
+- P15-4: Job intake form redesign (`JobClientPicker`, on-site address group)
+- P15-5: Job card / list show client info; awaiting-parts reason display
+- P15-6: Awaiting-parts state-machine wiring + reason dialog
+
+Resolves Q-P15-1 (job clients get their own table, not
+`party_type='job_client'`) and fixes BUG-JOBCLIENT-1 (job intake was
+searching the wrong customer population).
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 644/644 (baseline 627)
+- [x] New on-site job with a new client writes both rows in one
+      transaction, verified against a real DB
+- [x] Reselecting an existing client never creates a duplicate
+      `job_client` row — verified against a real DB
+- [x] Full received → awaiting_parts (reason persisted) → in_progress
+      sequence confirmed against real output
+
+See `docs/phases/PHASE_15.md` for full sub-phase detail, design decisions,
+and verification output.
+
+---
+
 ## Phase 16 — Jobs Settings: Service Charges, Brands, Commission Claims
 
 The shop owner can manage service charges and appliance brands without a
