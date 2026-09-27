@@ -128,6 +128,7 @@ export type {
   CashSessionRecord,
   OpenSessionRepoInput,
   CloseSessionRepoInput,
+  SetSessionNoteRepoInput,
   CashSessionRepositoryPort,
 } from './expense/cash-session.repository.port.js';
 

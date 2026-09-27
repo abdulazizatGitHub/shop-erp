@@ -4203,7 +4203,7 @@ phase — CLAUDE.md §8, don't fix a bug outside the task at hand; the
 credit-limit gate itself was untouched by P17-1.
 Status: UNFIXED — known wart, candidate for a future bug-fix phase.
 
-### BUG-31: Cash removed from the drawer for a bank deposit has no way to be recorded — misreports as a shortage — CRITICAL, not fixed
+### BUG-31: Cash removed from the drawer for a bank deposit has no way to be recorded — misreports as a shortage — CRITICAL, FIXED
 
 Found in: Phase 17, verifying P17-4's pre-conditions, 2026-09-27 —
 before starting P17-4, per explicit instruction to check whether
@@ -4235,18 +4235,23 @@ that amount, and `CashSessionWidget.tsx:230-232` reports it as
 till shortage (theft, miscounting, an unrecorded sale). This corrupts
 the primary daily cash-reconciliation record with a false alarm, with
 no way to avoid it, every time it happens.
-Fix: **Plan APPROVED 2026-09-27, build starting.** New append-only
-`cash_movement` table (migration `0021`, amended DDL — includes
-`reverses_id`/`UNIQUE(reverses_id)` for corrections, `note NOT NULL`
-on every movement — in `docs/phases/PHASE_17_5.md` §2.7), one new
-signed term in the `expected_cash` formula (`cashMovementsNet`, §2.5
-of that doc), no `business_unit_id`/`party_id` column, a session-must-
-be-open gate (see `docs/decisions/ADR-0016-cash-drawer-movements.md`
-for the full reasoning). Full task breakdown and exit criteria in
-`docs/phases/PHASE_17_5.md`.
-Status: UNFIXED, build in progress — **its own task, higher priority
-than Phase 17's P17-3/P17-4/P17-5/P17-7/P17-2b**, all of which stay
-paused until this phase's build completes (`docs/phases/PHASE_17_5.md`).
+Fix: New append-only `cash_movement` table (migration `0021`, amended
+DDL — includes `reverses_id`/`UNIQUE(reverses_id)` for corrections,
+`note NOT NULL` on every movement — in `docs/phases/PHASE_17_5.md`
+§2.7), one new signed term in the `expected_cash` formula
+(`cashMovementsNet`, §2.5 of that doc), no `business_unit_id`/
+`party_id` column, a session-must-be-open gate, a single-open-session
+invariant (R8), reversal scoped to the original's own still-open
+session (R7) (see `docs/decisions/ADR-0016-cash-drawer-movements.md`
+for the full reasoning). UI: a "Cash In / Cash Out" action on
+`CashSessionWidget.tsx` while a session is open
+(`CashMovementSection.tsx`), and — since R7's refusal message points
+here — an "Add note" action on a closed session
+(`ClosedSessionNote.tsx`, `cash_session.notes`). Full task breakdown,
+exit criteria, and test list in `docs/phases/PHASE_17_5.md`.
+Status: **FIXED** — Phase 17.5 complete, 2026-09-27
+(`docs/phases/PHASE_17_5.md`). Phase 17's P17-3/P17-4/P17-5/P17-7/
+P17-2b, paused for this phase, resume.
 
 ### BUG-32: `getCashBookReport`'s sale/payment inflows were not actually filtered to cash, and expense/payment-out were missing entirely — MEDIUM, FIXED
 

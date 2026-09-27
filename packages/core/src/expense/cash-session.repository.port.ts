@@ -24,6 +24,12 @@ export interface CashSessionRecord {
   readonly countedCashPaisa: number | null;
   readonly differencePaisa: number | null;
   readonly status: CashSessionStatus;
+  readonly notes: string | null;
+}
+
+export interface SetSessionNoteRepoInput {
+  readonly sessionId: string;
+  readonly note: string;
 }
 
 export interface OpenSessionRepoInput {
@@ -133,4 +139,15 @@ export interface CashSessionRepositoryPort {
    * guard is what keeps this invariant true in normal operation.
    */
   getOpenSession(): Promise<CashSessionRecord | null>;
+  /**
+   * Phase 17.5, review round 7. A plain UPDATE of `cash_session.notes` —
+   * not append-only, same as the rest of this row (PHASE_7.md §5
+   * Correction 2). Idempotent: calling it again with a different note
+   * replaces the old one; there is no history of prior notes. Throws if
+   * `sessionId` does not exist. Works on an open OR closed session — the
+   * UI currently only exposes it for a closed one, since that's the only
+   * case review round 7's refusal message points to, but the port itself
+   * has no such restriction.
+   */
+  setSessionNote(input: SetSessionNoteRepoInput): Promise<CashSessionRecord>;
 }

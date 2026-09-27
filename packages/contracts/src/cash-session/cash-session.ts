@@ -20,6 +20,17 @@ export const CloseSessionInput = z.object({
 });
 export type CloseSessionInput = z.infer<typeof CloseSessionInput>;
 
+// Phase 17.5 (docs/phases/PHASE_17_5.md), review round 7. The refusal
+// message shown when a cash movement can no longer be reversed
+// ("Add a note to the closed session instead") points here — this is
+// that recourse. Note text only; no direction/amount, since it does not
+// change expected_cash (already computed and stored at close time).
+export const SetCashSessionNoteInput = z.object({
+  sessionId: z.string().uuid(),
+  note: z.string().trim().min(1, 'A note is required.'),
+});
+export type SetCashSessionNoteInput = z.infer<typeof SetCashSessionNoteInput>;
+
 export const CashSessionDto = z.object({
   id: z.string().uuid(),
   sessionDate: z.string(),
@@ -30,5 +41,6 @@ export const CashSessionDto = z.object({
   countedCash: z.number().int().nullable(),
   difference: z.number().int().nullable(),
   status: z.enum(['open', 'closed']),
+  notes: z.string().nullable(),
 });
 export type CashSessionDto = z.infer<typeof CashSessionDto>;

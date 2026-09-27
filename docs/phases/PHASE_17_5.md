@@ -1,6 +1,6 @@
 # Phase 17.5 — Drawer Cash Movements
 
-**Status:** **APPROVED — 2026-09-27**, amended after review round 2
+**Status:** **COMPLETE — 2026-09-27**, amended after review round 2
 (R1 BUG-32 scope verified and folded into this phase as Task 4, ahead
 of the UI task; R2 movements require an open session; R3 adds
 `reverses_id` reversal support; R4 accepted risk recorded in ADR-0016)
@@ -11,17 +11,18 @@ Task 6 extended to expose `cash_session.notes`) and review round 4 (R8
 at most one session may ever be open — `openSession` refuses a second
 one, `getOpenSession()` throws rather than picking one; this closes
 BUG-33's "two sessions open at once" part, the sale-dating parts stay
-open). **Tasks 1–4 built** (migration `0021`; core validation +
+open). **All tasks built** (migration `0021`; core validation +
 `getOpenSession`; R8's single-open-session guard, then
 `KyselyCashMovementRepository.recordMovement`/`.reverseMovement`/
 `.listForDateRange` and the `expected_cash` formula change; BUG-32
-fixed in `getCashBookReport`). Task 5 (contracts + IPC) next. **Blocks
-go-live** — accepted by the owner as a blocker (BUG-31, `PROJECT.md`). **Pauses
-Phase 17**: P17-3, P17-4, P17-5, P17-7, and the logged follow-up
-P17-2b all stay approved and resume once this phase's build is
-complete.
+fixed in `getCashBookReport`; contracts + IPC + the "Cash In / Cash
+Out" UI, `CashMovementSection.tsx`; the R7-referenced closed-session
+"Add note" UI, `ClosedSessionNote.tsx`). BUG-31 is **FIXED**. **Was
+blocking go-live** — accepted by the owner as a blocker (BUG-31,
+`PROJECT.md`), now cleared. **Resumes Phase 17**: P17-3, P17-4, P17-5,
+P17-7, and the logged follow-up P17-2b are unpaused.
 **Started:** 2026-09-27
-**Completed:** —
+**Completed:** 2026-09-27
 
 See `docs/decisions/ADR-0016-cash-drawer-movements.md` for the
 decision record this plan implements.
@@ -703,20 +704,20 @@ this. Add a note to the closed session instead."`; accepts a
       tests, none of the 25 pre-existing tests in that file changed or
       removed:
   - `'excludes a non-cash sale and a non-cash incoming payment from
-  the totals (BUG-32)'` — an Easypaisa sale and a bank-method
+the totals (BUG-32)'` — an Easypaisa sale and a bank-method
     incoming payment are excluded from `getCashBookReport`'s totals
     (the cash-filter fix on the pre-existing `sale`/`payment`(in)
     branches).
   - `'includes cash expenses and cash outgoing payments as new Out
-  rows'` — the two previously-missing outflow branches
+rows'` — the two previously-missing outflow branches
     (`expense`, `payment` direction='out').
   - `'includes a cash_movement row with the correct sign split, and
-  labels a reversal as "Correction of {original doc_no}"'` — the
+labels a reversal as "Correction of {original doc_no}"'` — the
     new fifth branch, both an original and a reversal row.
   - `'R1 mixed-day test: getCashBookReport's net for one day +
-  opening cash equals closeSession's expectedCashPaisa — a cash
-  sale, an Easypaisa sale, a bank-method payment in, a cash
-  expense, and a bank-deposit movement, all on one day'` — the R1
+opening cash equals closeSession's expectedCashPaisa — a cash
+sale, an Easypaisa sale, a bank-method payment in, a cash
+expense, and a bank-deposit movement, all on one day'` — the R1
     priority test, now built for real against **both**
     `getCashBookReport` and `closeSession` on the same session/date:
     opening `1,000,000` paisa (Rs 10,000); a cash sale of `600,000`
@@ -725,45 +726,103 @@ this. Add a note to the closed session instead."`; accepts a
     paisa; a `bank_deposit` cash movement of `-500,000` paisa.
     `closeSession`'s `expectedCashPaisa`:
     `1,000,000 + 600,000 + 0 − (0 + 150,000 + 0) + (−500,000) =
-  950,000` (asserted, `differencePaisa === 0`). `getCashBookReport`'s
+950,000` (asserted, `differencePaisa === 0`). `getCashBookReport`'s
     net for that single day (`dateFrom = dateTo =` the session date):
     inflows `600,000` (cash sale only) minus outflows
     `150,000 + 500,000 = 650,000` = `−50,000` (asserted directly).
     Then `sessionOpeningCashPaisa + cashBookNetForDay ===
-  expectedCashPaisa` (`1,000,000 + (−50,000) = 950,000`) is
+expectedCashPaisa` (`1,000,000 + (−50,000) = 950,000`) is
     asserted explicitly — the two independently-computed figures
     confirmed equal, not merely both hand-calculated separately.
   - (The `'unions cash purchases (out) and cash sales (in)...'` test
     predating this task is untouched and still passes — its sales
     already used `paymentMode: 'cash'` explicitly, so the new filter
     doesn't change its result.)
-- [ ] **T5** — Handler tests (real temp DB, no Electron mocking, same
-      `runX`-plain-function precedent as `item.handler.test.ts`/
-      `sale.handler.test.ts`): `record` and `reverse` both round-trip
-      correctly through the IPC input schema; a blank `note` (any type)
-      is rejected at the Zod boundary before it ever reaches the
-      repository; a `record` call with no open session surfaces
-      `CashSessionNotOpenError`'s code intact across the boundary
-      (matches P17-1's own IPC-boundary lesson — verify this
-      empirically, don't assume a thrown error's custom properties
-      survive `ipcMain.handle`→`ipcRenderer.invoke`; resolve a
-      discriminated result if they don't, same fix pattern as
-      `sale.handler.ts`'s `runCreateSale`).
-- [ ] **T6** — Render tests: submitting the "Record cash movement" form
-      with reason "Bank deposit" and amount "12,000" calls the IPC
-      method with `movementType: 'bank_deposit'`, `amountPaisa: -1200000`,
-      and a required note; every reason (not just "Other") blocks
-      submission when the note is blank (R4); the movement list shows
-      each recorded entry individually with a "Reverse" action;
-      clicking "Reverse" on an already-reversed entry is disabled/
-      hidden, not merely re-clickable-and-erroring. **R7 addition:** a
-      movement belonging to a closed session's date renders its
-      "Reverse" action disabled with the exact refusal copy shown as a
-      tooltip/inline message, not merely a silently-ignored click; the
-      closed session's own detail view has an "Add note" field that
-      calls a save method writing to `cash_session.notes`.
-- [ ] `npm run verify` exits 0 after every task above, count pasted
-      each time (Golden Rule #4).
-- [ ] `PROJECT.md` (BUG-31 → FIXED, BUG-32 → FIXED) and `PROGRESS.md`
-      updated per CLAUDE.md §7 before this phase is called complete.
+- [x] **T5 (DONE)** — Contracts (`RecordCashMovementInput`,
+      `ReverseCashMovementInput`, `ListCashMovementsInput`,
+      `CashMovementDto`, all Zod), channels
+      `cashMovement.record`/`.reverse`/`.listForDateRange`, new
+      `cash-movement.handler.ts` (`runRecordCashMovement`/
+      `runReverseCashMovement`/`runListCashMovements`, the same plain-
+      function precedent as `item.handler.test.ts`), wired through
+      `main.ts`/`preload.ts`/`electron-api.d.ts`. **Error-mapping
+      decision (differs slightly from the plan text above):** the four
+      new errors (`CashSessionNotOpenError`,
+      `CashMovementSessionClosedError`, `CashMovementAlreadyReversedError`,
+      `ReversalOfReversalError`) are all simple `.code`-only errors, so
+      they use the established reject-and-catch-`.code` pattern already
+      proven for `SessionAlreadyOpenError` — **not** the
+      resolved-discriminated-result redesign `sale.handler.ts`'s
+      `runCreateSale` needed for negative-stock's richer `.items` array.
+      That redesign only exists because a complex payload couldn't be
+      trusted to survive the IPC boundary; a bare string code doesn't
+      have that problem, verified empirically by
+      `with-error.test.ts`'s new tests (14 total, up from 10) and
+      `cash-movement.handler.test.ts` (5 tests, real temp DB): `record`
+      throws `CashSessionNotOpenError` with zero rows inserted when no
+      session is open, and returns the correct DTO shape when one is
+      open; `reverse` succeeds while the original's session is still
+      open, and refuses with `CashMovementSessionClosedError` and the
+      exact plain message once that session has closed;
+      `listForDateRange` returns rows for the requested range.
+- [x] **T6 (DONE)** — New `CashMovementSection.tsx` (extracted as its
+      own component, not grown into `CashSessionWidget.tsx`, to stay
+      under CLAUDE.md §9's ~300-line file guideline), mounted inside
+      `CashSessionWidget.tsx`'s STATE 2 (open) only — matches R2/R7:
+      recording and reversing both require an open session, so the
+      whole control surface only exists while one is open. A "Cash In /
+      Cash Out" button opens an inline form: a Reason select (4 types),
+      a Cash In/Cash Out direction toggle shown **only** for `'other'`
+      (bank_deposit/owner_draw always negative, float_add always
+      positive — §2.4), an amount field, and a note field with Record
+      disabled until the note is non-blank (R4, every type, not just
+      `'other'`). The movement list below shows each entry
+      individually (never netted) with doc_no, description, note, and a
+      signed `MoneyDisplay`; a reversal row is labelled "Correction of
+      {original doc_no}"; each non-reversal, not-yet-reversed row has a
+      "Reverse" action (an inline note field, required, before
+      confirming). A static line under the list carries the ADR-0016
+      §5 accepted-risk warning verbatim: "Movements are not tied to a
+      login until the auth phase." 6 render tests in
+      `CashMovementSection.test.tsx`: no-auth warning visible; Record
+      disabled until a note is entered; the direction toggle appears
+      only for `'other'`; recording calls `ipc.cashMovement.record`
+      with the correctly-signed amount; the movement list renders
+      doc_no/description/note per row with reversal labelling; Reverse
+      calls `ipc.cashMovement.reverse` with the original id and the
+      typed note. **Scope note on the plan text above:** the "a
+      movement belonging to a closed session's date renders its Reverse
+      action disabled with the refusal copy" case does not arise in
+      this UI as built — `CashMovementSection` only ever loads the
+      currently-open session's own date (`session.sessionDate`), so a
+      closed session's movements are never listed here at all for a
+      Reverse click to reach. The refusal path is still fully covered
+      at the handler layer (T5's `cash-movement.handler.test.ts`); nothing
+      in the UI can construct the scenario the plan text described.
+      **T6 extension — closed-session notes:** new
+      `SetCashSessionNoteInput` contract, `cashSession.setNote` channel,
+      `CashSessionRepositoryPort.setSessionNote` (plain `UPDATE
+  cash_session SET notes = ?`, no audit_log/sync_outbox row — a
+      free-text annotation, not a financial fact), and a new
+      `ClosedSessionNote.tsx` component (its own file, same file-size
+      reasoning as above) mounted only in `CashSessionWidget.tsx`'s
+      STATE 3 (closed). Shows the existing note (if any) with an "Edit
+      note" button, or an "Add note" button with none; Save is disabled
+      until the note is non-blank. `cash-session.handler.test.ts` (2
+      tests, real temp DB): a note is written onto a closed session;
+      calling it a second time **replaces** the note rather than
+      erroring or appending (the idempotent-update requirement).
+      `ClosedSessionNote.test.tsx` (4 render tests) and 2 new
+      `CashSessionWidget.test.tsx` cases (the note control is absent
+      while open; visible with its text and "Edit note" once closed
+      with an existing note) round this out.
+- [x] `npm run verify` exits 0 — **964/964 tests passing** (up from 941
+      before this round: +5 `cash-movement.handler.test.ts`, +4
+      `with-error.test.ts`, +6 `CashMovementSection.test.tsx`, +2
+      `CashSessionWidget.test.tsx`, +2 `cash-session.handler.test.ts`,
+      +4 `ClosedSessionNote.test.tsx` = +23; net +23, matches). Both
+      `apps/client` and `apps/server` production builds pass with no
+      errors.
+- [x] `PROJECT.md` (BUG-31 → FIXED, BUG-32 → FIXED) and `PROGRESS.md`
+      updated per CLAUDE.md §7 — this phase is complete.
 - [ ] Phase 17 resumes: P17-3, P17-4, P17-5, P17-7, P17-2b unpaused.

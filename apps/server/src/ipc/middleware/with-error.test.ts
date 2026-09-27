@@ -2,9 +2,13 @@ import { afterEach, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   AnotherSessionStillOpenError,
+  CashMovementAlreadyReversedError,
+  CashMovementSessionClosedError,
+  CashSessionNotOpenError,
   MultipleOpenSessionsError,
   NegativeStockBlockedError,
   NegativeStockConfirmationRequiredError,
+  ReversalOfReversalError,
   SessionAlreadyOpenError,
 } from '@shop/core';
 import { DbBusyError } from '@shop/db';
@@ -63,6 +67,44 @@ describe('toIpcError', () => {
     expect(ipcError.code).toBe('MULTIPLE_OPEN_SESSIONS');
     expect(ipcError.message).toContain('2026-08-15');
     expect(ipcError.message).toContain('2026-08-16');
+  });
+
+  it('wraps CashSessionNotOpenError into { code: CASH_SESSION_NOT_OPEN, message } (Phase 17.5 Task 5)', () => {
+    const error = new CashSessionNotOpenError();
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('CASH_SESSION_NOT_OPEN');
+    expect(typeof ipcError.message).toBe('string');
+  });
+
+  it('wraps CashMovementSessionClosedError into { code: CASH_MOVEMENT_SESSION_CLOSED, message } (Phase 17.5 Task 5, R7)', () => {
+    const error = new CashMovementSessionClosedError();
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('CASH_MOVEMENT_SESSION_CLOSED');
+    expect(ipcError.message).toBe(
+      'That day is closed — its cash difference already reflects this. Add a note to the closed session instead.',
+    );
+  });
+
+  it('wraps CashMovementAlreadyReversedError into { code: CASH_MOVEMENT_ALREADY_REVERSED, message } (Phase 17.5 Task 5)', () => {
+    const error = new CashMovementAlreadyReversedError('movement-1');
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('CASH_MOVEMENT_ALREADY_REVERSED');
+    expect(ipcError.message).toContain('movement-1');
+  });
+
+  it('wraps ReversalOfReversalError into { code: REVERSAL_OF_REVERSAL, message } (Phase 17.5 Task 5)', () => {
+    const error = new ReversalOfReversalError('movement-2');
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('REVERSAL_OF_REVERSAL');
+    expect(ipcError.message).toContain('movement-2');
   });
 
   it("wraps NegativeStockBlockedError into { code: NEGATIVE_STOCK_BLOCKED, details.items } — defensive/secondary path only (P17-1 review): the real sale:create flow never lets this reach here, see sale.handler.ts's runCreateSale", () => {

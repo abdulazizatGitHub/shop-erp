@@ -56,6 +56,12 @@ export const channels = {
     open: 'cashSession:open',
     close: 'cashSession:close',
     today: 'cashSession:today',
+    setNote: 'cashSession:setNote',
+  },
+  cashMovement: {
+    record: 'cashMovement:record',
+    reverse: 'cashMovement:reverse',
+    listForDateRange: 'cashMovement:listForDateRange',
   },
   purchase: {
     create: 'purchase:create',

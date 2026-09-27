@@ -1,10 +1,14 @@
 import { ZodError } from 'zod';
 import {
   AnotherSessionStillOpenError,
+  CashMovementAlreadyReversedError,
+  CashMovementSessionClosedError,
+  CashSessionNotOpenError,
   DiscountExceedsSubtotalError,
   MultipleOpenSessionsError,
   NegativeStockBlockedError,
   NegativeStockConfirmationRequiredError,
+  ReversalOfReversalError,
   SessionAlreadyOpenError,
 } from '@shop/core';
 import { DbBusyError } from '@shop/db';
@@ -45,6 +49,26 @@ export function toIpcError(error: unknown): IpcError {
 
   if (error instanceof MultipleOpenSessionsError) {
     return { code: 'MULTIPLE_OPEN_SESSIONS', message: error.message };
+  }
+
+  // Phase 17.5, Task 5 — cash_movement's own errors, same primary-path
+  // reject-and-catch-code shape as the cash-session errors above (a
+  // plain string-only error, unlike the negative-stock case's array
+  // payload, so the P17-1 IPC-boundary redesign doesn't apply here).
+  if (error instanceof CashSessionNotOpenError) {
+    return { code: 'CASH_SESSION_NOT_OPEN', message: error.message };
+  }
+
+  if (error instanceof CashMovementSessionClosedError) {
+    return { code: 'CASH_MOVEMENT_SESSION_CLOSED', message: error.message };
+  }
+
+  if (error instanceof CashMovementAlreadyReversedError) {
+    return { code: 'CASH_MOVEMENT_ALREADY_REVERSED', message: error.message };
+  }
+
+  if (error instanceof ReversalOfReversalError) {
+    return { code: 'REVERSAL_OF_REVERSAL', message: error.message };
   }
 
   if (error instanceof DiscountExceedsSubtotalError) {

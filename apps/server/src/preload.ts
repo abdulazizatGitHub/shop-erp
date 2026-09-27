@@ -110,6 +110,7 @@ import type {
   ShopIdentityDto,
   AdvanceDto,
   AttendanceRecordDto,
+  CashMovementDto,
   CashSessionDto,
   CloseSessionInput,
   CreateExpenseInput,
@@ -117,10 +118,14 @@ import type {
   ExpenseDto,
   GetMonthAttendanceInput,
   ListAdvancesInput,
+  ListCashMovementsInput,
   ListExpensesInput,
   OpenSessionInput,
+  RecordCashMovementInput,
+  ReverseCashMovementInput,
   RecordAdvanceInput,
   SaveAttendanceInput,
+  SetCashSessionNoteInput,
   StaffCreateInput,
   StaffDto,
   StockValuationReportDto,
@@ -272,6 +277,18 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.cashSession.close, input) as Promise<CashSessionDto>,
     today: (): Promise<CashSessionDto | null> =>
       ipcRenderer.invoke(channels.cashSession.today) as Promise<CashSessionDto | null>,
+    setNote: (input: SetCashSessionNoteInput): Promise<CashSessionDto> =>
+      ipcRenderer.invoke(channels.cashSession.setNote, input) as Promise<CashSessionDto>,
+  },
+  cashMovement: {
+    record: (input: RecordCashMovementInput): Promise<CashMovementDto> =>
+      ipcRenderer.invoke(channels.cashMovement.record, input) as Promise<CashMovementDto>,
+    reverse: (input: ReverseCashMovementInput): Promise<CashMovementDto> =>
+      ipcRenderer.invoke(channels.cashMovement.reverse, input) as Promise<CashMovementDto>,
+    listForDateRange: (input: ListCashMovementsInput): Promise<readonly CashMovementDto[]> =>
+      ipcRenderer.invoke(channels.cashMovement.listForDateRange, input) as Promise<
+        readonly CashMovementDto[]
+      >,
   },
   purchase: {
     create: (input: CreatePurchaseInput): Promise<CreatePurchaseResult> =>

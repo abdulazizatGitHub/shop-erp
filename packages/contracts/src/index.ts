@@ -61,8 +61,17 @@ export {
 export {
   OpenSessionInput,
   CloseSessionInput,
+  SetCashSessionNoteInput,
   CashSessionDto,
 } from './cash-session/cash-session.js';
+
+export {
+  CashMovementType,
+  RecordCashMovementInput,
+  ReverseCashMovementInput,
+  ListCashMovementsInput,
+  CashMovementDto,
+} from './cash-movement/cash-movement.js';
 
 export {
   SaleLineInput,

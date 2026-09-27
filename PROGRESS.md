@@ -41,6 +41,114 @@
 
 ---
 
+## [2026-09-27] Session 96 — Phase 17.5 complete: Tasks 5 & 6 built, BUG-31 FIXED
+
+**Goal:** Build Task 5 (contracts + IPC) and Task 6 (UI) — the "Cash In
+/ Cash Out" recording/reversal UI, plus the R7-referenced "Add note on
+a closed session" follow-up — closing out Phase 17.5.
+
+**Done:**
+
+- Contracts: `packages/contracts/src/cash-movement/cash-movement.ts`
+  (new) — `CashMovementType`, `RecordCashMovementInput`,
+  `ReverseCashMovementInput`, `ListCashMovementsInput`,
+  `CashMovementDto`. `cash-session.ts` — added `SetCashSessionNoteInput`
+  and a `notes` field on `CashSessionDto`.
+- IPC: new channels `cashMovement.record`/`.reverse`/
+  `.listForDateRange` and `cashSession.setNote`
+  (`apps/server/src/ipc/channels.ts`); new
+  `apps/server/src/ipc/handlers/cash-movement.handler.ts`
+  (`runRecordCashMovement`/`runReverseCashMovement`/
+  `runListCashMovements`, the `item.handler.test.ts` plain-function
+  precedent); `cash-session.handler.ts` gained `runSetCashSessionNote`
+  and the new channel's registration. `with-error.ts` maps the four new
+  errors (`CashSessionNotOpenError`, `CashMovementSessionClosedError`,
+  `CashMovementAlreadyReversedError`, `ReversalOfReversalError`) via the
+  established reject-and-catch-`.code` pattern — not the
+  resolved-discriminated-result redesign `sale.handler.ts` needed,
+  since none of these carry a complex payload the IPC boundary can't be
+  trusted with. Wired through `main.ts`, `preload.ts`,
+  `electron-api.d.ts`.
+- Core/db: `CashSessionRepositoryPort` gained `setSessionNote` (plain
+  `UPDATE cash_session SET notes = ?`, no `audit_log`/`sync_outbox` row
+  — a free-text annotation, not a financial fact); `CashSessionRecord`
+  gained `notes`.
+- UI: new `apps/client/src/pages/dashboard/CashMovementSection.tsx`
+  (extracted as its own file, not grown into `CashSessionWidget.tsx`,
+  per CLAUDE.md §9's ~300-line guideline) — mounted in STATE 2 (open)
+  only. "Cash In / Cash Out" button → inline form (Reason select, a
+  Cash In/Cash Out toggle shown only for `'other'`, amount, a note
+  required before Record enables); movement list below shows each
+  entry individually with doc_no/description/note/signed amount, a
+  reversal labelled "Correction of {original doc_no}", and a per-row
+  Reverse action (own required note); a static line carries ADR-0016
+  §5's accepted-risk warning verbatim. New
+  `apps/client/src/pages/dashboard/ClosedSessionNote.tsx` — mounted in
+  STATE 3 (closed) only — "Add note"/"Edit note" writing to
+  `cash_session.notes`, Save disabled until non-blank.
+  `CashSessionWidget.tsx` wires both children in, passing
+  `session.sessionDate`/`session.id`/`session.notes`.
+- Tests: `cash-movement.handler.test.ts` (5, new, real temp DB);
+  `with-error.test.ts` (+4, now 14); `CashMovementSection.test.tsx` (6,
+  new); `cash-session.handler.test.ts` (2, new, real temp DB — a note
+  is written, and a second call replaces rather than appends);
+  `ClosedSessionNote.test.tsx` (4, new); `CashSessionWidget.test.tsx`
+  (+2 — the note control absent while open, visible with its text and
+  "Edit note" once closed). No existing cash-session/cash-movement/
+  dashboard test was deleted or weakened; the mocked `ipc.cashSession`/
+  `ipc.cashMovement` objects in `CashSessionWidget.test.tsx` gained
+  `setNote`/`listForDateRange` (defaulted to resolve `[]`) so all 6
+  pre-existing cases kept passing unmodified in substance.
+- `docs/phases/PHASE_17_5.md` — T5/T6 exit criteria marked done with
+  every test named, the plan-vs-built scope note recorded (the "Reverse
+  disabled on a closed-session movement" UI case doesn't arise, since
+  `CashMovementSection` only ever loads the open session's own date),
+  header status moved to COMPLETE.
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` — status line
+  updated to "Accepted and implemented".
+- `PROJECT.md` — BUG-31 marked **FIXED** (title and Status line); BUG-32
+  reconfirmed FIXED (unchanged from Session 95).
+
+**Verified:**
+
+- `npm run typecheck` — clean.
+- `npm run lint` — clean (`eslint . --max-warnings=0`).
+- `npm test` — **964/964** (up from 941 before this round; +23: 5 + 4 +
+  6 + 2 + 4 + 2).
+- `npm run build --workspace=@shop/client` and
+  `npm run build --workspace=@shop/server` — both succeed, no errors.
+
+**Not done / deferred:** none — this closes Phase 17.5.
+
+**Bugs found:** none new. BUG-33 parts (a)/(b) remain open (unrelated,
+logged in Session 94/95).
+
+**Decisions taken:** Reversal disabled-with-refusal-copy for a
+closed-session's movement (plan text under old T6) is not built as a
+UI case — `CashMovementSection` structurally never lists a closed
+session's movements, so the scenario cannot occur in this UI. The
+refusal path itself is fully covered at the handler layer
+(`cash-movement.handler.test.ts`). Recorded as a scope note in
+`PHASE_17_5.md` rather than silently dropped.
+
+**Blocked on:** nothing.
+
+**Next session should:** Phase 17.5 is complete — resume Phase 17's
+paused work (P17-3, P17-4, P17-5, P17-7, P17-2b), per
+`docs/phases/PHASE_17_5.md`'s own pause note.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (Phase 17 unpaused)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (964/964)
+
+---
+
 ## [2026-09-27] Session 95 — Phase 17.5 Task 4 built: BUG-32 fixed in getCashBookReport
 
 **Goal:** Build Task 4 only — fix BUG-32 in `getCashBookReport` (cash

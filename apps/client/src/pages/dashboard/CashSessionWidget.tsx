@@ -3,6 +3,8 @@ import type { CashSessionDto } from '@shop/contracts';
 import { Money } from '@shop/shared';
 import { Alert, Button, Card, MoneyDisplay, TextInput } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
+import { CashMovementSection } from './CashMovementSection.js';
+import { ClosedSessionNote } from './ClosedSessionNote.js';
 
 type FormMode = 'none' | 'open' | 'close';
 
@@ -186,6 +188,8 @@ export function CashSessionWidget(): React.JSX.Element {
             {session.sessionDate} — opened at {formatTime(session.openedAt)}
           </p>
 
+          <CashMovementSection sessionDate={session.sessionDate} />
+
           {mode === 'close' ? (
             <>
               <TextInput
@@ -259,6 +263,13 @@ export function CashSessionWidget(): React.JSX.Element {
         <Alert variant={varianceVariant}>
           {varianceLabel} <MoneyDisplay paisaValue={Math.abs(difference)} tone="muted" />
         </Alert>
+        <ClosedSessionNote
+          sessionId={session.id}
+          note={session.notes}
+          onSaved={(note) => {
+            setSession({ ...session, notes: note });
+          }}
+        />
       </div>
     </Card>
   );

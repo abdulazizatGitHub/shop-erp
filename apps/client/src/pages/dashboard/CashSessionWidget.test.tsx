@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/ipc.js', () => ({
   ipc: {
@@ -8,6 +8,12 @@ vi.mock('../../lib/ipc.js', () => ({
       today: vi.fn(),
       open: vi.fn(),
       close: vi.fn(),
+      setNote: vi.fn(),
+    },
+    cashMovement: {
+      record: vi.fn(),
+      reverse: vi.fn(),
+      listForDateRange: vi.fn(),
     },
   },
 }));
@@ -16,10 +22,15 @@ import { ipc } from '../../lib/ipc.js';
 import { CashSessionWidget } from './CashSessionWidget.js';
 
 const today = vi.mocked(ipc.cashSession.today);
+const listForDateRange = vi.mocked(ipc.cashMovement.listForDateRange);
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  listForDateRange.mockResolvedValue([]);
 });
 
 describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
@@ -43,6 +54,7 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
       countedCash: null,
       difference: null,
       status: 'open',
+      notes: null,
     });
 
     render(<CashSessionWidget />);
@@ -62,6 +74,7 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
       countedCash: 4500000,
       difference: 0,
       status: 'closed',
+      notes: null,
     });
 
     render(<CashSessionWidget />);
@@ -80,6 +93,7 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
       countedCash: 4500000,
       difference: 80000,
       status: 'closed',
+      notes: null,
     });
 
     render(<CashSessionWidget />);
@@ -103,6 +117,7 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
       countedCash: null,
       difference: null,
       status: 'open',
+      notes: null,
     });
 
     render(<CashSessionWidget />);
@@ -124,10 +139,55 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
       countedCash: 4400000,
       difference: -100000,
       status: 'closed',
+      notes: null,
     });
 
     render(<CashSessionWidget />);
 
     expect(await screen.findByText('Short by', { exact: false })).toBeTruthy();
+  });
+
+  // Review round 7 follow-up (docs/phases/PHASE_17_5.md): the "Add note"
+  // control only makes sense once a session's expected_cash is final —
+  // it must not appear while the session is still open.
+  it('STATE 2 — open: does not show an Add note / Edit note control', async () => {
+    today.mockResolvedValue({
+      id: 's1',
+      sessionDate: '2026-08-15',
+      openedAt: '2026-08-15T09:00:00.000Z',
+      closedAt: null,
+      openingCash: 500000,
+      expectedCash: null,
+      countedCash: null,
+      difference: null,
+      status: 'open',
+      notes: null,
+    });
+
+    render(<CashSessionWidget />);
+
+    await screen.findByText('Rs 5,000');
+    expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit note' })).toBeNull();
+  });
+
+  it('STATE 3 — closed with an existing note: shows the note text and an Edit note button', async () => {
+    today.mockResolvedValue({
+      id: 's1',
+      sessionDate: '2026-08-15',
+      openedAt: '2026-08-15T09:00:00.000Z',
+      closedAt: '2026-08-15T20:00:00.000Z',
+      openingCash: 500000,
+      expectedCash: 4500000,
+      countedCash: 4500000,
+      difference: 0,
+      status: 'closed',
+      notes: 'Owner took Rs 2,000 to the bank.',
+    });
+
+    render(<CashSessionWidget />);
+
+    expect(await screen.findByText('Owner took Rs 2,000 to the bank.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit note' })).toBeTruthy();
   });
 });

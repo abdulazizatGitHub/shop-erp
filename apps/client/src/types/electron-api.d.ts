@@ -97,6 +97,7 @@ import type {
   SaleWithLinesDto,
   AdvanceDto,
   AttendanceRecordDto,
+  CashMovementDto,
   CashSessionDto,
   CloseSessionInput,
   CreateExpenseInput,
@@ -104,10 +105,14 @@ import type {
   ExpenseDto,
   GetMonthAttendanceInput,
   ListAdvancesInput,
+  ListCashMovementsInput,
   ListExpensesInput,
   OpenSessionInput,
   RecordAdvanceInput,
+  RecordCashMovementInput,
+  ReverseCashMovementInput,
   SaveAttendanceInput,
+  SetCashSessionNoteInput,
   StaffCreateInput,
   StaffDto,
   StockValuationReportDto,
@@ -480,6 +485,14 @@ export interface ElectronApi {
     readonly open: (input: OpenSessionInput) => Promise<CashSessionDto>;
     readonly close: (input: CloseSessionInput) => Promise<CashSessionDto>;
     readonly today: () => Promise<CashSessionDto | null>;
+    readonly setNote: (input: SetCashSessionNoteInput) => Promise<CashSessionDto>;
+  };
+  readonly cashMovement: {
+    readonly record: (input: RecordCashMovementInput) => Promise<CashMovementDto>;
+    readonly reverse: (input: ReverseCashMovementInput) => Promise<CashMovementDto>;
+    readonly listForDateRange: (
+      input: ListCashMovementsInput,
+    ) => Promise<readonly CashMovementDto[]>;
   };
   readonly purchase: {
     readonly create: (input: CreatePurchaseInput) => Promise<{

@@ -8,6 +8,7 @@ import {
   type CashSessionRepositoryPort,
   type CloseSessionRepoInput,
   type OpenSessionRepoInput,
+  type SetSessionNoteRepoInput,
 } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
@@ -22,6 +23,7 @@ const CASH_SESSION_COLUMNS = [
   'expectedCash',
   'countedCash',
   'difference',
+  'notes',
 ] as const;
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -333,6 +335,40 @@ export class KyselyCashSessionRepository implements CashSessionRepositoryPort {
     }
     return rows[0] ? toCashSessionRecord(rows[0]) : null;
   }
+
+  /**
+   * Review round 7 follow-up (docs/phases/PHASE_17_5.md). Plain UPDATE,
+   * not append-only — same as the rest of this row. No audit_log/
+   * sync_outbox entry: notes are a free-text annotation, not a
+   * financial fact, and every other write in this repository logs those
+   * two for that reason — this one deliberately doesn't.
+   */
+  async setSessionNote(input: SetSessionNoteRepoInput): Promise<CashSessionRecord> {
+    const existing = await this.db
+      .selectFrom('cashSession')
+      .select(['id'])
+      .where('id', '=', input.sessionId)
+      .where('tenantId', '=', this.tenantId)
+      .executeTakeFirst();
+    if (!existing) {
+      throw new Error(`Cash session ${input.sessionId} not found`);
+    }
+
+    await this.db
+      .updateTable('cashSession')
+      .set({ notes: input.note })
+      .where('id', '=', input.sessionId)
+      .where('tenantId', '=', this.tenantId)
+      .execute();
+
+    const row = await this.db
+      .selectFrom('cashSession')
+      .select(CASH_SESSION_COLUMNS)
+      .where('id', '=', input.sessionId)
+      .executeTakeFirstOrThrow();
+
+    return toCashSessionRecord(row);
+  }
 }
 
 function toCashSessionRecord(row: {
@@ -344,6 +380,7 @@ function toCashSessionRecord(row: {
   expectedCash: number | null;
   countedCash: number | null;
   difference: number | null;
+  notes: string | null;
 }): CashSessionRecord {
   return {
     id: row.id,
@@ -355,5 +392,6 @@ function toCashSessionRecord(row: {
     countedCashPaisa: row.countedCash,
     differencePaisa: row.difference,
     status: row.closedAt === null ? 'open' : 'closed',
+    notes: row.notes,
   };
 }
