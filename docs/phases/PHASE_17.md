@@ -13,9 +13,17 @@ was never actually verified and is a well-known Electron limitation —
 for the negative-stock cases instead of rejecting, which the Structured
 Clone Algorithm does guarantee. **P17-2 is also DONE — pending
 owner-machine click-through** (low-stock badge switched to
-`counterStockMilli`, Items-list dual-figure display, Dashboard widget —
-see §2.2/§6/§8, 894/894 tests). P17-3 through P17-5 and P17-7 remain to
-build.
+`counterStockMilli`, Items-list dual-figure display, Dashboard widget,
+plus two review rounds: single-source `isLowStock` DTO field and a
+null-as-0 guard fix — see §2.2/§6/§8, 899/899 tests). **P17-4 is
+BLOCKED — 2026-09-27:** verifying its pre-conditions (owner-drawing
+scope, the cash-close formula) surfaced BUG-31 (PROJECT.md) — no
+existing way to record cash removed from the drawer for a bank deposit,
+which the cash session misreports as a shortage every time. Per this
+session's own STOP instruction, P17-4 was not built; BUG-31 is its own,
+higher-priority task. §9 also logs P17-2b (Q17-7's stock-alert
+taxonomy follow-up, not built this session). P17-3, P17-5, and P17-7
+remain to build; P17-4 is blocked on BUG-31.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -476,45 +484,68 @@ has no `isBillable` field at all — it never reaches the client. (Every
 other `isBillable` hit in the repo is `job_part.is_billable`, an
 unrelated column on a different table — per-job billing, not this one.)
 
-**Rule set, per D17-4:**
+**Q-DRAWING, ANSWERED (owner via developer, 2026-09-27) — supersedes
+the "Owner drawing: Yes" row below:** owner drawings are **out of
+scope** — "the system digitizes business revenue, not the owner's
+personal spending." Consequence: `is_owner_drawing` is hidden from the
+form too, exactly like `kind`/`is_billable` — defaulted to `false` on
+every category this form ever creates. **The form is name-only.**
+Nothing in this phase builds a way to create, or otherwise designate,
+an owner-drawing category — that stays a manual DB-only state no UI in
+this codebase writes to (matches today's live data: all 6 seeded rows
+already have `is_owner_drawing=0`, per (a) above). If a seeded/manual
+owner-drawing row is ever deactivated through this form, that stays
+safe (soft `deleted_at`, `is_owner_drawing` untouched) — this form just
+never sets it to `1`.
 
-- `allocation_method` is **derived** from `is_owner_drawing`, never a
-  form field: `true` maps to `'not_expense'`, `false` maps to
-  `'direct'`. A core rule enforces the two can never disagree.
-  (`'not_expense'` itself is never read by any view either — only
-  `is_owner_drawing` is — so this is for internal consistency, not
-  because a report requires it.)
+**A17-3 wording, CLOSED (owner via developer, 2026-09-27):** the
+billable-field question below is moot now that Q-DRAWING also settles
+it the same way — **keep hidden**, no help text needed since nothing
+shows the field. No longer provisional.
+
+**Rule set, per D17-4 (revised per Q-DRAWING):**
+
+- `allocation_method` is **derived**, never a form field: this form
+  only ever produces `is_owner_drawing=false`, so every category it
+  creates gets `allocation_method='direct'`. `'not_expense'` is
+  unreachable through this form — matches "owner drawings out of
+  scope," there is no form path that should ever produce one. A core
+  rule still enforces the derivation for any future write path to this
+  table.
 - **`kind` has zero readers, so it is hidden from the form**, defaulted
   to `'variable'` (the majority of the 6 seeds — 4 vs. 2 — there is no
   single value that fits all 6).
-- **Correction to the instruction's own premise:** "Billable help text
-  must cite its actual consumer" assumed one exists. **It doesn't** —
-  `is_billable` has the same zero-consumers problem as `kind`. Applying
-  the same rule symmetrically: **`is_billable` is also hidden**,
-  defaulted to `false` (matching all 6 seeds). Flagged for owner review
-  before P17-4 starts — the alternative (keep it visible with honest
-  "not yet used by any report" wording) is available if preferred.
+- **`is_billable` has the same zero-consumers problem as `kind`** —
+  hidden, defaulted to `false` (matching all 6 seeds). Closed by A17-3
+  above, no longer provisional.
+- **`is_owner_drawing` is hidden too, per Q-DRAWING** — defaulted to
+  `false` on every category this form creates.
 
-**Corrected field list** (owner reviews before P17-4 starts):
+**Corrected field list** (final — both open items closed by Q-DRAWING/A17-3):
 
-| Field                              | Shown?        | Reasoning                                                                                                                                                                                                           |
-| ---------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Name                               | Yes           | (no help text needed)                                                                                                                                                                                               |
-| Owner drawing                      | Yes           | "Owner drawing: money the owner takes for personal use. It is moved out of business expenses and does not reduce either shop's profit." — matches `is_owner_drawing`, the one column every real consumer filters on |
-| Kind                               | **Hidden**    | Zero readers (D17-4c) — defaulted to `'variable'`                                                                                                                                                                   |
-| Billable                           | **Hidden**    | Zero readers (D17-4c) — defaulted to `false`, matching all 6 seeds                                                                                                                                                  |
-| Business unit                      | **Removed**   | Not a category-level field — chosen per expense at entry time on the existing expense form, unaffected by this phase                                                                                                |
-| Allocation method / Parts share bp | **Not shown** | `allocation_method` derived from `is_owner_drawing`; `parts_share_bp` stays `NULL`, matching all 6 seeds and Q17-1                                                                                                  |
+| Field                              | Shown?        | Reasoning                                                                                                                       |
+| ---------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Name                               | Yes           | The only field this form writes at all (create or edit)                                                                         |
+| Owner drawing                      | **Hidden**    | Q-DRAWING, ANSWERED — out of scope; defaulted to `false`                                                                        |
+| Kind                               | **Hidden**    | Zero readers (D17-4c) — defaulted to `'variable'`                                                                               |
+| Billable                           | **Hidden**    | Zero readers (D17-4c), A17-3 CLOSED — defaulted to `false`, matching all 6 seeds                                                |
+| Business unit                      | **Removed**   | Not a category-level field — chosen per expense at entry time on the existing expense form, unaffected by this phase            |
+| Allocation method / Parts share bp | **Not shown** | `allocation_method` derived, always `'direct'` through this form; `parts_share_bp` stays `NULL`, matching all 6 seeds and Q17-1 |
 
-**Field-lock rule (Q17-5, ANSWERED), corrected list:** once any expense
-references a category, only its **`name`** stays editable —
-`is_owner_drawing` locks (the only other field this form actually
-writes). Enforced by a new core check (e.g.
-`assertExpenseCategoryFieldsLocked`), following the
-`assertCommissionModeConsistent` precedent
-(`packages/core/src/job/service-charge.service.ts:21-84`) — logic lives
-in `packages/core`, never a DB constraint (CLAUDE.md section 3.7).
-in `packages/core`, never a DB constraint (CLAUDE.md §3.7).
+**Field-lock rule (Q17-5, ANSWERED), simplified per Q-DRAWING:** since
+this form never writes anything but `name` — not even
+`is_owner_drawing` any more — the "lock other fields once referenced"
+protection collapses to a simpler guarantee: **the edit input schema
+itself accepts only `name`**, so there is no other field to
+accidentally change after a category is referenced by an expense. A
+core-level `assertExpenseCategoryFieldsLocked`-style check is still
+worth keeping as defense-in-depth for any future write path to this
+table (e.g. an admin tool), following the `assertCommissionModeConsistent`
+precedent (`packages/core/src/job/service-charge.service.ts:21-84`) —
+logic lives in `packages/core`, never a DB constraint (CLAUDE.md §3.7)
+— but the form's own contract no longer needs a "kind/isBillable/
+isOwnerDrawing edit is rejected" test case, since its input type cannot
+express one.
 
 **Invalid combinations rejected in `packages/core`** (checked against
 what the live views actually filter on, not assumed):
@@ -729,7 +760,7 @@ UI), same convention as every prior phase's task table.
 | P17-1   | `negativeStockPolicy`, one core summed/warehouse-scoped predicate, block+warn, both mechanisms unified (S17-SALE-1)             | `setting.repository.ts`/`setting.handler.ts`, `packages/contracts/src/setting/setting.ts`, `packages/core/src/sale/sale.ts`+`sale.repository.port.ts` (predicate + typed errors), `sale.repository.ts` (rewritten check + throw), `item.repository.ts`+`item.repository.port.ts`+`packages/contracts/src/item/item.ts` (new `counterStockMilli`), `ItemSearchPanel.tsx`+`ItemProductCard.tsx` (switched to `counterStockMilli`), `useSaleFlow.ts`+`SalePage.tsx`+`useSaleKeyboardShortcuts.ts` (Option C confirmation flow), new `sections/StockAlertsSettingsSection.tsx`                   | No                                              | **DONE — pending owner-machine click-through.** All automated exit criteria in §8 verified: 858/858 + review-round additions, `npm run verify` clean, both builds clean, live-DB script (run against the real dev DB — a process mistake corrected going forward, see CLAUDE.md) confirmed all four scenarios. Review round fixed a real IPC-boundary gap: `sale:create` now resolves a discriminated `NegativeStockOutcome` instead of relying on thrown-error properties. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding. | **M/L** (revised up from M) |
 | P17-2   | Low-stock badge + default threshold + Dashboard card, with `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (`counterStockMilli`/`reorderLevelMilli` on all 3 query methods), new `packages/core/src/item/low-stock.ts` (`isLowStock`), `item.handler.ts` (`runLowStockCount`), `stock-alerts-setting.repository.ts`/`.handler.ts` (split from `setting.*` to stay under the ~300-line convention), `StockBadge.tsx` (client-side `isLowStock` duplicate + `resolveStockBadge` rewrite — client can't import `@shop/core`), `ItemsPage.tsx`+new `ItemsTableRow.tsx` (dual-figure display, "Low stock only" filter), new `LowStockWidget.tsx` + `DashboardPage.tsx`/`App.tsx` wiring | No                                              | **DONE — pending owner-machine click-through.** All exit criteria in §8 verified: 894/894, `npm run verify` clean, both builds clean. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding.                                                                                                                                                                                                                                                                                                                                       | M                           |
 | P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | M                           |
-| P17-4   | Expense Categories Settings section, corrected field list (S17-EXP-1)                                                           | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (`assertExpenseCategoryFieldsLocked` + the two invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                 | No — `deleted_at` already exists, safe to reuse | Ready — form wording is provisional, owner reviews before this task starts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | M                           |
+| P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **BLOCKED — see BUG-31.** Form wording is CLOSED (Q-DRAWING/A17-3, both settled name-only) — the remaining blocker is the cash-removal gap found while verifying P17-4's pre-conditions, not this task's own scope. Not built this session.                                                                                                                                                                                                                                                                                                                                         | M                           |
 | P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
 | P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | Ready — **scope-approved this phase**, tier stays T2 in the inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
 
@@ -739,10 +770,11 @@ reflecting P17-1's re-estimate and P17-7's addition).
 
 ### T2 — stays documented, not built this phase
 
-| Task ID | Description                                                                            | Files likely touched                                                                                                                                             | Migration? | Effort |
-| ------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ |
-| P17-6   | Wire `receiptPaperSize` into purchase-order + customer-statement prints (S17-PRINT-2b) | `purchase-pdf.ts` (needs a size parameter added first), `customer-statement-pdf.ts`, `purchase-print.handler.ts`, `print.handler.ts` (customer-statement branch) | No         | M      |
-| P17-8   | Half-day wage fraction + Leave/Holiday paid toggles (S17-STAFF-2, S17-STAFF-3)         | `wage.service.ts` (read settings instead of hardcoded constants), `setting.repository.ts`/`setting.handler.ts`, new `sections/PayrollSettingsSection.tsx`        | No         | S      |
+| Task ID | Description                                                                            | Files likely touched                                                                                                                                                                                               | Migration? | Effort |
+| ------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------ |
+| P17-6   | Wire `receiptPaperSize` into purchase-order + customer-statement prints (S17-PRINT-2b) | `purchase-pdf.ts` (needs a size parameter added first), `customer-statement-pdf.ts`, `purchase-print.handler.ts`, `print.handler.ts` (customer-statement branch)                                                   | No         | M      |
+| P17-8   | Half-day wage fraction + Leave/Holiday paid toggles (S17-STAFF-2, S17-STAFF-3)         | `wage.service.ts` (read settings instead of hardcoded constants), `setting.repository.ts`/`setting.handler.ts`, new `sections/PayrollSettingsSection.tsx`                                                          | No         | S      |
+| P17-2b  | New "Not stocked yet" badge/count state for never-received items (Q17-7 follow-up, §9) | `packages/core/src/item/low-stock.ts` (replace `isLowStock` boolean with a `stockAlert` enum), `item.repository.ts`, `packages/contracts/src/item/item.ts`, `StockBadge.tsx`, `LowStockWidget.tsx`/`ItemsPage.tsx` | No         | S/M    |
 
 **Settings-nav wiring** (the new groups/items from §5) is folded into
 whichever of P17-1/P17-3/P17-4/P17-7 lands first — no separate task.
@@ -926,31 +958,29 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       to `25` updates every currently-open report table **without a
       reload** (A17-4) — manual verification on the shop machine, or a
       render test confirming the hook re-renders subscribers on change.
-- [ ] **P17-4** — Repository tests: create a category; edit its name
-      only (succeeds); attempt to edit `kind`/`isBillable`/
-      `isOwnerDrawing` on a category already referenced by a real seeded
-      `expense` row (rejected with the new typed error); the two invalid
-      combinations (`is_owner_drawing=1` AND `is_billable=1`; non-null
-      `parts_share_bp` with `allocation_method !== 'shared_fixed'`) are
-      rejected in `packages/core`; deactivate a category with existing
-      expenses (soft, `deletedAt` set) and confirm `expense:list`/
-      `getExpenseSummaryReport` still return the same historical
-      rows/totals unchanged (hand-calculated total in the test comment).
-      UI action: Settings → Expenses → Categories shows the corrected
-      field list (Name/Kind/Billable/Owner drawing, no Business unit, no
-      Allocation method), matching the Brands/Service-Charges shell.
-      **D17-4 form (this revision):** the form itself shows **only Name
-      and Owner drawing** — `kind` and `is_billable` are hidden fields
-      defaulted to `'variable'`/`false`, per D17-4(c)'s zero-readers
-      finding, not merely de-emphasized on the shell. `allocation_method`
-      is derived, never a form field: `is_owner_drawing=true` maps to
-      `'not_expense'`, `false` maps to `'direct'`. **New criterion:** an
-      expense recorded against a new category created with "Owner
-      drawing" checked appears in `v_owner_drawings` and does **NOT**
-      appear in `v_unit_direct_expense` or in
-      `getExpenseSummaryReport`'s business totals — all three filter on
-      `is_owner_drawing` alone (D17-4b), so this is provable directly from
-      the corrected field list with no `kind`/`is_billable` involvement.
+- [ ] **P17-4** — BLOCKED, see BUG-31 (PROJECT.md) — not built this
+      session; the cash-removal verification below triggered a STOP.
+      Simplified scope, once unblocked, per Q-DRAWING (owner drawings
+      out of scope — form is name-only, `is_owner_drawing` hidden too):
+      Repository tests: create a category (name only); edit its name
+      (succeeds) — the edit input schema itself accepts no other field,
+      so there is no "kind/isBillable/isOwnerDrawing edit rejected" case
+      to test; the two invalid combinations (`is_owner_drawing=1` AND
+      `is_billable=1`; non-null `parts_share_bp` with
+      `allocation_method !== 'shared_fixed'`) stay rejected in
+      `packages/core` as defense-in-depth for any future write path,
+      even though this form can never produce either; deactivate a
+      category with existing expenses (soft, `deletedAt` set) and
+      confirm `expense:list`/`getExpenseSummaryReport` still return the
+      same historical rows/totals unchanged (hand-calculated total in
+      the test comment). UI action: Settings → Expenses → Categories
+      shows the corrected field list — **Name only**, matching the
+      Brands/Service-Charges shell. **Dropped criterion (Q-DRAWING):**
+      the earlier "expense in a new owner-drawing category appears in
+      v_owner_drawings and not in v_unit_direct_expense/business totals"
+      test is removed — this form can never create an owner-drawing
+      category (`is_owner_drawing` is hidden, always `false`), so that
+      scenario is unreachable through the UI this task builds.
 - [ ] **P17-5** — Unit test: `renderInvoicePdf`/`renderPaymentReceiptPdf`
       each accept and thread through a page-size parameter (test asserts
       the parameter reaches the underlying `PDFDocument` call). UI
@@ -969,6 +999,117 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       next begins).
 - [ ] `PROJECT.md` and `PROGRESS.md` updated per CLAUDE.md §7 before this
       phase (the build sub-phase) is called complete.
+
+---
+
+## 9. Follow-up task P17-2b — Q17-7 stock-alert taxonomy (not part of this phase's build)
+
+**Q17-7, ANSWERED (developer decision, 2026-09-27 — owner to confirm
+before P17-2b is built):** replaces the provisional P17-2 answer
+("never-stocked items are never flagged"). A never-received item is
+neither "healthy" nor genuinely "low" — it deserves its own state, not
+silence. New taxonomy, replacing the single `isLowStock` boolean with a
+four-state result:
+
+| State             | Condition                                                                          | Colour |
+| ----------------- | ---------------------------------------------------------------------------------- | ------ |
+| `'out'`           | Has stock history, `counterStockMilli <= 0` (includes negative)                    | Red    |
+| `'low'`           | `counterStockMilli > 0` and `<= reorderLevelMilli` (or shop default)               | Yellow |
+| `'not_stocked'`   | No stock history (`counterStockMilli === null`) **and** `reorderLevelMilli` is set | Grey   |
+| `null` (no state) | No history and no reorder level; `trackStock=false`; deleted                       | —      |
+
+- **Dashboard:** counts `'out'` + `'low'` exactly as today's single
+  count does, **plus** a separate "Not stocked yet: N" figure for
+  `'not_stocked'` items.
+- **"Low stock only" filter:** shows `'out'` + `'low'` items (unchanged
+  user-visible behaviour from today's single-boolean filter).
+- **Computed once, in `@shop/core`** (replacing
+  `packages/core/src/item/low-stock.ts`'s `isLowStock` boolean with a
+  `stockAlert: 'out' | 'low' | 'not_stocked' | null` function), sent as
+  one `ItemDto` field — no client re-derivation, same discipline as the
+  P17-2 review fix.
+
+**Report requested before scheduling P17-2b (this session, dev DB copy,
+never the live file directly — CLAUDE.md session rule):**
+
+- Active (non-deleted) items with `reorder_level` set: **1** (out of 7
+  total active items in the current dev DB — a small seed/test dataset,
+  not representative of the owner's real ~300–500 SKU catalogue per
+  PROJECT.md Q6).
+- Of that 1 item, with **zero** `stock_movement` rows anywhere (the
+  exact "not stocked yet" case P17-2b introduces): **1** — i.e. on
+  today's real dev data, P17-2b's new grey state would currently apply
+  to exactly one item, and today's build shows no badge for it at all.
+- **Current `resolveStockBadge` states** (`apps/client/src/components/
+shared/StockBadge.tsx`, post-P17-2-review-fix): `null` → no badge
+  (covers both `trackStock=false` and a never-stocked item — the two
+  cases P17-2b's taxonomy will split apart); `'Out of stock'` (red,
+  `counterStockMilli<=0`, already matches P17-2b's `'out'` exactly);
+  `'Low: N'` (yellow, `isLowStock` true, already matches P17-2b's
+  `'low'` exactly); `'N in stock'` (green, default). **P17-2b therefore
+  only needs to add one new rendered state (`'Not stocked yet'`, grey)
+  — the existing red/yellow states are unchanged**, confirming the
+  taxonomy above extends rather than duplicates today's badge.
+
+**Not built this session** — logged here and in §6's T2 table only, per
+explicit instruction. STOP condition from the cash-removal check (§10)
+took priority; P17-4 itself was also not built this session as a result.
+
+---
+
+## 10. Cash-removal-from-drawer gap — found while verifying P17-4's pre-conditions
+
+**Verification requested before P17-4 (no code, report only):**
+
+**(a) Does the cash session compute expected closing cash? Formula:**
+Yes — `packages/db/src/repositories/cash-session.repository.ts:205-208`:
+
+```
+cashIn  = openingCashPaisa + cashSales + cashPaymentsIn
+cashOut = cashPurchases + cashExpenses + cashPaymentsOut
+expectedCashPaisa = cashIn - cashOut
+differencePaisa   = countedCashPaisa - expectedCashPaisa
+```
+
+(`cashSales`/`cashPaymentsIn`/`cashPurchases`/`cashExpenses`/
+`cashPaymentsOut` are same-day, `method='cash'` sums — full per-term SQL
+at `cash-session.repository.ts:130-203`.)
+
+**(b) Is there any existing way to record cash removed from the drawer
+that is NOT an expense (payout / deposit / transfer)?** **No.**
+Verified both candidate mechanisms:
+
+- `expense` (method='cash') — recording a bank deposit as an "expense"
+  would misrepresent it as a business cost, and per Q-DRAWING (this
+  session) the system deliberately does not track the owner's personal
+  cash movements as expenses at all.
+- `payment` (direction='out', method='cash') — `CreatePaymentInput`
+  (`packages/contracts/src/payment/payment.ts:10`) **requires**
+  `partyId: z.string().uuid()`. Confirmed via `advance.repository.ts:74`
+  and `advance.repository.port.ts:42` that the one place `direction='out'`
+  is actually written is a **staff payroll advance** (a receivable
+  against a specific staff member) — not a general party-less cash
+  transfer. There is no `cash_movement`/`cash_transfer`/`bank_deposit`
+  table or concept anywhere in the schema (grepped all migrations —
+  zero matches), confirming PROJECT.md Q12's 2026-08-24 finding still
+  holds: no cash-drawer ledger exists outside `cash_session` itself.
+
+**(c) What happens at close when cash has been taken to the bank?**
+**It shows as a shortage.** `expectedCashPaisa` has no term that
+accounts for cash physically removed from the drawer for any reason
+other than a recorded `expense`/`payment` row. If the owner takes, say,
+Rs 5,000 to the bank mid-day, `countedCashPaisa` at close is Rs 5,000
+lower than `expectedCashPaisa`, producing `differencePaisa = -500000`
+— rendered by `CashSessionWidget.tsx:230-232` as **"Short by Rs
+5,000"**, `danger` variant. This is indistinguishable in the UI from an
+actual till shortage (theft, miscounting, an unrecorded sale) — a
+legitimate, routine cash-management action is misreported as a loss,
+every single time it happens, with no way to avoid it.
+
+**STOP triggered, per this session's own instruction:** (c) is a
+shortage with no way to record it. **Logged as BUG-31 in PROJECT.md**
+— its own task, higher priority than P17-4. P17-4 was not built this
+session as a result (see §6/§8's `P17-4` rows, both marked BLOCKED).
 
 ---
 

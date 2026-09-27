@@ -41,6 +41,161 @@
 
 ---
 
+## [2026-09-27] Session 90 — Phase 17 P17-4 verification: cash-removal gap found, STOP (BUG-31)
+
+**Goal:** Record three owner-side decisions (Q-DRAWING, Q17-7, A17-3
+wording), then verify P17-4's pre-conditions (can the expense form even
+reach an owner-drawing category; does cash-session close handle cash
+removed from the drawer) before starting P17-4's build.
+
+**Done:**
+
+- `docs/phases/PHASE_17.md` §2.6 — recorded Q-DRAWING (ANSWERED: owner
+  drawings out of scope) and closed A17-3 (billable field stays
+  hidden). Consequence: the Expense Categories form is **name-only** —
+  `is_owner_drawing` is now hidden alongside `kind`/`is_billable`,
+  defaulted `false`. Corrected field list and field-lock rule rewritten
+  to match; the "owner-drawing view-exclusion" exit criterion dropped
+  (unreachable through a form that can never set `is_owner_drawing=1`).
+- `docs/phases/PHASE_17.md` new §9 — logged **P17-2b** (Q17-7's
+  follow-up): a four-state `stockAlert` taxonomy
+  (`'out'`/`'low'`/`'not_stocked'`/`null`) replacing the single
+  `isLowStock` boolean, adding a grey "Not stocked yet" state for
+  never-received items with a reorder level set. Reported the
+  requested pre-scheduling numbers (dev DB copy, `data/shop-dev.db`
+  never touched directly — CLAUDE.md session rule): 1 of 7 active items
+  has `reorder_level` set; that same 1 item has zero `stock_movement`
+  rows anywhere (the exact new grey case). Current `resolveStockBadge`
+  states confirmed: `null` (no badge), `'Out of stock'` (red),
+  `'Low: N'` (yellow), `'N in stock'` (green) — P17-2b only adds the
+  grey state, doesn't touch the other three. **Not built this
+  session.**
+- `docs/phases/PHASE_17.md` new §10 + `PROJECT.md` BUG-31 — verified
+  the cash-removal question: (a) `cash-session.repository.ts:205-208`'s
+  formula shown in full; (b) confirmed no existing mechanism records
+  cash removed from the drawer outside an `expense`/`payment` row, and
+  neither fits (expense would misrepresent a bank deposit as a
+  business cost; `payment` requires a `partyId`, and its one
+  `direction='out'` write site is a staff payroll advance, not a
+  general transfer); (c) confirmed this **shows as a shortage** at
+  close (`CashSessionWidget.tsx:230-232`, "Short by Rs X", danger
+  variant) with no way to avoid it.
+- `PROJECT.md` — BUG-31 logged (CRITICAL), Q-DRAWING open question
+  marked ANSWERED.
+
+**Verified:** No code changed this session — verification and
+documentation only. `npm run verify` not re-run (nothing to verify);
+the existing 899/899 from Session 89 stands unchanged.
+
+**Not done / deferred:** P17-4 itself — **BLOCKED**, not started. Its
+scope is otherwise fully unblocked (Q-DRAWING and A17-3 both closed),
+but the cash-removal gap takes priority per explicit instruction.
+P17-2b (Q17-7 follow-up) — logged only, not built.
+
+**Bugs found:** BUG-31 (cash removed from the drawer for a bank
+deposit has no recording mechanism and misreports as a shortage —
+CRITICAL, UNFIXED, its own task).
+
+**Decisions taken:** Q-DRAWING (owner drawings out of scope — ANSWERED),
+A17-3 (billable field stays hidden — CLOSED), Q17-7 (developer decision
+replacing the provisional P17-2 answer — a four-state taxonomy, owner
+to confirm before P17-2b is built).
+
+**Blocked on:** BUG-31 — needs a design decision (new table vs. a
+nullable-partyId `payment` extension) for recording a drawer cash
+removal that's neither an expense nor a party-tied payment, before
+P17-4 can start.
+
+**Next session should:** design and scope the BUG-31 fix as its own
+task (higher priority than P17-4, per this session's instruction); only
+after that, or on explicit owner override, start P17-4 (now fully
+unblocked on wording — name-only form, both open questions closed).
+
+**Checklist:**
+
+- [x] All verification checks passed (no code changed; prior 899/899 stands)
+- [x] No unresolved bugs introduced by this session (BUG-31 pre-existing, newly found)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — P17-4 blocked on BUG-31
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (899/899, unchanged this session)
+
+---
+
+## [2026-09-27] Session 89 — Phase 17 P17-2 review rounds 1 and 2 (899 tests)
+
+**Goal:** Address two rounds of owner review feedback on the P17-2
+build (Session 88), before starting P17-4.
+
+**Done:**
+
+- **Review round 1 — single-source `isLowStock`:** removed the
+  client-side `isLowStock` duplicate in `StockBadge.tsx` (the P17-2
+  build had re-implemented the predicate client-side, arguing
+  `apps/client` can't import `@shop/core`). Corrected: a DTO field
+  doesn't need to import the function that computed it.
+  `item.repository.ts` now computes `isLowStock` once (via
+  `@shop/core`'s `isLowStock`) and sends it as a plain `boolean` on
+  `ItemDto`; `resolveStockBadge` only renders it.
+  `defaultLowStockThresholdMilli` prop-threading removed from 5 files
+  that no longer need it. New `item.handler.test.ts` proof (30 items,
+  low-stock ones scattered through insertion order) that the "Low
+  stock only" filter and the Dashboard count can never disagree,
+  because `searchItems` has no `LIMIT`/`OFFSET` anywhere.
+- **Review round 2 — three more fixes:** (1) fixed a real block-mode
+  hole: `ItemSearchPanel`'s add-to-cart guard read
+  `counterStockMilli !== null && <= 0`, letting a never-stocked item
+  (`counterStockMilli === null`) straight through `'block'` mode —
+  fixed to `(counterStockMilli ?? 0) <= 0`, matching the server's own
+  `readStockOnHandMilli` fallback (confirmed the server predicate
+  itself was never the gap — "no stock_movement rows" already reads as
+  0, not NULL, there). (2) Recorded Q17-7 (provisional) in
+  `PHASE_17.md` §2.2. (3) The Dashboard low-stock widget's click now
+  opens Items with "Low stock only" already ON (Q17-3, as approved),
+  via a one-shot flag in `App.tsx` reset by any direct sidebar/keyboard
+  tab switch. (4) Documented the 30-item equality test's dependency on
+  `searchItems` having no pagination, both in the test and at
+  `searchItems`' own definition.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean after each round.
+- `npm test` — 892/892 (round 1), then 899/899 (round 2): new
+  `App.test.tsx` (2), `ItemsPage.test.tsx` (2), rewritten
+  `ItemSearchPanel.test.tsx` never-moved-item cases (2, replacing 1),
+  new `sale.repository.test.ts` never-stocked-item cases (2).
+- `npm run build --workspace=@shop/client` / `--workspace=@shop/server`
+  — both clean, both rounds.
+
+**Not done / deferred:** none from these two rounds — both fully
+addressed.
+
+**Bugs found:** none new (the block-mode hole was fixed within the
+same round it was found, per CLAUDE.md §8's "unless it blocks the
+current phase" exception — it directly affected the very negative-stock
+guarantee P17-1 exists to provide).
+
+**Decisions taken:** none new.
+
+**Blocked on:** nothing — both review rounds fully resolved.
+
+**Next session should:** proceed to P17-4, per the owner's
+"P17-1 and P17-2 accepted" go-ahead (see Session 90 — that session's
+verification of P17-4's own pre-conditions is what found BUG-31).
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (899/899)
+
+---
+
 ## [2026-09-26] Session 88 — Phase 17 P17-2 built: low-stock badge, Dashboard widget
 
 **Goal:** Build P17-2 (low-stock badge switched to `counterStockMilli` +

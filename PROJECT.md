@@ -4203,6 +4203,52 @@ phase — CLAUDE.md §8, don't fix a bug outside the task at hand; the
 credit-limit gate itself was untouched by P17-1.
 Status: UNFIXED — known wart, candidate for a future bug-fix phase.
 
+### BUG-31: Cash removed from the drawer for a bank deposit has no way to be recorded — misreports as a shortage — CRITICAL, not fixed
+
+Found in: Phase 17, verifying P17-4's pre-conditions, 2026-09-27 —
+before starting P17-4, per explicit instruction to check whether
+recording an owner-drawing category would even be reachable through
+the expense form; the check led to the cash-session close formula
+instead.
+Description: `cash-session.repository.ts:205-208`'s
+`expectedCashPaisa = (openingCashPaisa + cashSales + cashPaymentsIn) -
+(cashPurchases + cashExpenses + cashPaymentsOut)` has no term for cash
+physically removed from the drawer for any reason other than a
+recorded `expense` or `payment` row. Verified there is no existing way
+to record such a removal: `expense` (method='cash') would misrepresent
+a bank deposit as a business cost (and per this session's Q-DRAWING
+decision, the system deliberately does not track the owner's personal
+cash movements as expenses); `payment` (direction='out', method='cash')
+requires `partyId` (`packages/contracts/src/payment/payment.ts:10`) —
+the one place it's actually written, a staff payroll advance
+(`advance.repository.ts:74`), is a receivable against a specific staff
+member, not a general cash transfer. No `cash_movement`/
+`cash_transfer`/`bank_deposit` table exists anywhere in the schema
+(confirmed by grep across all migrations) — this reconfirms PROJECT.md
+Q12's 2026-08-24 finding: no cash-drawer ledger exists outside
+`cash_session` itself.
+Impact: Every time the owner takes cash from the drawer to deposit at
+the bank (an ordinary, expected daily action for a cash-heavy shop),
+`countedCashPaisa` at close is lower than `expectedCashPaisa` by exactly
+that amount, and `CashSessionWidget.tsx:230-232` reports it as
+"Short by Rs [amount]" — indistinguishable in the UI from a real
+till shortage (theft, miscounting, an unrecorded sale). This corrupts
+the primary daily cash-reconciliation record with a false alarm, with
+no way to avoid it, every time it happens.
+Fix: Needs a way to record a cash removal that is neither an expense
+nor a party-tied payment — e.g. a `cash_movement`/`bank_deposit`-style
+entry that participates in the `expectedCashPaisa` formula as a third
+`cash_out` term, alongside `cashPurchases`/`cashExpenses`/
+`cashPaymentsOut`. Design (a new table vs. reusing `payment` with a
+nullable `partyId`, whether it needs its own report) is undecided — a
+future phase's own scope, not designed here.
+Status: UNFIXED — its own task, **higher priority than Phase 17's
+P17-4** (per this session's explicit instruction). P17-4 (Expense
+Categories form) is blocked pending this, since verifying its
+pre-conditions is what surfaced the gap — not because P17-4's own
+scope depends on it technically, but per the owner's stated priority
+order.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]
@@ -4384,7 +4430,7 @@ but are never read by any code today.
 | Q-VOID-COMM | If a delivered job is ever voided (depends on Q-VOID shipping), what happens to its commission claims — undecided ones, and ones already approved and paid?                                                                                       | Phase 16 commission claims (ADR-0015)                                                                   | 2026-09-22 | OPEN — not designed in Phase 16. Voiding does not exist yet (Q-VOID is itself deferred), so this has no live consequence today; revisit if/when Q-VOID is built.                                                                                                                                                                                                                                                                                                                                                    |
 | Q-ZEROBILL  | The delivery modal allows "Deliver & Invoice" with zero parts and zero labour lines (Rs 0 total) — see `JobDeliveryModal.tsx`'s guard, which blocks only when _both_ are empty. Is this legitimate (warranty/free-check jobs) or a missing guard? | Delivery modal validation (OD-16-10, 2026-09-22)                                                        | 2026-09-22 | OPEN — owner to decide. Not changed in Phase 16 per explicit instruction (OD-16-10).                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Q-ADR14     | PROGRESS.md's Session 75 (2026-09-22) recorded "Logged ADR-0014 in PROJECT.md §6" for the job-hard-delete decision, but no `docs/decisions/ADR-0014-*.md` file existed until this entry was found during Phase 16 planning.                       | Doc consistency                                                                                         | 2026-09-22 | **RESOLVED 2026-09-22** — `docs/decisions/ADR-0014-no-hard-delete-jobs.md` written, content taken strictly from the PROGRESS.md Session 75 / PROJECT.md §6 record (no new decisions). Commission-claims ADR takes **ADR-0015** to avoid any collision.                                                                                                                                                                                                                                                              |
-| Q-DRAWING   | No seeded `expense_category` row has `is_owner_drawing=1` (all 6 bootstrap seeds have it `0`, per Phase 17 D17-4). How are owner drawings recorded today, before P17-4 adds a form to create an owner-drawing category?                           | Phase 17 P17-4 scope                                                                                    | 2026-09-26 | OPEN — owner to answer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Q-DRAWING   | No seeded `expense_category` row has `is_owner_drawing=1` (all 6 bootstrap seeds have it `0`, per Phase 17 D17-4). How are owner drawings recorded today, before P17-4 adds a form to create an owner-drawing category?                           | Phase 17 P17-4 scope                                                                                    | 2026-09-26 | **ANSWERED 2026-09-27 (owner via developer).** Owner drawings are out of scope — "the system digitizes business revenue, not the owner's personal spending." Consequence: P17-4's form is name-only; `is_owner_drawing` is hidden (defaulted `false`) alongside `kind`/`is_billable`, not offered as a field at all. See `docs/phases/PHASE_17.md` §2.6.                                                                                                                                                            |
 
 ### P0-8 baseline (derived, not assumed)
 
