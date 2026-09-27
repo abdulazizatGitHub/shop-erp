@@ -41,6 +41,75 @@
 
 ---
 
+## [2026-09-27] Session 92 — Phase 17.5 review round 2 (APPROVED) + Task 1 built: migration 0021
+
+**Goal:** Address review-round-2 feedback on the Phase 17.5 plan (R1–R4),
+mark it APPROVED, then build Task 1 (the `cash_movement` migration)
+only.
+
+**Done:**
+
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` and
+  `docs/phases/PHASE_17_5.md` amended and marked Accepted/APPROVED:
+  **R1** — verified `closeSession`'s own five queries already filter to
+  `cash` correctly (shown in full); BUG-31 severity does not apply to
+  the close formula itself. BUG-32 is confined to `getCashBookReport`,
+  and is larger than first scoped — besides the missing cash-filter, the
+  query has no `expense` or `payment`-out branch at all. Folded into
+  this phase as Task 4, ahead of the UI task. **R2** — confirmed
+  `closeSession` sums by calendar date, not a time window, and stores
+  its figures at close; reversed the first draft's "no gate" position —
+  a `cash_movement` may now only be recorded while a session is open
+  (new `CashSessionNotOpenError`). **R3** — added nullable `reverses_id`
+  (`UNIQUE(reverses_id)`, set on the reversal pointing back at the
+  original), reversing the first draft's "no reversal column" position.
+  **R4** — recorded the no-auth accepted risk in ADR-0016; `note` is now
+  required on every movement, not just `'other'`.
+- **Task 1 built**: migration
+  `packages/db/src/migrations/0021_cash_movement.sql` (the amended DDL —
+  `reverses_id`, `UNIQUE(reverses_id)`, `note NOT NULL`), new
+  `CashMovementTable` type in `kysely-schema.ts`.
+- `packages/db/src/migration-runner.test.ts` updated: `0021` added to
+  every migration-list assertion (applied/skipped/schema_migration
+  rows), table count bumped 55→56, new test confirming `cash_movement`'s
+  exact column list, nullability, and both `UNIQUE` constraints (plus
+  the TEXT-primary-key's own auto-index, which the test explicitly
+  distinguishes from the two real constraints).
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **900/900** (up from 899 — one new migration test).
+- `npm run build --workspace=@shop/client` / `--workspace=@shop/server`
+  — both clean.
+
+**Not done / deferred:** Tasks 2–6 of Phase 17.5 (core validation, the
+`KyselyCashMovementRepository`, the BUG-32 report fix, contracts/IPC,
+UI) — per instruction, only Task 1 was built this session.
+
+**Bugs found:** none new.
+
+**Decisions taken:** ADR-0016 amended and Accepted (R1–R4 above).
+
+**Blocked on:** nothing — Task 1 complete and verified; Task 2 is next.
+
+**Next session should:** build Task 2 (core: `CashMovementType`,
+`CashMovementRecord`, `CashSessionNotOpenError`,
+`assertCashMovementValid`/`assertReversalValid`), per
+`docs/phases/PHASE_17_5.md` §4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (900/900)
+
+---
+
 ## [2026-09-27] Session 91 — Phase 17.5 planning: drawer cash movements (BUG-31 plan, ADR-0016)
 
 **Goal:** BUG-31 accepted as a go-live blocker. Plan only (no code, no

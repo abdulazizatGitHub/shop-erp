@@ -487,6 +487,20 @@ export interface CashSessionTable {
   notes: string | null;
 }
 
+/** Migration 0021, Phase 17.5 (docs/phases/PHASE_17_5.md), ADR-0016. */
+export interface CashMovementTable {
+  id: string;
+  tenantId: string;
+  docNo: string;
+  movementDate: string;
+  movementType: string;
+  amount: number;
+  note: string;
+  reversesId: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
 /** See 0001_init.sql's expense_category table + 0003_shared_overhead.sql's ALTER. Phase 7. */
 export interface ExpenseCategoryTable {
   id: string;
@@ -698,6 +712,7 @@ export interface Database {
   expenseCategory: ExpenseCategoryTable;
   expense: ExpenseTable;
   cashSession: CashSessionTable;
+  cashMovement: CashMovementTable;
   purchaseOrder: PurchaseOrderTable;
   purchaseOrderLine: PurchaseOrderLineTable;
   grn: GrnTable;

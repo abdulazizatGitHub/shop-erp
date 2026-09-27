@@ -48,12 +48,13 @@ describe('migrate', () => {
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
+      '0021_cash_movement.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it("applies exactly 55 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 and 0020 are column adds only, not new tables", () => {
+  it("applies exactly 56 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 and 0020 are column adds only, not new tables; +1 for 0021's cash_movement", () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -62,8 +63,60 @@ describe('migrate', () => {
     const views = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view'`).all();
     db.close();
 
-    expect(tables).toHaveLength(55);
+    expect(tables).toHaveLength(56);
     expect(views).toHaveLength(11);
+  });
+
+  it('applies 0021 to a fresh database — cash_movement table exists with the exact expected columns and constraints', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const columns = db.prepare(`PRAGMA table_info(cash_movement)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    const indexes = db.prepare(`PRAGMA index_list(cash_movement)`).all() as Array<{
+      name: string;
+      unique: number;
+      origin: string;
+    }>;
+    db.close();
+
+    expect(columns.map((c) => c.name)).toEqual([
+      'id',
+      'tenant_id',
+      'doc_no',
+      'movement_date',
+      'movement_type',
+      'amount',
+      'note',
+      'reverses_id',
+      'created_at',
+      'created_by',
+    ]);
+    for (const requiredColumn of [
+      'tenant_id',
+      'doc_no',
+      'movement_date',
+      'movement_type',
+      'amount',
+      'note',
+      'created_at',
+    ]) {
+      expect(columns.find((c) => c.name === requiredColumn)?.notnull).toBe(1);
+    }
+    // reverses_id is nullable — NULL for every original (non-reversal) row.
+    expect(columns.find((c) => c.name === 'reverses_id')?.notnull).toBe(0);
+    // created_by is nullable — no auth layer yet (ADR-0016, R4's accepted risk).
+    expect(columns.find((c) => c.name === 'created_by')?.notnull).toBe(0);
+
+    // Two explicit UNIQUE constraints — (tenant_id, doc_no) and
+    // (reverses_id) — plus the TEXT PRIMARY KEY's own auto-index
+    // (SQLite creates a real unique index for a non-INTEGER primary
+    // key, unlike a rowid-alias INTEGER PRIMARY KEY) and the plain
+    // idx_cm_date index (not unique).
+    const uniqueIndexes = indexes.filter((i) => i.unique === 1 && i.origin !== 'pk');
+    expect(uniqueIndexes).toHaveLength(2);
+    expect(indexes.some((i) => i.name === 'idx_cm_date')).toBe(true);
   });
 
   it('every view executes without error on an empty database', () => {
@@ -105,6 +158,7 @@ describe('migrate', () => {
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
+      '0021_cash_movement.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -138,6 +192,7 @@ describe('migrate', () => {
       { version: 18, name: '0018_commission_claims.sql' },
       { version: 19, name: '0019_commission_claim_snapshot.sql' },
       { version: 20, name: '0020_job_technician_unassign_reason.sql' },
+      { version: 21, name: '0021_cash_movement.sql' },
     ]);
   });
 
@@ -262,6 +317,7 @@ describe('migrate', () => {
       '0018_commission_claims.sql',
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
+      '0021_cash_movement.sql',
     ]);
 
     db = new Database(dbPath);
