@@ -22,8 +22,11 @@ existing way to record cash removed from the drawer for a bank deposit,
 which the cash session misreports as a shortage every time. Per this
 session's own STOP instruction, P17-4 was not built; BUG-31 is its own,
 higher-priority task. §9 also logs P17-2b (Q17-7's stock-alert
-taxonomy follow-up, not built this session). P17-3, P17-5, and P17-7
-remain to build; P17-4 is blocked on BUG-31.
+taxonomy follow-up, not built this session). **PHASE PAUSED —
+2026-09-27:** BUG-31 accepted as a go-live blocker; its plan lives in
+`docs/phases/PHASE_17_5.md` + `docs/decisions/ADR-0016-cash-drawer-movements.md`
+(plan only, no code yet). P17-3, P17-4, P17-5, P17-7, and P17-2b all
+stay approved and resume once Phase 17.5's build is complete.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main

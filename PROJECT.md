@@ -4235,19 +4235,48 @@ that amount, and `CashSessionWidget.tsx:230-232` reports it as
 till shortage (theft, miscounting, an unrecorded sale). This corrupts
 the primary daily cash-reconciliation record with a false alarm, with
 no way to avoid it, every time it happens.
-Fix: Needs a way to record a cash removal that is neither an expense
-nor a party-tied payment — e.g. a `cash_movement`/`bank_deposit`-style
-entry that participates in the `expectedCashPaisa` formula as a third
-`cash_out` term, alongside `cashPurchases`/`cashExpenses`/
-`cashPaymentsOut`. Design (a new table vs. reusing `payment` with a
-nullable `partyId`, whether it needs its own report) is undecided — a
-future phase's own scope, not designed here.
-Status: UNFIXED — its own task, **higher priority than Phase 17's
-P17-4** (per this session's explicit instruction). P17-4 (Expense
-Categories form) is blocked pending this, since verifying its
-pre-conditions is what surfaced the gap — not because P17-4's own
-scope depends on it technically, but per the owner's stated priority
-order.
+Fix: **Planned, not yet built** — accepted by the owner as a go-live
+blocker, 2026-09-27. New append-only `cash_movement` table (migration
+`0021`, proposed DDL in `docs/phases/PHASE_17_5.md` §2.7), one new
+signed term in the `expected_cash` formula
+(`cashMovementsNet`, §2.5 of that doc), no `business_unit_id`/`party_id`
+column (see `docs/decisions/ADR-0016-cash-drawer-movements.md` for the
+full reasoning). Full task breakdown and exit criteria in
+`docs/phases/PHASE_17_5.md`.
+Status: UNFIXED, plan approved — **its own task, higher priority than
+Phase 17's P17-3/P17-4/P17-5/P17-7/P17-2b**, all of which are paused
+until this phase's build completes (`docs/phases/PHASE_17_5.md`).
+
+### BUG-32: `getCashBookReport`'s sale/payment inflows are not actually filtered to cash — MEDIUM, not fixed
+
+Found in: Phase 17.5 planning, 2026-09-27 — while verifying whether the
+system tracks a bank balance anywhere (question (1) of BUG-31's
+follow-up plan), reading `getCashBookReport` to check its scope.
+Description: `report.repository.ts:195-206`'s own doc-comment claims
+"inflows are the union of cash actually collected at sale time
+(`sale.paid_amount`)," but the `sale` branch of the query (`:223-227`)
+has no `payment_mode = 'cash'` filter (or any `payment_mode` filter at
+all) — every confirmed sale with `paid_amount > 0` is counted as a
+"Cash sale," regardless of whether it was actually settled in cash,
+bank transfer, easypaisa, jazzcash, or cheque. The `payment` branch
+(`:231-235`) has the same gap — every `direction='in'` payment is
+counted, regardless of `method`. The `purchase` branch (`:214-219`), by
+contrast, correctly filters `payment_mode = 'cash'`.
+Impact: The "Cash Book"/"Cash Record" report (`CashBookReport.tsx`)
+over-counts inflows whenever a customer pays by a non-cash method —
+its running balance and KPI totals include money that never touched
+the physical till. Not a stock/money-movement bug (no wrong row is
+written anywhere) — a report-scope bug: the numbers shown don't mean
+what the report's own title and doc-comment say they mean.
+Fix: Add `AND payment_mode = 'cash'` to the `sale` branch and
+`AND method = 'cash'` to the `payment` branch, matching the `purchase`
+branch's existing filter. Straightforward once picked up, but out of
+scope for Phase 17.5 (which only adds a new third branch to this same
+query for `cash_movement` — see `docs/phases/PHASE_17_5.md` Task 5) and
+out of scope for whichever phase eventually builds Phase 17.5, unless
+that session chooses to fix it alongside touching the same file.
+Status: UNFIXED — waiting for a bug-fix phase, or for whoever next
+touches `getCashBookReport` to fix it in the same pass.
 
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 

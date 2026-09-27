@@ -41,6 +41,90 @@
 
 ---
 
+## [2026-09-27] Session 91 — Phase 17.5 planning: drawer cash movements (BUG-31 plan, ADR-0016)
+
+**Goal:** BUG-31 accepted as a go-live blocker. Plan only (no code, no
+migration) for a way to record cash added to or removed from the
+drawer for a reason that is not a sale, purchase, expense, or party
+payment — verifying seven specific design questions with file:line
+citations before proposing schema.
+
+**Done:**
+
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` (new, draft/proposed):
+  a new append-only `cash_movement` table, four reasons
+  (`bank_deposit`/`owner_draw`/`float_add`/`other`, note required for
+  `other`), no `business_unit_id` (matches `cash_session`'s own
+  precedent — whole-till tables were never unit-tagged), no `party_id`
+  (avoids polluting the party ledger), no `reversed_by_id` (matches
+  `DATABASE_RULES.md §3`'s finding that the equivalent column on
+  `stock_movement`/`party_ledger` is never actually written by any
+  code path — corrections are a new row with the sign flipped,
+  discovered by summing, the pattern that's actually used). Rejected
+  alternatives recorded: an `expense` (hits both units' P&L) and a
+  payment to a dummy party (pollutes the party ledger).
+- `docs/phases/PHASE_17_5.md` (new): full plan — verification answers
+  1–7 (bank balance: none tracked anywhere, confirmed by grep; ADR-0005:
+  only `sale_line` requires `business_unit_id` NOT NULL, every cost-side
+  table is nullable, `expense.business_unit_id IS NULL` is the live
+  precedent for "belongs to neither unit"; no table anywhere has a
+  `cash_session_id` FK — everything is date-keyed, no gating on session
+  status exists for sales/expenses either, so this table follows suit;
+  exact formula change — one new signed `cashMovementsNet` term at
+  `cash-session.repository.ts:205-208`; every consumer of drawer-cash
+  summing listed, confirming `closeSession` is the only place the
+  formula itself is computed; migration `0021`'s proposed DDL). Task
+  breakdown (5 tasks, migration → core → db → contracts/IPC → UI) and
+  exit criteria, including the requested hand-calculated test (opening
+  10,000 + cash sale 5,000 − bank deposit 12,000 = expected 3,000, no
+  shortage) and a same-file test proving `getExpenseSummaryReport`'s
+  business totals and `v_unit_direct_expense`'s sum are unchanged.
+- `PROJECT.md` — BUG-31's status updated (plan approved, points to the
+  new phase doc/ADR). **BUG-32 logged** (new, MEDIUM): found while
+  checking for a tracked bank balance —
+  `getCashBookReport`'s `sale`/`payment` inflow branches have no
+  `payment_mode`/`method = 'cash'` filter at all, despite the file's own
+  doc-comment claiming they do; the `purchase` branch correctly filters.
+  Pre-existing, unrelated to BUG-31, not fixed here.
+- `docs/phases/PHASE_17.md` — header updated: Phase 17 formally paused,
+  pointing to the new phase doc/ADR; P17-3/P17-4/P17-5/P17-7/P17-2b all
+  stay approved and resume once Phase 17.5's build completes.
+
+**Verified:** No code changed — planning only, as instructed. All
+seven verification questions answered with file:line citations (see
+`docs/phases/PHASE_17_5.md` §2); `npm run verify` not re-run (nothing
+to verify); the existing 899/899 stands unchanged.
+
+**Not done / deferred:** The Phase 17.5 build itself (migration `0021`,
+core/db/contracts/IPC/UI) — plan only this session, per instruction.
+
+**Bugs found:** BUG-32 (`getCashBookReport`'s cash-filter gap — MEDIUM,
+UNFIXED, unrelated pre-existing defect).
+
+**Decisions taken:** ADR-0016 (draft/proposed — drawer cash movements
+are their own append-only table, no `business_unit_id`/`party_id`/
+`reversed_by_id`).
+
+**Blocked on:** nothing — the plan itself is complete; the _build_ is
+what's gated on this plan being reviewed/approved before code starts.
+
+**Next session should:** build Phase 17.5 per its own task breakdown
+(§4) and exit criteria (§5), starting with migration `0021`; then
+resume Phase 17 at whichever of P17-3/P17-4/P17-5/P17-7/P17-2b the
+owner prioritises next.
+
+**Checklist:**
+
+- [x] All verification checks passed (no code changed; prior 899/899 stands)
+- [x] No unresolved bugs introduced by this session (BUG-32 pre-existing, newly found)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [ ] Next phase prerequisites are met — Phase 17.5 build not started
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (899/899, unchanged this session)
+
+---
+
 ## [2026-09-27] Session 90 — Phase 17 P17-4 verification: cash-removal gap found, STOP (BUG-31)
 
 **Goal:** Record three owner-side decisions (Q-DRAWING, Q17-7, A17-3
