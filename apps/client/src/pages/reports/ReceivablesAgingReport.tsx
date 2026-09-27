@@ -18,12 +18,11 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 import { CustomerAgingBarChart } from './CustomerAgingBarChart.js';
-
-const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly ReceivablesAgingRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -141,6 +140,7 @@ function formatMoneyTooltip(_value: unknown, _name: unknown, item: unknown): str
  * are computed as of.
  */
 export function ReceivablesAgingReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly ReceivablesAgingRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +176,7 @@ export function ReceivablesAgingReport(): React.JSX.Element {
     [owing],
   );
   const chartData = useMemo(() => buildBuckets(owing), [owing]);
-  const visibleOwing = owing.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleOwing = owing.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   if (error) return <Alert variant="danger">{error}</Alert>;
   if (!rows) return <LoadingState message="Loading Udhaar (Who Owes Me)…" />;
@@ -281,7 +281,7 @@ export function ReceivablesAgingReport(): React.JSX.Element {
             </Table>
             <Pagination
               totalRows={owing.length}
-              rowsPerPage={ROWS_PER_PAGE}
+              rowsPerPage={rowsPerPage}
               currentPage={page}
               onPageChange={setPage}
             />

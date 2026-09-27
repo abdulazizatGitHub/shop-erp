@@ -98,6 +98,8 @@ import type {
   SetDefaultLowStockThresholdInput,
   SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
+  RowsPerPage,
+  SetRowsPerPageInput,
   SetShopNameInput,
   DiscountConfigDto,
   SetDiscountApplyWalkinInput,
@@ -598,6 +600,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getDefaultLowStockThreshold) as Promise<number>,
     setDefaultLowStockThreshold: (input: SetDefaultLowStockThresholdInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setDefaultLowStockThreshold, input) as Promise<void>,
+    getRowsPerPage: (): Promise<RowsPerPage> =>
+      ipcRenderer.invoke(channels.setting.getRowsPerPage) as Promise<RowsPerPage>,
+    setRowsPerPage: (input: SetRowsPerPageInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setRowsPerPage, input) as Promise<void>,
     getShopIdentity: (): Promise<ShopIdentityDto> =>
       ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
     setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>

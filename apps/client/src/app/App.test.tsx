@@ -28,6 +28,9 @@ vi.mock('../lib/ipc.js', () => ({
       // render needs them mocked.
       getShopName: vi.fn().mockResolvedValue('Test Shop'),
       getShopIdentity: vi.fn().mockResolvedValue({ name: 'Test Shop', address: null, phone: null }),
+      // RowsPerPageProvider (P17-3) also fetches this unconditionally on
+      // every App mount, same as the two settings above.
+      getRowsPerPage: vi.fn().mockResolvedValue(10),
     },
     cashSession: {
       today: vi.fn().mockResolvedValue(null),

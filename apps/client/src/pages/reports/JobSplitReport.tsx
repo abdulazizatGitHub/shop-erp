@@ -27,12 +27,11 @@ import type { JobSplitRecord } from '../../types/electron-api.js';
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 import { PartsLabourDonut } from './PartsLabourDonut.js';
-
-const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly JobSplitRecord[]): Record<string, string | number>[] {
   return rows.map((r) => ({
@@ -100,6 +99,7 @@ function formatJobTooltip(_value: unknown, name: unknown, item: unknown): string
  * (This Month default) — the fan-out pattern itself is unchanged.
  */
 export function JobSplitReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly JobSplitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +127,7 @@ export function JobSplitReport(): React.JSX.Element {
   const labourChargePaisa = rows ? rows.reduce((sum, r) => sum + r.labourChargePaisa, 0) : 0;
   const totalBillPaisa = rows ? rows.reduce((sum, r) => sum + r.totalBillPaisa, 0) : 0;
   const chartData = toChartData(rows ?? []);
-  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleRows = (rows ?? []).slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -244,7 +244,7 @@ export function JobSplitReport(): React.JSX.Element {
                 </Table>
                 <Pagination
                   totalRows={rows.length}
-                  rowsPerPage={ROWS_PER_PAGE}
+                  rowsPerPage={rowsPerPage}
                   currentPage={page}
                   onPageChange={setPage}
                 />

@@ -11,8 +11,7 @@ import {
   TableRow,
 } from '@shop/ui';
 import { Pagination } from '../../components/shared/Pagination.js';
-
-const ROWS_PER_PAGE = 10;
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 
 export interface ItemsSoldTableProps {
   readonly rows: readonly ItemSoldSummaryRowDto[];
@@ -25,6 +24,7 @@ function formatQtySold(totalSoldMilli: number, unitName: string): string {
 
 /** P11-5 Section 5 — "What Was Sold", already sorted by revenuePaisa DESC (report:itemSoldSummary's own sort order). */
 export function ItemsSoldTable({ rows }: ItemsSoldTableProps): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function ItemsSoldTable({ rows }: ItemsSoldTableProps): React.JSX.Element
     return <EmptyState message="No items sold in this period." />;
   }
 
-  const visible = rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visible = rows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <>
@@ -65,7 +65,7 @@ export function ItemsSoldTable({ rows }: ItemsSoldTableProps): React.JSX.Element
       </Table>
       <Pagination
         totalRows={rows.length}
-        rowsPerPage={ROWS_PER_PAGE}
+        rowsPerPage={rowsPerPage}
         currentPage={page}
         onPageChange={setPage}
       />

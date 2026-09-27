@@ -6,6 +6,7 @@ import { ServiceChargesTab } from './job/ServiceChargesTab.js';
 import { BackupSettingsSection } from './sections/BackupSettingsSection.js';
 import { DiscountsSettingsSection } from './sections/DiscountsSettingsSection.js';
 import { InvoiceReceiptsSettingsSection } from './sections/InvoiceReceiptsSettingsSection.js';
+import { ReportsDisplaySettingsSection } from './sections/ReportsDisplaySettingsSection.js';
 import { StockAlertsSettingsSection } from './sections/StockAlertsSettingsSection.js';
 import { ShopSettingsSection } from './sections/ShopSettingsSection.js';
 import { CommissionRefreshContext } from './CommissionRefreshContext.js';
@@ -121,6 +122,17 @@ export function SettingsPage(): React.JSX.Element {
                     description="Review and approve or reject pending commission claims."
                   >
                     <CommissionApprovalsTab />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/reports/display"
+                element={
+                  <SettingsSectionFrame
+                    title="Display"
+                    description="Rows per page across every report and list table."
+                  >
+                    <ReportsDisplaySettingsSection />
                   </SettingsSectionFrame>
                 }
               />

@@ -368,6 +368,12 @@ export interface SetDefaultLowStockThresholdInput {
   readonly value: number;
 }
 
+export type RowsPerPage = 10 | 25 | 50;
+
+export interface SetRowsPerPageInput {
+  readonly value: RowsPerPage;
+}
+
 export interface SetShopNameInput {
   readonly value: string;
 }
@@ -643,6 +649,8 @@ export interface ElectronApi {
     readonly setDefaultLowStockThreshold: (
       input: SetDefaultLowStockThresholdInput,
     ) => Promise<void>;
+    readonly getRowsPerPage: () => Promise<RowsPerPage>;
+    readonly setRowsPerPage: (input: SetRowsPerPageInput) => Promise<void>;
     readonly getShopIdentity: () => Promise<ShopIdentityDto>;
     readonly setShopIdentity: (input: SetShopIdentityInput) => Promise<void>;
   };

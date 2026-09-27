@@ -26,12 +26,11 @@ import {
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 import { DailyCashFlowChart } from './DailyCashFlowChart.js';
-
-const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly CashBookRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -94,6 +93,7 @@ function formatMoneyTooltip(_value: unknown, _name: unknown, item: unknown): str
  * Closing balance is simply the last row's runningBalancePaisa.
  */
 export function CashBookReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly CashBookRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +122,7 @@ export function CashBookReport(): React.JSX.Element {
     : 0;
   const closingBalancePaisa = lastRow ? lastRow.runningBalancePaisa : 0;
   const chartData = toChartData(rows ?? []);
-  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleRows = (rows ?? []).slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -238,7 +238,7 @@ export function CashBookReport(): React.JSX.Element {
                 </Table>
                 <Pagination
                   totalRows={rows.length}
-                  rowsPerPage={ROWS_PER_PAGE}
+                  rowsPerPage={rowsPerPage}
                   currentPage={page}
                   onPageChange={setPage}
                 />

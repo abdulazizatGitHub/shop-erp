@@ -123,6 +123,11 @@ export {
   setDefaultLowStockThresholdMilli,
 } from './repositories/stock-alerts-setting.repository.js';
 export type { NegativeStockPolicy } from './repositories/stock-alerts-setting.repository.js';
+export {
+  getRowsPerPage,
+  setRowsPerPage,
+} from './repositories/reports-display-setting.repository.js';
+export type { RowsPerPage } from './repositories/reports-display-setting.repository.js';
 export { getShopIdentity, setShopIdentity } from './repositories/shop-identity.repository.js';
 export {
   getCustomerLedger,

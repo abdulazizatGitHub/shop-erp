@@ -41,6 +41,111 @@
 
 ---
 
+## [2026-09-27] Session 97 — Phase 17 resumed, P17-3 built: shared rows-per-page setting
+
+**Goal:** Build P17-3 only — replace all 11 files' own local
+`const ROWS_PER_PAGE` with one shared `useRowsPerPage()` hook/context,
+default 10 everywhere including `CustomerLedgerTable` (Q17-2's
+deliberate 15→10 normalization), plus a new Settings → Reports →
+Display section. Phase 17.5 was accepted by the owner (click-through
+passed) immediately before this session, unpausing Phase 17.
+
+**Done:**
+
+- Contracts: `RowsPerPage` (`10 | 25 | 50`), `SetRowsPerPageInput`
+  (`packages/contracts/src/setting/setting.ts`).
+- DB: new `reports-display-setting.repository.ts` (`getRowsPerPage`/
+  `setRowsPerPage`, plain key-value UPDATE-or-INSERT, same convention as
+  `stock-alerts-setting.repository.ts` — own file rather than growing
+  `setting.repository.ts` past ~300 lines).
+- IPC: new `setting:getRowsPerPage`/`setting:setRowsPerPage` channels;
+  new `reports-display-setting.handler.ts` (own file, same convention
+  as `stock-alerts-setting.handler.ts`); wired through `main.ts`,
+  `preload.ts`, `electron-api.d.ts` (types declared locally there,
+  matching how the file's other setting types are already handled,
+  rather than imported from `@shop/contracts`).
+- Client: new `apps/client/src/context/RowsPerPageContext.tsx` —
+  `useRowsPerPage()` (the value, default 10), `useSetRowsPerPage()`
+  (Settings section only), `RowsPerPageProvider` (one IPC read on
+  mount, wraps the whole app in `App.tsx` next to `ShopIdentityProvider`
+  — not 12 separate per-mount fetches, per A17-4). New
+  `sections/ReportsDisplaySettingsSection.tsx` under a new "Reports →
+  Display" nav group (`settingsNav.config.ts`, `SettingsPage.tsx`) —
+  10/25/50 buttons, saves via IPC then pushes the value live into the
+  context so every already-open table updates immediately.
+- All 11 files switched from their own local constant to the hook:
+  `DailySalesReport.tsx`, `CashBookReport.tsx`,
+  `BestPerformersTable.tsx`, `ItemsSoldTable.tsx`, `WageMonthReport.tsx`,
+  `ReceivablesAgingReport.tsx`, `ExpensesReport.tsx`,
+  `JobSplitReport.tsx`, `StockValuationReport.tsx`, `JobsPage.tsx`,
+  `CustomerLedgerTable.tsx` (this last one's old local `15` is now `10`
+  — the deliberate normalization).
+- Tests: `reports-display-setting.repository.test.ts` (5, new, real
+  temp DB — fresh-DB default 10, 25/50 round-trip, duplicate-row
+  update, malformed-value fallback); `RowsPerPageContext.test.tsx` (3,
+  new — default outside a provider, resolves from IPC, **every
+  subscriber re-renders immediately on change, no reload**);
+  `context/rows-per-page-usage.test.ts` (11 cases, new — a static-
+  analysis test that greps each of the 11 files for `useRowsPerPage`
+  and the absence of `const ROWS_PER_PAGE =`, since a render test alone
+  can't distinguish a hardcoded 10 from a default-10 hook);
+  `ReportsDisplaySettingsSection.test.tsx` (3, new — load/select,
+  save-updates-an-open-table-live, fresh-DB default shown selected);
+  `CustomerLedgerTable.test.tsx` (2, new — no test file existed for
+  this component before; 12 rows produce a "Page 2" button, which the
+  old local `15` would not, since `Pagination` renders nothing when
+  `totalRows <= rowsPerPage` — proves the 15→10 normalization
+  directly). `App.test.tsx`'s `ipc.js` mock gained
+  `setting.getRowsPerPage` (`RowsPerPageProvider` now fetches it
+  unconditionally on every App mount, same as the pre-existing
+  `getShopName`/`getShopIdentity` entries there) — its 2 pre-existing
+  tests otherwise unmodified.
+- `docs/phases/PHASE_17.md` — P17-3 marked DONE in the task table and
+  §8 exit criteria, with every new test named; phase header status
+  updated to record Phase 17.5's acceptance and P17-3's completion.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **988/988** (up from 964 before this round: +24 new,
+  +2 pre-existing `App.test.tsx` cases fixed by the mock update rather
+  than counted as new).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both succeed, no errors.
+
+**Not done / deferred:** P17-4 (still BLOCKED-turned-unblocked but not
+yet built — BUG-31 is fixed, P17-4 itself was never started), P17-5,
+P17-7, P17-2b — all remain approved, not built this session, per the
+explicit "Build P17-3 only" instruction.
+
+**Bugs found:** none new.
+
+**Decisions taken:** none new — Q17-2 (rows-per-page default) was
+already answered in a prior planning session; this session only
+implemented it.
+
+**Blocked on:** nothing.
+
+**Next session should:** await fresh authorization for the next task —
+P17-4 (Expense Categories Settings, now unblocked since BUG-31 is
+fixed), P17-5 (paper size wiring), or P17-7 (payment method
+enable/disable), per `docs/phases/PHASE_17.md` §6.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (not touched this round — not
+      part of this task's explicit scope; no bug/status entry there
+      was stale as a result of this change)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P17-4 unblocked, awaiting
+      authorization)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (988/988)
+
+---
+
 ## [2026-09-27] Session 96 — Phase 17.5 complete: Tasks 5 & 6 built, BUG-31 FIXED
 
 **Goal:** Build Task 5 (contracts + IPC) and Task 6 (UI) — the "Cash In

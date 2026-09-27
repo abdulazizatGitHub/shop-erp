@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ToastProvider } from '@shop/ui';
 import { ShopIdentityProvider } from '../context/ShopIdentityContext.js';
+import { RowsPerPageProvider } from '../context/RowsPerPageContext.js';
 import { ItemsPage } from '../pages/items/ItemsPage.js';
 import JobsPage from '../pages/jobs/JobsPage.js';
 import TechnicianCustodyPage from '../pages/jobs/TechnicianCustodyPage.js';
@@ -61,40 +62,42 @@ export function App(): React.JSX.Element {
   return (
     <ToastProvider>
       <ShopIdentityProvider>
-        <div className="flex h-screen bg-surface-sunken">
-          <Sidebar
-            activeTab={tab}
-            onSelectTab={handleSelectTab}
-            activeReportsGroup={reportsGroup}
-            onSelectReportsGroup={handleSelectReportsGroup}
-          />
-          <main className="flex-1 overflow-y-auto p-6">
-            {tab === 'sales' && <SalePage />}
-            {tab === 'items' && <ItemsPage initialLowStockOnly={itemsInitialLowStockOnly} />}
-            {tab === 'suppliers' && <SuppliersPage />}
-            {tab === 'purchase-orders' && <PurchaseOrdersPage />}
-            {tab === 'jobs' && <JobsPage />}
-            {tab === 'technician-custody' && <TechnicianCustodyPage />}
-            {tab === 'reports' && (
-              <ReportsPage activeGroup={reportsGroup} onActiveGroupChange={setReportsGroup} />
-            )}
-            {tab === 'customers' && <CustomersPage />}
-            {tab === 'settings' && <SettingsPage />}
-            {tab === 'staff' && <StaffPage />}
-            {tab === 'expenses' && <ExpensesPage />}
-            {tab === 'dashboard' && (
-              <DashboardPage
-                onNavigateToItems={() => {
-                  // Q17-3, as approved: opens Items with the low-stock
-                  // filter already ON, not just switched to the tab.
-                  setItemsInitialLowStockOnly(true);
-                  setTab('items');
-                }}
-              />
-            )}
-            {tab === 'attendance' && <AttendancePage />}
-          </main>
-        </div>
+        <RowsPerPageProvider>
+          <div className="flex h-screen bg-surface-sunken">
+            <Sidebar
+              activeTab={tab}
+              onSelectTab={handleSelectTab}
+              activeReportsGroup={reportsGroup}
+              onSelectReportsGroup={handleSelectReportsGroup}
+            />
+            <main className="flex-1 overflow-y-auto p-6">
+              {tab === 'sales' && <SalePage />}
+              {tab === 'items' && <ItemsPage initialLowStockOnly={itemsInitialLowStockOnly} />}
+              {tab === 'suppliers' && <SuppliersPage />}
+              {tab === 'purchase-orders' && <PurchaseOrdersPage />}
+              {tab === 'jobs' && <JobsPage />}
+              {tab === 'technician-custody' && <TechnicianCustodyPage />}
+              {tab === 'reports' && (
+                <ReportsPage activeGroup={reportsGroup} onActiveGroupChange={setReportsGroup} />
+              )}
+              {tab === 'customers' && <CustomersPage />}
+              {tab === 'settings' && <SettingsPage />}
+              {tab === 'staff' && <StaffPage />}
+              {tab === 'expenses' && <ExpensesPage />}
+              {tab === 'dashboard' && (
+                <DashboardPage
+                  onNavigateToItems={() => {
+                    // Q17-3, as approved: opens Items with the low-stock
+                    // filter already ON, not just switched to the tab.
+                    setItemsInitialLowStockOnly(true);
+                    setTab('items');
+                  }}
+                />
+              )}
+              {tab === 'attendance' && <AttendancePage />}
+            </main>
+          </div>
+        </RowsPerPageProvider>
       </ShopIdentityProvider>
     </ToastProvider>
   );

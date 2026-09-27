@@ -27,12 +27,11 @@ import {
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 import { WageByRoleDonut } from './WageByRoleDonut.js';
-
-const ROWS_PER_PAGE = 10;
 
 function toCsvRows(rows: readonly WageMonthRowDto[]): Record<string, string | number>[] {
   return rows.map((row) => ({
@@ -122,6 +121,7 @@ function formatWageTooltip(_value: unknown, name: unknown, item: unknown): strin
  * note, since wageMonth has no multi-month concept at all.
  */
 export function WageMonthReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [rows, setRows] = useState<readonly WageMonthRowDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +161,7 @@ export function WageMonthReport(): React.JSX.Element {
   }, []);
 
   const chartData = toChartData(rows ?? []);
-  const visibleRows = (rows ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleRows = (rows ?? []).slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -290,7 +290,7 @@ export function WageMonthReport(): React.JSX.Element {
                 </Table>
                 <Pagination
                   totalRows={rows.length}
-                  rowsPerPage={ROWS_PER_PAGE}
+                  rowsPerPage={rowsPerPage}
                   currentPage={page}
                   onPageChange={setPage}
                 />

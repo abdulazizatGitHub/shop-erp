@@ -16,6 +16,7 @@ import {
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getPreviousPeriod, getToday, type DateRange } from '../../utils/dateRanges.js';
@@ -23,8 +24,6 @@ import { CashCreditPie } from './CashCreditPie.js';
 import { ItemsSoldTable } from './ItemsSoldTable.js';
 import { SalesSummaryCards } from './SalesSummaryCards.js';
 import { SalesTrendChart } from './SalesTrendChart.js';
-
-const ROWS_PER_PAGE = 10;
 
 /**
  * P10-5: SaleSummaryDto carries no line-item count — a real "Items" value
@@ -59,6 +58,7 @@ function toCsvRows(
  * (Section 5). Single loading/error state covers all three.
  */
 export function DailySalesReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getToday(new Date()));
   const [sales, setSales] = useState<readonly SaleSummaryDto[] | null>(null);
   const [comparison, setComparison] = useState<PeriodComparisonDto | null>(null);
@@ -115,7 +115,7 @@ export function DailySalesReport(): React.JSX.Element {
       });
   }, [range]);
 
-  const visibleSales = (sales ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleSales = (sales ?? []).slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -203,7 +203,7 @@ export function DailySalesReport(): React.JSX.Element {
                 </Table>
                 <Pagination
                   totalRows={sales.length}
-                  rowsPerPage={ROWS_PER_PAGE}
+                  rowsPerPage={rowsPerPage}
                   currentPage={page}
                   onPageChange={setPage}
                 />

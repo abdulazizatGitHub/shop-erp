@@ -11,8 +11,7 @@ import {
   TableRow,
 } from '@shop/ui';
 import { Pagination } from '../../components/shared/Pagination.js';
-
-const ROWS_PER_PAGE = 10;
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 
 export interface BestPerformersTableProps {
   readonly rows: readonly StockPerformanceRowDto[];
@@ -34,10 +33,11 @@ export function BestPerformersTable({
   page,
   onPageChange,
 }: BestPerformersTableProps): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   if (rows.length === 0) {
     return <EmptyState message="No data for this period." />;
   }
-  const visible = rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visible = rows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   return (
     <>
       <Table>
@@ -70,7 +70,7 @@ export function BestPerformersTable({
       </Table>
       <Pagination
         totalRows={rows.length}
-        rowsPerPage={ROWS_PER_PAGE}
+        rowsPerPage={rowsPerPage}
         currentPage={page}
         onPageChange={onPageChange}
       />

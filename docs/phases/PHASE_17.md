@@ -23,10 +23,14 @@ which the cash session misreports as a shortage every time. Per this
 session's own STOP instruction, P17-4 was not built; BUG-31 is its own,
 higher-priority task. §9 also logs P17-2b (Q17-7's stock-alert
 taxonomy follow-up, not built this session). **PHASE PAUSED —
-2026-09-27:** BUG-31 accepted as a go-live blocker; its plan lives in
-`docs/phases/PHASE_17_5.md` + `docs/decisions/ADR-0016-cash-drawer-movements.md`
-(plan only, no code yet). P17-3, P17-4, P17-5, P17-7, and P17-2b all
-stay approved and resume once Phase 17.5's build is complete.
+2026-09-27, RESUMED 2026-09-27:** BUG-31 accepted as a go-live blocker;
+Phase 17.5 (`docs/phases/PHASE_17_5.md` +
+`docs/decisions/ADR-0016-cash-drawer-movements.md`) fixed it and was
+accepted by the owner (click-through passed), unpausing this phase.
+**P17-3 is DONE** — rows-per-page via one shared `useRowsPerPage()`
+hook/context, default 10 everywhere including `CustomerLedgerTable`
+(Q17-2's deliberate 15→10 normalization) — see §6/§8, 988/988 tests.
+P17-4, P17-5, P17-7, and P17-2b remain approved, not yet built.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -762,7 +766,7 @@ UI), same convention as every prior phase's task table.
 | ------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | P17-1   | `negativeStockPolicy`, one core summed/warehouse-scoped predicate, block+warn, both mechanisms unified (S17-SALE-1)             | `setting.repository.ts`/`setting.handler.ts`, `packages/contracts/src/setting/setting.ts`, `packages/core/src/sale/sale.ts`+`sale.repository.port.ts` (predicate + typed errors), `sale.repository.ts` (rewritten check + throw), `item.repository.ts`+`item.repository.port.ts`+`packages/contracts/src/item/item.ts` (new `counterStockMilli`), `ItemSearchPanel.tsx`+`ItemProductCard.tsx` (switched to `counterStockMilli`), `useSaleFlow.ts`+`SalePage.tsx`+`useSaleKeyboardShortcuts.ts` (Option C confirmation flow), new `sections/StockAlertsSettingsSection.tsx`                   | No                                              | **DONE — pending owner-machine click-through.** All automated exit criteria in §8 verified: 858/858 + review-round additions, `npm run verify` clean, both builds clean, live-DB script (run against the real dev DB — a process mistake corrected going forward, see CLAUDE.md) confirmed all four scenarios. Review round fixed a real IPC-boundary gap: `sale:create` now resolves a discriminated `NegativeStockOutcome` instead of relying on thrown-error properties. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding. | **M/L** (revised up from M) |
 | P17-2   | Low-stock badge + default threshold + Dashboard card, with `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (`counterStockMilli`/`reorderLevelMilli` on all 3 query methods), new `packages/core/src/item/low-stock.ts` (`isLowStock`), `item.handler.ts` (`runLowStockCount`), `stock-alerts-setting.repository.ts`/`.handler.ts` (split from `setting.*` to stay under the ~300-line convention), `StockBadge.tsx` (client-side `isLowStock` duplicate + `resolveStockBadge` rewrite — client can't import `@shop/core`), `ItemsPage.tsx`+new `ItemsTableRow.tsx` (dual-figure display, "Low stock only" filter), new `LowStockWidget.tsx` + `DashboardPage.tsx`/`App.tsx` wiring | No                                              | **DONE — pending owner-machine click-through.** All exit criteria in §8 verified: 894/894, `npm run verify` clean, both builds clean. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding.                                                                                                                                                                                                                                                                                                                                       | M                           |
-| P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | M                           |
+| P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | **DONE.** All exit criteria in §8 verified: 988/988, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | M                           |
 | P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **BLOCKED — see BUG-31.** Form wording is CLOSED (Q-DRAWING/A17-3, both settled name-only) — the remaining blocker is the cash-removal gap found while verifying P17-4's pre-conditions, not this task's own scope. Not built this session.                                                                                                                                                                                                                                                                                                                                         | M                           |
 | P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
 | P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | Ready — **scope-approved this phase**, tier stays T2 in the inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
@@ -952,15 +956,58 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       a later direct sidebar visit to Items opens with it unchecked. For
       the custody item, the Items list shows both figures under the
       badge: "Shop: 0 · With technicians: 5".
-- [ ] **P17-3** — All 11 existing report-table tests plus a
-      `CustomerLedgerTable` render test still pass after switching from a
-      local constant to the shared `useRowsPerPage()` hook, with the
-      setting defaulted to `10`. Query: a fresh DB has no `rowsPerPage`
-      key and every table falls back to `10`, confirmed by direct query.
-      UI action: changing Settings → Reports → Display → "Rows per page"
-      to `25` updates every currently-open report table **without a
-      reload** (A17-4) — manual verification on the shop machine, or a
-      render test confirming the hook re-renders subscribers on change.
+- [x] **P17-3 (DONE)** — New shared `RowsPerPageContext.tsx`
+      (`apps/client/src/context/`): `useRowsPerPage()` (the value, default
+      10), `useSetRowsPerPage()` (used only by the Settings section, to
+      push a live update out), and `RowsPerPageProvider` — one IPC read
+      (`setting:getRowsPerPage`) on mount, wrapping the whole app in
+      `App.tsx` (same place `ShopIdentityProvider` already wraps it), not
+      12 separate per-mount fetches. New
+      `reports-display-setting.repository.ts`/`.handler.ts` (own files,
+      same "extracted before setting.repository.ts/setting.handler.ts
+      cross ~300 lines" convention as `stock-alerts-setting.*`), new
+      `SetRowsPerPageInput`/`RowsPerPage` contracts, new
+      `setting:getRowsPerPage`/`setting:setRowsPerPage` channels, new
+      `sections/ReportsDisplaySettingsSection.tsx` under a new "Reports →
+      Display" nav group. All 11 files (9 report tabs + `JobsPage.tsx` +
+      `CustomerLedgerTable.tsx`) switched from their own local
+      `const ROWS_PER_PAGE = ...` to `useRowsPerPage()` — confirmed by a
+      dedicated static-analysis test
+      (`context/rows-per-page-usage.test.ts`, 11 cases) that greps each
+      file for the hook and the absence of the old constant, since a
+      render test alone can't distinguish a hardcoded 10 from a
+      default-10 hook. `CustomerLedgerTable`'s own local `15` is
+      normalized to `10` (Q17-2, ANSWERED) — proved directly by a new
+      `CustomerLedgerTable.test.tsx` (no test file existed for it
+      before): 12 rows render a "Page 2" button, which the old `15`
+      would not (`Pagination` renders nothing when `totalRows <=
+    rowsPerPage`). `reports-display-setting.repository.test.ts` (5
+      tests, real temp DB): a fresh DB has no `rowsPerPage` key and
+      `getRowsPerPage` returns `10`, confirmed both by the return value
+      and a direct `COUNT(*)` query proving the read never writes a row;
+      25/50 round-trip; setting it twice updates the same row; a
+      malformed stored value falls back to `10`.
+      `RowsPerPageContext.test.tsx` (3 tests): the hook returns the
+      default outside any provider; the provider resolves the real
+      value from IPC; **changing it via `useSetRowsPerPage()` re-renders
+      every subscriber immediately** — two independently-mounted
+      consumers both picked up the new value with no remount (A17-4,
+      proven directly rather than only by manual verification).
+      `ReportsDisplaySettingsSection.test.tsx` (3 tests, rendered inside
+      a `RowsPerPageProvider` alongside a stand-in "open table"
+      consumer): loads and shows the current value selected; choosing
+      50 and saving calls `setRowsPerPage` and the stand-in table
+      updates live in the same render, no reload; a fresh-DB value of
+      10 shows 10 already selected with Save disabled. All 11
+      pre-existing report/list tests (`DailySalesReport.test.tsx`,
+      `WageMonthReport.test.tsx`, `JobsPage.test.tsx` — the only 3 of
+      the 11 with dedicated test files before this phase) pass
+      unmodified, since the hook's outside-a-provider default (10)
+      matches what they already expected. `App.test.tsx`'s `ipc.js`
+      mock gained `setting.getRowsPerPage` (mocked to resolve `10`),
+      alongside the other settings `RowsPerPageProvider` now fetches
+      unconditionally on every mount, same as `ShopIdentityContext`'s
+      existing entries there.
 - [ ] **P17-4** — BLOCKED, see BUG-31 (PROJECT.md) — not built this
       session; the cash-removal verification below triggered a STOP.
       Simplified scope, once unblocked, per Q-DRAWING (owner drawings

@@ -14,6 +14,7 @@ import {
 } from '@shop/ui';
 import type { BadgeTone } from '@shop/ui';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { DESCRIPTIONS } from './ledger-entry-descriptions.js';
 import { LedgerExportMenu } from './LedgerExportMenu.js';
 
@@ -38,8 +39,6 @@ const INACTIVE_CHIP_CLASS =
 const ACTIVE_CHIP_CLASS =
   'rounded-md border border-brand bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors';
 
-const ROWS_PER_PAGE = 15;
-
 export interface CustomerLedgerTableProps {
   readonly rows: readonly CustomerLedgerRowDto[];
   readonly customerCode: string;
@@ -54,6 +53,10 @@ export function CustomerLedgerTable({
   onSelectSale,
   onSelectPayment,
 }: CustomerLedgerTableProps): React.JSX.Element {
+  // P17-3, Q17-2 (ANSWERED): a deliberate 15→10 normalization — this
+  // table's own local constant used to be 15, an unexplained
+  // inconsistency with every other report/list table's 10.
+  const rowsPerPage = useRowsPerPage();
   const [filter, setFilter] = useState<LedgerFilter>('all');
   const [page, setPage] = useState(1);
 
@@ -62,7 +65,7 @@ export function CustomerLedgerTable({
   }, [filter, rows]);
 
   const filtered = filter === 'all' ? rows : rows.filter((r) => r.sourceType === filter);
-  const paged = filtered.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="rounded-2xl bg-surface p-6 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_16px_rgba(0,0,0,.06)]">
@@ -192,7 +195,7 @@ export function CustomerLedgerTable({
               </Table>
               <Pagination
                 totalRows={filtered.length}
-                rowsPerPage={ROWS_PER_PAGE}
+                rowsPerPage={rowsPerPage}
                 currentPage={page}
                 onPageChange={setPage}
               />

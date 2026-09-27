@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CheckSquare,
   DatabaseBackup,
+  LayoutList,
   Percent,
   Receipt,
   Store,
@@ -87,6 +88,18 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
         title: 'Commission Approvals',
         hint: 'Review and approve claims',
         icon: CheckSquare,
+      },
+    ],
+  },
+  {
+    label: 'Reports',
+    items: [
+      {
+        key: 'reports-display',
+        path: '/settings/reports/display',
+        title: 'Display',
+        hint: 'Rows per page',
+        icon: LayoutList,
       },
     ],
   },

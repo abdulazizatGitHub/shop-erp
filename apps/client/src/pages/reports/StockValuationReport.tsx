@@ -17,14 +17,13 @@ import {
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
 import { BestPerformersBarChart } from './BestPerformersBarChart.js';
 import { BestPerformersTable } from './BestPerformersTable.js';
 import { StockHealthDonut } from './StockHealthDonut.js';
-
-const ROWS_PER_PAGE = 10;
 
 function toCsvRows(lines: StockValuationReportDto['lines']): Record<string, string | number>[] {
   return lines.map((line) => ({
@@ -81,6 +80,7 @@ function InventoryValue({
  * report:stockPerformance) is date-scoped, per P10-4's own instruction.
  */
 export function StockValuationReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [report, setReport] = useState<StockValuationReportDto | null>(null);
   const [performance, setPerformance] = useState<readonly StockPerformanceRowDto[] | null>(null);
@@ -123,8 +123,8 @@ export function StockValuationReport(): React.JSX.Element {
   }, [query]);
 
   const visibleLines = filteredLines.slice(
-    (stockLevelPage - 1) * ROWS_PER_PAGE,
-    stockLevelPage * ROWS_PER_PAGE,
+    (stockLevelPage - 1) * rowsPerPage,
+    stockLevelPage * rowsPerPage,
   );
 
   const itemsInStock = report?.lines.filter((l) => l.quantityOnHandMilli > 0).length ?? 0;
@@ -239,7 +239,7 @@ export function StockValuationReport(): React.JSX.Element {
             </Table>
             <Pagination
               totalRows={filteredLines.length}
-              rowsPerPage={ROWS_PER_PAGE}
+              rowsPerPage={rowsPerPage}
               currentPage={stockLevelPage}
               onPageChange={setStockLevelPage}
             />

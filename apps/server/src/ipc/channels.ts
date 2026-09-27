@@ -175,6 +175,8 @@ export const channels = {
     setNegativeStockPolicy: 'setting:setNegativeStockPolicy',
     getDefaultLowStockThreshold: 'setting:getDefaultLowStockThreshold',
     setDefaultLowStockThreshold: 'setting:setDefaultLowStockThreshold',
+    getRowsPerPage: 'setting:getRowsPerPage',
+    setRowsPerPage: 'setting:setRowsPerPage',
   },
   print: {
     reprintReceipt: 'print:reprintReceipt',

@@ -35,6 +35,7 @@ import { registerCustomerBalanceImportHandlers } from './ipc/handlers/customer-b
 import { registerBackupHandlers } from './ipc/handlers/backup.handler.js';
 import { registerSettingHandlers } from './ipc/handlers/setting.handler.js';
 import { registerStockAlertsSettingHandlers } from './ipc/handlers/stock-alerts-setting.handler.js';
+import { registerReportsDisplaySettingHandlers } from './ipc/handlers/reports-display-setting.handler.js';
 import { registerPrintHandlers } from './ipc/handlers/print.handler.js';
 import { registerInvoiceHandlers } from './ipc/handlers/invoice.handler.js';
 import { registerReportHandlers } from './ipc/handlers/report.handler.js';
@@ -126,6 +127,7 @@ function registerIpcHandlers(dbPath: string): void {
   registerBackupHandlers({ dbPath, defaultBackupDir: resolveBackupDir() });
   registerSettingHandlers({ dbPath, tenantId });
   registerStockAlertsSettingHandlers({ dbPath, tenantId });
+  registerReportsDisplaySettingHandlers({ dbPath, tenantId });
   registerPrintHandlers({ dbPath, tenantId });
   registerInvoiceHandlers({ dbPath, tenantId });
   registerReportHandlers({ dbPath, tenantId });

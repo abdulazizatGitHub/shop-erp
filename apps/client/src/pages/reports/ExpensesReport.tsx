@@ -30,11 +30,10 @@ import {
 import { DateRangeSelector } from '../../components/shared/DateRangeSelector.js';
 import { ExportCsvButton } from '../../components/shared/ExportCsvButton.js';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { downloadCsv } from '../../utils/exportCsv.js';
 import { ipc } from '../../lib/ipc.js';
 import { getThisMonth, type DateRange } from '../../utils/dateRanges.js';
-
-const ROWS_PER_PAGE = 10;
 
 // Cycled through for pie slices — no hardcoded hex, all from the shared
 // token file. More categories than colors just repeats the cycle.
@@ -123,6 +122,7 @@ function formatUnitTooltip(_value: unknown, _name: unknown, item: unknown): stri
  * rows. No new IPC channel was added for either.
  */
 export function ExpensesReport(): React.JSX.Element {
+  const rowsPerPage = useRowsPerPage();
   const [range, setRange] = useState<DateRange>(() => getThisMonth(new Date()));
   const [summary, setSummary] = useState<readonly ExpenseSummaryRowDto[] | null>(null);
   const [expenses, setExpenses] = useState<readonly ExpenseDto[] | null>(null);
@@ -152,7 +152,7 @@ export function ExpensesReport(): React.JSX.Element {
 
   const categorySlices = summary ? byCategory(summary) : [];
   const unitBars = summary ? byBusinessUnit(summary) : [];
-  const visibleExpenses = (expenses ?? []).slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleExpenses = (expenses ?? []).slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -267,7 +267,7 @@ export function ExpensesReport(): React.JSX.Element {
                 </Table>
                 <Pagination
                   totalRows={expenses.length}
-                  rowsPerPage={ROWS_PER_PAGE}
+                  rowsPerPage={rowsPerPage}
                   currentPage={page}
                   onPageChange={setPage}
                 />

@@ -15,6 +15,7 @@ import {
   TextInput,
 } from '@shop/ui';
 import { Pagination } from '../../components/shared/Pagination.js';
+import { useRowsPerPage } from '../../context/RowsPerPageContext.js';
 import { ipc } from '../../lib/ipc.js';
 import { JobCreateForm } from './JobCreateForm.js';
 import { JobDetailPage } from './JobDetailPage.js';
@@ -30,12 +31,10 @@ const STATUS_FILTERS: ReadonlyArray<{ key: StatusFilter; label: string }> = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-/** V4 — matches every report page's own constant (ItemsSoldTable.tsx,
- * ReceivablesAgingReport.tsx, etc. all use 10, not 20 — confirmed by
- * grep across every reports/*.tsx file before picking this value). */
-const ROWS_PER_PAGE = 10;
-
 export default function JobsPage(): React.JSX.Element {
+  // P17-3 — shared useRowsPerPage() hook, replaces the old local
+  // rowsPerPage constant (default still 10, matching every report tab).
+  const rowsPerPage = useRowsPerPage();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchText, setSearchText] = useState('');
   const [jobs, setJobs] = useState<readonly JobSummaryDto[] | null>(null);
@@ -134,7 +133,7 @@ export default function JobsPage(): React.JSX.Element {
   }
 
   const filteredJobs = (jobs ?? []).filter(matchesSearch);
-  const visibleJobs = filteredJobs.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+  const visibleJobs = filteredJobs.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -238,7 +237,7 @@ export default function JobsPage(): React.JSX.Element {
 
         <Pagination
           totalRows={filteredJobs.length}
-          rowsPerPage={ROWS_PER_PAGE}
+          rowsPerPage={rowsPerPage}
           currentPage={page}
           onPageChange={setPage}
         />

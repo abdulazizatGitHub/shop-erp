@@ -18,6 +18,17 @@ export const SetDefaultLowStockThresholdInput = z.object({
 });
 export type SetDefaultLowStockThresholdInput = z.infer<typeof SetDefaultLowStockThresholdInput>;
 
+/**
+ * P17-3 (docs/phases/PHASE_17.md §2.5, S17-REP-1). One shared value read
+ * by every report/list table via the client's useRowsPerPage() hook —
+ * not a generic numeric field, a fixed 3-choice setting (10/25/50).
+ */
+export const RowsPerPage = z.union([z.literal(10), z.literal(25), z.literal(50)]);
+export type RowsPerPage = z.infer<typeof RowsPerPage>;
+
+export const SetRowsPerPageInput = z.object({ value: RowsPerPage });
+export type SetRowsPerPageInput = z.infer<typeof SetRowsPerPageInput>;
+
 /** P4-1c. Placeholder default ("Shop ERP") until the owner sets the real name. */
 export const SetShopNameInput = z.object({
   value: z.string().trim().min(1),
