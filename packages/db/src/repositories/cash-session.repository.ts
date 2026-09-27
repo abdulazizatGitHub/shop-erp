@@ -2,6 +2,8 @@ import { sql, type Kysely } from 'kysely';
 import { newId } from '@shop/shared';
 import {
   SessionAlreadyOpenError,
+  AnotherSessionStillOpenError,
+  MultipleOpenSessionsError,
   type CashSessionRecord,
   type CashSessionRepositoryPort,
   type CloseSessionRepoInput,
@@ -52,11 +54,32 @@ export class KyselyCashSessionRepository implements CashSessionRepositoryPort {
    * crossing this method's boundary. withRetry itself only retries
    * SQLITE_BUSY, so a constraint violation always propagates straight
    * out of it, caught here.
+   *
+   * Phase 17.5, review round 4 R8: also refuses (before attempting the
+   * insert, inside the same transaction) if a DIFFERENT date's session
+   * is still open — AnotherSessionStillOpenError, naming that date. At
+   * most one session may ever be open at once, which is what makes
+   * `getOpenSession()` well-defined. Checking the SAME-date case here
+   * too (not just relying on the UNIQUE constraint below) preserves the
+   * existing SessionAlreadyOpenError behaviour for that one case.
    */
   async openSession(input: OpenSessionRepoInput): Promise<CashSessionRecord> {
     try {
       return await withRetry(() =>
         this.db.transaction().execute(async (trx) => {
+          const openElsewhere = await trx
+            .selectFrom('cashSession')
+            .select(['sessionDate'])
+            .where('tenantId', '=', this.tenantId)
+            .where('closedAt', 'is', null)
+            .executeTakeFirst();
+          if (openElsewhere) {
+            if (openElsewhere.sessionDate === input.date) {
+              throw new SessionAlreadyOpenError(input.date);
+            }
+            throw new AnotherSessionStillOpenError(openElsewhere.sessionDate);
+          }
+
           const id = newId();
           const now = new Date().toISOString();
 
@@ -280,24 +303,28 @@ export class KyselyCashSessionRepository implements CashSessionRepositoryPort {
   }
 
   /**
-   * Phase 17.5, review round 3 R6/R7 (docs/phases/PHASE_17_5.md §2.8).
+   * Phase 17.5, review round 3 R6/R7, round 4 R8 (docs/phases/PHASE_17_5.md §2.8).
    * `WHERE closed_at IS NULL`, deliberately not filtered by
    * `session_date` — a session opened on day D and never closed must
-   * still be found on wall-clock D+1. If more than one session were
-   * ever simultaneously open (BUG-33, PROJECT.md — not prevented today),
-   * the most recently opened one is used, since that's the one the
-   * owner is most likely actively working with.
+   * still be found on wall-clock D+1. Throws MultipleOpenSessionsError
+   * if more than one is found — never silently picks one.
+   * `openSession`'s own `AnotherSessionStillOpenError` guard is what
+   * keeps at most one open in normal operation; this only guards
+   * against the invariant ever being violated some other way (e.g.
+   * pre-existing data from before that guard existed).
    */
   async getOpenSession(): Promise<CashSessionRecord | null> {
-    const row = await this.db
+    const rows = await this.db
       .selectFrom('cashSession')
       .select(CASH_SESSION_COLUMNS)
       .where('tenantId', '=', this.tenantId)
       .where('closedAt', 'is', null)
-      .orderBy('openedAt', 'desc')
-      .executeTakeFirst();
+      .execute();
 
-    return row ? toCashSessionRecord(row) : null;
+    if (rows.length > 1) {
+      throw new MultipleOpenSessionsError(rows.map((r) => r.sessionDate));
+    }
+    return rows[0] ? toCashSessionRecord(rows[0]) : null;
   }
 }
 

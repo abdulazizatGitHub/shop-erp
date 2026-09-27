@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SessionAlreadyOpenError } from '@shop/core';
+import { newId } from '@shop/shared';
+import {
+  AnotherSessionStillOpenError,
+  MultipleOpenSessionsError,
+  SessionAlreadyOpenError,
+} from '@shop/core';
 import { openDatabase } from '../connection.js';
 import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
@@ -123,6 +128,33 @@ describe('KyselyCashSessionRepository.openSession (PHASE_7.md §5 GAP-7/GAP-8, E
       .all(TENANT_ID, '2026-08-15');
     expect(rows).toHaveLength(1);
   });
+
+  // Phase 17.5, review round 4 R8 (docs/phases/PHASE_17_5.md).
+  it('opening a session for a DIFFERENT date while one is still open throws AnotherSessionStillOpenError, naming the open date', async () => {
+    await repo.openSession({ date: '2026-08-15', openingCashPaisa: 500000 });
+
+    let caught: unknown;
+    try {
+      await repo.openSession({ date: '2026-08-16', openingCashPaisa: 100000 });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(AnotherSessionStillOpenError);
+    expect((caught as Error).message).toContain('2026-08-15');
+
+    const rows = rawDb.prepare(`SELECT id FROM cash_session WHERE tenant_id = ?`).all(TENANT_ID);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('opening a new session succeeds once the previous one is closed', async () => {
+    const first = await repo.openSession({ date: '2026-08-15', openingCashPaisa: 500000 });
+    await repo.closeSession({ sessionId: first.id, countedCashPaisa: 500000 });
+
+    const second = await repo.openSession({ date: '2026-08-16', openingCashPaisa: 200000 });
+    expect(second.status).toBe('open');
+    expect(second.sessionDate).toBe('2026-08-16');
+  });
 });
 
 describe('KyselyCashSessionRepository.closeSession (EC-P7-5)', () => {
@@ -233,5 +265,33 @@ describe('KyselyCashSessionRepository.getOpenSession', () => {
 
     const result = await repo.getOpenSession();
     expect(result).toBeNull();
+  });
+
+  // Phase 17.5, review round 4 R8. `openSession`'s own
+  // AnotherSessionStillOpenError guard should make this unreachable in
+  // normal operation — seeded directly (bypassing the repository) to
+  // prove getOpenSession() never silently picks one if the invariant is
+  // ever violated some other way (e.g. pre-existing bad data).
+  it('throws MultipleOpenSessionsError if more than one open session exists (seeded directly)', async () => {
+    const now = new Date().toISOString();
+    for (const date of ['2026-08-15', '2026-08-16']) {
+      rawDb
+        .prepare(
+          `INSERT INTO cash_session (id, tenant_id, session_date, opened_at, closed_at, opening_cash, expected_cash, counted_cash, difference, opened_by, closed_by, notes)
+           VALUES (?, ?, ?, ?, NULL, 500000, NULL, NULL, NULL, NULL, NULL, NULL)`,
+        )
+        .run(newId(), TENANT_ID, date, now);
+    }
+
+    let caught: unknown;
+    try {
+      await repo.getOpenSession();
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(MultipleOpenSessionsError);
+    expect((caught as Error).message).toContain('2026-08-15');
+    expect((caught as Error).message).toContain('2026-08-16');
   });
 });

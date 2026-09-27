@@ -1,6 +1,6 @@
 # ADR-0016: Drawer cash movements are their own append-only table, outside both units' P&L
 
-**Status:** Accepted — 2026-09-27 (amended after review round 2: R1 BUG-32 scope/fix, R2 session-open gate, R3 reversal mechanism, R4 accepted risk; amended again after review round 3: R6 movement_date follows the open session not the wall clock — BUG-33 logged, not fixed; R7 reversal scoped to the still-open original session). Task 1 built (migration 0021). Task 2 next.
+**Status:** Accepted — 2026-09-27 (amended after review round 2: R1 BUG-32 scope/fix, R2 session-open gate, R3 reversal mechanism, R4 accepted risk; amended again after review round 3: R6 movement_date follows the open session not the wall clock — BUG-33 logged, not fixed; R7 reversal scoped to the still-open original session; amended again after review round 4: R8 at most one session may ever be open — `openSession` refuses a second one, `getOpenSession()` throws rather than picking one, BUG-33's cross-date-open-sessions part is fixed by this). Task 1 and Task 2 built (migration 0021; core validation + getOpenSession). Task 3 next.
 
 ## Context
 
@@ -167,6 +167,26 @@ way `sale`/`purchase`/`expense`/`payment` already are.
   attempted (a plain "already reversed" message, no DB round trip for a
   doomed insert), with the DB's `UNIQUE(reverses_id)` kept as the
   backstop for the check-then-insert race window.
+- **At most one cash session may ever be open at a time (review round
+  4, R8)** — required for `getOpenSession()` above to be well-defined
+  at all; without it, "the" open session is ambiguous. `openSession`
+  now refuses (inside its own transaction, before the insert) if ANY
+  session is open, not just one for the same date — `AnotherSessionStillOpenError`,
+  naming the open date: _"The drawer for {date} is still open — close
+  it first."_ (The exact-same-date case still throws the pre-existing
+  `SessionAlreadyOpenError`, unchanged.) `getOpenSession()` itself
+  throws `MultipleOpenSessionsError` if it ever finds more than one —
+  it never silently picks one, even though that state should now be
+  unreachable in normal operation. The Dashboard widget
+  (`CashSessionWidget.tsx`) resolves `cashSession:today` via
+  `getOpenSession()`, not a same-day lookup (already true from R6), so
+  an older still-open session now renders as "Open," with its own date
+  shown next to the opened time — not as "Not started," which is what
+  silently let a second session get opened over it before this fix.
+  **This closes the "two sessions for different dates can be open
+  simultaneously" part of BUG-33** (`PROJECT.md`, updated) — the
+  sale/expense/purchase/payment wall-clock-dating parts (a)/(b) remain
+  open, out of this phase's scope (see BUG-33's updated entry).
 - `getCashBookReport` (`report.repository.ts:208-255`) is **fixed as
   part of this ADR's own scope, not left as a separate bug (R1)** —
   gains a fourth `UNION ALL` branch for `cash_movement` (both signs,

@@ -1,6 +1,8 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
+  AnotherSessionStillOpenError,
+  MultipleOpenSessionsError,
   NegativeStockBlockedError,
   NegativeStockConfirmationRequiredError,
   SessionAlreadyOpenError,
@@ -42,6 +44,25 @@ describe('toIpcError', () => {
 
     expect(ipcError.code).toBe('SESSION_ALREADY_OPEN');
     expect(ipcError.message).toContain('2026-08-15');
+  });
+
+  it('wraps AnotherSessionStillOpenError into { code: ANOTHER_SESSION_STILL_OPEN, message } (Phase 17.5, review round 4 R8)', () => {
+    const error = new AnotherSessionStillOpenError('2026-08-15');
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('ANOTHER_SESSION_STILL_OPEN');
+    expect(ipcError.message).toContain('2026-08-15');
+  });
+
+  it('wraps MultipleOpenSessionsError into { code: MULTIPLE_OPEN_SESSIONS, message } (Phase 17.5, review round 4 R8)', () => {
+    const error = new MultipleOpenSessionsError(['2026-08-15', '2026-08-16']);
+
+    const ipcError = toIpcError(error);
+
+    expect(ipcError.code).toBe('MULTIPLE_OPEN_SESSIONS');
+    expect(ipcError.message).toContain('2026-08-15');
+    expect(ipcError.message).toContain('2026-08-16');
   });
 
   it("wraps NegativeStockBlockedError into { code: NEGATIVE_STOCK_BLOCKED, details.items } — defensive/secondary path only (P17-1 review): the real sale:create flow never lets this reach here, see sale.handler.ts's runCreateSale", () => {

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { CloseSessionInput, OpenSessionInput, type CashSessionDto } from '@shop/contracts';
-import { closeSession, getTodaySession, openSession, type CashSessionRecord } from '@shop/core';
+import { closeSession, getOpenSession, openSession, type CashSessionRecord } from '@shop/core';
 import { createKyselyDb, KyselyCashSessionRepository, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
 import { withError } from '../middleware/with-error.js';
@@ -23,10 +23,6 @@ function toDto(record: CashSessionRecord): CashSessionDto {
     difference: record.differencePaisa,
     status: record.status,
   };
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /** See staff.handler.ts's file header — no requirePermission() (PROJECT.md BUG-ADR9). */
@@ -79,7 +75,10 @@ export function registerCashSessionHandlers(deps: CashSessionHandlerDeps): void 
           deps.tenantId,
           deps.deviceCode,
         );
-        const record = await getTodaySession(repo, todayIso());
+        // Phase 17.5, review round 4 R8: the currently OPEN session,
+        // never "today's" — a session opened on an earlier date and
+        // never closed must still show here (BUG-33, PROJECT.md).
+        const record = await getOpenSession(repo);
         return record ? toDto(record) : null;
       } finally {
         db.close();

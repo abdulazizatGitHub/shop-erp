@@ -116,10 +116,12 @@ export type {
   ExpenseRepositoryPort,
 } from './expense/expense.repository.port.js';
 
-export { openSession, closeSession, getTodaySession } from './expense/cash-session.service.js';
+export { openSession, closeSession, getOpenSession } from './expense/cash-session.service.js';
 export {
   SessionAlreadyOpenError,
   CashSessionNotOpenError,
+  AnotherSessionStillOpenError,
+  MultipleOpenSessionsError,
 } from './expense/cash-session.repository.port.js';
 export type {
   CashSessionStatus,

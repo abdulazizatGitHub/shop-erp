@@ -52,6 +52,39 @@ export class SessionAlreadyOpenError extends Error {
 }
 
 /**
+ * Phase 17.5 (docs/phases/PHASE_17_5.md), review round 4 R8. Thrown by
+ * `openSession` when a DIFFERENT date's session is still open — a
+ * single-open-session invariant `getOpenSession()` depends on being
+ * true to be well-defined at all. Distinct from `SessionAlreadyOpenError`
+ * (same date, DB constraint) — this one names the OTHER date that's
+ * blocking the new one.
+ */
+export class AnotherSessionStillOpenError extends Error {
+  readonly code = 'ANOTHER_SESSION_STILL_OPEN';
+
+  constructor(openDate: string) {
+    super(`The drawer for ${openDate} is still open — close it first.`);
+    this.name = 'AnotherSessionStillOpenError';
+  }
+}
+
+/**
+ * Phase 17.5, review round 4 R8. Thrown by `getOpenSession()` if more
+ * than one session is found with `closed_at IS NULL` — this should be
+ * unreachable once `openSession`'s own `AnotherSessionStillOpenError`
+ * guard is in place, but `getOpenSession()` never silently picks one if
+ * the invariant is ever violated anyway (e.g. pre-existing bad data).
+ */
+export class MultipleOpenSessionsError extends Error {
+  readonly code = 'MULTIPLE_OPEN_SESSIONS';
+
+  constructor(dates: readonly string[]) {
+    super(`More than one cash session is open at once: ${dates.join(', ')}.`);
+    this.name = 'MultipleOpenSessionsError';
+  }
+}
+
+/**
  * Phase 17.5 (docs/phases/PHASE_17_5.md), review round 2 R2. Thrown by
  * cash-movement recording/reversal when there is no currently-open
  * session (`getOpenSession()` returns null) — same typed-error shape as
@@ -71,7 +104,11 @@ export interface CashSessionRepositoryPort {
   /**
    * ONE TRANSACTION: cash_session insert + audit_log + sync_outbox.
    * Throws SessionAlreadyOpenError (never a raw constraint error) if a
-   * session already exists for this date.
+   * session already exists for this exact date. Throws
+   * AnotherSessionStillOpenError (review round 4, R8) if a DIFFERENT
+   * date's session is still open — at most one session may ever be
+   * open at a time, which is what makes `getOpenSession()` below
+   * well-defined.
    */
   openSession(input: OpenSessionRepoInput): Promise<CashSessionRecord>;
   /**
@@ -84,13 +121,16 @@ export interface CashSessionRepositoryPort {
   /** The session for one date, or null if none was opened. */
   getSessionByDate(date: string): Promise<CashSessionRecord | null>;
   /**
-   * Phase 17.5, review round 3 R6/R7 — the session with
+   * Phase 17.5, review round 3 R6/R7, round 4 R8 — the session with
    * `closed_at IS NULL`, regardless of what today's wall-clock date is.
    * This is deliberately NOT `getSessionByDate(todayIso())`: a session
    * opened on day D and never closed must still be found on wall-clock
    * D+1 — that's the whole point (BUG-33, PROJECT.md, not fixed by
    * this method — `cash_movement` uses it to avoid the same defect for
    * its own writes, nothing more). Null if no session is open at all.
+   * Throws MultipleOpenSessionsError if more than one is found — never
+   * silently picks one; `openSession`'s own `AnotherSessionStillOpenError`
+   * guard is what keeps this invariant true in normal operation.
    */
   getOpenSession(): Promise<CashSessionRecord | null>;
 }

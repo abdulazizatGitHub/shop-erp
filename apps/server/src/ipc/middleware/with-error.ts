@@ -1,6 +1,8 @@
 import { ZodError } from 'zod';
 import {
+  AnotherSessionStillOpenError,
   DiscountExceedsSubtotalError,
+  MultipleOpenSessionsError,
   NegativeStockBlockedError,
   NegativeStockConfirmationRequiredError,
   SessionAlreadyOpenError,
@@ -31,6 +33,18 @@ export function toIpcError(error: unknown): IpcError {
 
   if (error instanceof SessionAlreadyOpenError) {
     return { code: 'SESSION_ALREADY_OPEN', message: error.message };
+  }
+
+  // Phase 17.5, review round 4 R8 — same primary-path mapping as
+  // SessionAlreadyOpenError above (this codebase's established pattern
+  // for cash-session errors; unlike the negative-stock case, this one
+  // has never needed the resolve-instead-of-reject redesign).
+  if (error instanceof AnotherSessionStillOpenError) {
+    return { code: 'ANOTHER_SESSION_STILL_OPEN', message: error.message };
+  }
+
+  if (error instanceof MultipleOpenSessionsError) {
+    return { code: 'MULTIPLE_OPEN_SESSIONS', message: error.message };
   }
 
   if (error instanceof DiscountExceedsSubtotalError) {

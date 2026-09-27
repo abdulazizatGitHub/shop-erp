@@ -22,9 +22,15 @@ export async function closeSession(
   });
 }
 
-export async function getTodaySession(
+/**
+ * Phase 17.5, review round 4 R8 — renamed from `getTodaySession`
+ * (which called `repo.getSessionByDate(todayIso())`): the Dashboard
+ * widget must show an older still-open session instead of reporting
+ * "no session today," so this now calls `repo.getOpenSession()`
+ * directly, with no date parameter at all.
+ */
+export async function getOpenSession(
   repo: CashSessionRepositoryPort,
-  date: string,
 ): Promise<CashSessionRecord | null> {
-  return repo.getSessionByDate(date);
+  return repo.getOpenSession();
 }

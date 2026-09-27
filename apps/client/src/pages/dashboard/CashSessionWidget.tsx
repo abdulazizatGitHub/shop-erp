@@ -109,7 +109,10 @@ export function CashSessionWidget(): React.JSX.Element {
     );
   }
 
-  // STATE 1 — no session today.
+  // STATE 1 — no session open at all (Phase 17.5 R8: `cashSession:today`
+  // now resolves the currently-OPEN session, never strictly "today's" —
+  // an older still-open session is shown in STATE 2 below instead of
+  // this state, even past midnight).
   if (session === null) {
     return (
       <Card title="Cash Session">
@@ -166,7 +169,10 @@ export function CashSessionWidget(): React.JSX.Element {
     );
   }
 
-  // STATE 2 — open.
+  // STATE 2 — open. Shows the session's own date explicitly (Phase 17.5
+  // R8) — this may be an OLDER date's session still open past
+  // midnight, and "Opened at {time}" alone would be ambiguous about
+  // which day that time belongs to.
   if (session.status === 'open') {
     return (
       <Card title="Cash Session — Open">
@@ -176,7 +182,9 @@ export function CashSessionWidget(): React.JSX.Element {
             <p className="text-sm text-ink-muted">Opening float</p>
             <MoneyDisplay paisaValue={session.openingCash} />
           </div>
-          <p className="text-sm text-ink-faint">Opened at {formatTime(session.openedAt)}</p>
+          <p className="text-sm text-ink-faint">
+            {session.sessionDate} — opened at {formatTime(session.openedAt)}
+          </p>
 
           {mode === 'close' ? (
             <>

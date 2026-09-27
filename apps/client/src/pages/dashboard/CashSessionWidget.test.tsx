@@ -87,6 +87,32 @@ describe('CashSessionWidget (P7-10 smoke test, EC-P7-10)', () => {
     expect(await screen.findByText('Over by', { exact: false })).toBeTruthy();
   });
 
+  // Phase 17.5, review round 4 R8: cashSession:today now resolves the
+  // currently-OPEN session (getOpenSession), never strictly "today's" —
+  // an older still-open session must render as STATE 2 (open), not
+  // STATE 1 ("Not started"), even though its own sessionDate is well
+  // before whatever today's wall-clock date is when the test runs.
+  it('shows an older still-open session (not "Not started") when one is still open past its own day', async () => {
+    today.mockResolvedValue({
+      id: 's1',
+      sessionDate: '2020-01-01',
+      openedAt: '2020-01-01T09:00:00.000Z',
+      closedAt: null,
+      openingCash: 500000,
+      expectedCash: null,
+      countedCash: null,
+      difference: null,
+      status: 'open',
+    });
+
+    render(<CashSessionWidget />);
+
+    expect(await screen.findByText('Rs 5,000')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Close Session' })).toBeTruthy();
+    expect(screen.queryByText('Not started')).toBeNull();
+    expect(screen.getByText('2020-01-01', { exact: false })).toBeTruthy();
+  });
+
   it('STATE 3 — closed, short (difference < 0): shows "Short by"', async () => {
     today.mockResolvedValue({
       id: 's1',
