@@ -1,6 +1,6 @@
 # ADR-0016: Drawer cash movements are their own append-only table, outside both units' P&L
 
-**Status:** Proposed (draft — plan only, no migration applied yet) · **Date:** 2026-09-27
+**Status:** Accepted — 2026-09-27 (amended after review round 2: R1 BUG-32 scope/fix, R2 session-open gate, R3 reversal mechanism, R4 accepted risk). Build starts at Phase 17.5 Task 1.
 
 ## Context
 
@@ -21,11 +21,16 @@ A new table, `cash_movement`, records cash added to or removed from the
 physical drawer for one of four reasons: `bank_deposit` (cash removed,
 taken to the bank), `owner_draw` (cash removed, taken by the owner for
 personal use), `float_add` (cash added — change/float top-up), or
-`other` (either direction; a non-blank note is required). It is
-**append-only** (ADR-0004) and participates in the cash session's
+`other` (either direction). **A non-blank note is required on every
+movement, all four types** (review round 2, R4 — see Consequences). It
+is **append-only** (ADR-0004) and participates in the cash session's
 `expected_cash` formula as one new signed term — nothing else. It has
 **no `business_unit_id` column** and **no effect on either unit's
-P&L** — see Consequences.
+P&L** — see Consequences. **A movement may only be recorded while a
+cash session is open** (review round 2, R2), refused with a plain,
+typed error otherwise. **A movement can be reversed** — a new row,
+`reverses_id` pointing back at the original, amount negated, at most
+once per original — see Consequences.
 
 ## Reasoning
 
@@ -83,16 +88,27 @@ way `sale`/`purchase`/`expense`/`payment` already are.
   a new filter condition on an existing one. `v_unit_direct_expense`,
   `v_overhead_pool`, `v_owner_drawings`, and `getExpenseSummaryReport`
   are all completely untouched by this ADR.
-- **No `reversed_by_id` column.** `docs/DATABASE_RULES.md §3` records
-  the finding, confirmed by grep, that `stock_movement.reversed_by_id`
-  and `party_ledger`'s equivalent are **never actually written by any
-  application code path** — the real, working correction pattern in
-  this codebase is a plain new row with the opposite sign, discovered
-  by summing, not by following a pointer. `cash_movement` follows that
-  same real pattern from day one rather than adding a second unused
-  pointer column: a correction is a new row with `amount` negated (and
-  ideally a `note` referencing which entry it corrects, free text, not
-  FK-enforced).
+- **`reverses_id`, reversed from the first draft's "no reversal
+  column" position (review round 2, R3).** The first draft cited
+  `docs/DATABASE_RULES.md §3`'s finding that `stock_movement.reversed_by_id`
+  is never actually written by any application code path, and proposed
+  omitting the equivalent column here. Overruled: `cash_movement` gets
+  a nullable `reverses_id TEXT REFERENCES cash_movement(id)`, set only
+  on the reversal row, pointing **back** at the original — the opposite
+  direction from the vestigial `reversed_by_id` columns, which were set
+  on the _original_ by a second, easy-to-forget call site. Here there
+  is exactly one write path (`reverseMovement()`) that creates the
+  reversal row and sets `reverses_id` in the same insert, so the
+  "column nobody remembers to write" failure mode doesn't apply.
+  `UNIQUE(reverses_id)` enforces "reversed at most once" (SQLite allows
+  unlimited `NULL`s, at most one non-null value) — the same precedent
+  as `commission_decision_reversal.UNIQUE(decision_id)` (ADR-0015). The
+  reversal amount must be the exact negation of the original's,
+  core-enforced (`assertReversalValid`). The sign-per-type rule below
+  applies only to _original_ rows — a reversal of a (necessarily
+  negative) `bank_deposit` is itself positive by definition, and
+  enforcing "always negative" against it too would be
+  self-contradictory.
 - **No `party_id` column** — deliberately, per "why not a payment to a
   dummy party" above.
 - Corrects `cash-session.repository.ts`'s `expected_cash` formula to
@@ -100,15 +116,49 @@ way `sale`/`purchase`/`expense`/`payment` already are.
   `cashMovementsNet = SUM(cash_movement.amount) WHERE tenant_id=? AND movement_date=?`
   (COALESCE'd to 0, same convention as every other term in that
   formula): `expectedCashPaisa = cashIn - cashOut + cashMovementsNet`.
-- `getCashBookReport` (`report.repository.ts:208-255`) gains a third
-  `UNION ALL` branch for `cash_movement`, alongside `purchase`/`sale`/
-  `payment`. **Separately noted, not fixed here:** while reading this
-  report to plan the new branch, its existing `sale`/`payment` unions
-  were found to not actually filter `payment_mode`/`method = 'cash'`
-  despite the file's own doc-comment claiming they do — logged as
-  BUG-32 (`PROJECT.md`), a pre-existing, unrelated defect.
+- **A movement may only be recorded while a cash session is open
+  (R2).** `closeSession` itself sums by calendar date, not a time
+  window, and never gates any other table's writes on session status —
+  but a drawer movement is different in kind from a sale or expense: it
+  is "this physical thing is happening right now," not a document that
+  can legitimately be entered for a past date. Letting one through for
+  a date whose session was never opened, or was already closed and
+  counted, would let it change a `cash_session` row's `expected_cash`
+  retroactively, after the owner's `countedCashPaisa` was already
+  verified and stored — the exact kind of after-the-fact tampering R4
+  below is concerned about. `CashSessionNotOpenError`, checked and
+  inserted in one transaction.
+- `getCashBookReport` (`report.repository.ts:208-255`) is **fixed as
+  part of this ADR's own scope, not left as a separate bug (R1)** —
+  gains a fourth `UNION ALL` branch for `cash_movement` (both signs,
+  "Correction of CM-xxxx" labelling for a reversal), and its
+  pre-existing gaps are corrected: the `sale`/`payment`(in) branches
+  gain the `payment_mode`/`method = 'cash'` filter their own doc-comment
+  already claimed they had (BUG-32, `PROJECT.md`), and two entirely
+  missing outflow branches (`expense`, `payment` direction='out') are
+  added. Verified first (R1) that `closeSession` itself was never
+  affected by BUG-32 — its own five queries already filter to cash
+  correctly; the gap was confined to this separate, independently
+  implemented report.
 - See `docs/phases/PHASE_17_5.md` for the full schema, task breakdown,
   and exit criteria.
+
+## Accepted risk (R4)
+
+Without an auth/permission layer (ADR-0009; no user/role gate exists
+yet, `BUG-ADR9`), anyone with app access can record a cash-out movement
+to mask what would otherwise show as a shortage — e.g. a fake
+`owner_draw` for exactly the missing amount reconciles a genuinely
+short till cleanly, with nothing today distinguishing it from a real
+withdrawal. **Accepted as a risk for this phase**, mitigated by three
+things built now: a non-blank `note` required on every movement, all
+four types (not only `'other'`) — a minimal audit trail even without
+per-user attribution; the close screen lists every movement
+individually, never only a net figure; the Cash Book report shows every
+movement with its note and reversal status. `created_by
+REFERENCES app_user(id)` already exists on the table, nullable and
+populated with `NULL` everywhere today — ready for a future auth phase
+to populate without a schema change.
 
 ## Alternatives rejected
 
@@ -122,8 +172,20 @@ way `sale`/`purchase`/`expense`/`payment` already are.
   omitting the column outright: `cash_session` already establishes that
   whole-till tables don't carry unit tagging at all, and there's no
   plausible future case where a drawer movement becomes unit-specific.
-- **A `reversed_by_id` self-referencing column** (matching
-  `stock_movement`'s schema) — rejected because that exact column is
-  documented (`DATABASE_RULES.md §3`) as dead weight on the two tables
-  that already have it; a new table shouldn't repeat a mistake that's
-  already been found and named.
+- **No requirement to attach to an open session** (the first draft's
+  position) — reversed by R2: unlike sale/expense, a drawer movement
+  has no legitimate "entered late for a past date" case, and allowing
+  one after a session's figures are already verified and stored would
+  undermine the very reconciliation this ADR exists to fix.
+- **Note required only for `'other'`** (the first draft's position) —
+  reversed by R4: requiring it on every movement is a cheap, real
+  mitigation for the accepted no-auth risk above.
+- **No reversal mechanism / no `reverses_id` column** (the first
+  draft's position, citing `DATABASE_RULES.md §3`'s finding that the
+  equivalent column on `stock_movement`/`party_ledger` goes unwritten)
+  — reversed by R3: that finding is about a column set on the wrong
+  row (the original) by a second, easy-to-forget call site;
+  `reverses_id` on the reversal row, written by the one call site that
+  creates it, doesn't share that failure mode, and "reversed at most
+  once" needs _some_ way to check for an existing reversal — a
+  `UNIQUE` constraint is the simplest one available.
