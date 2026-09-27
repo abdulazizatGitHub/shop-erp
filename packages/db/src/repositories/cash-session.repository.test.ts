@@ -9,11 +9,14 @@ import {
   MultipleOpenSessionsError,
   SessionAlreadyOpenError,
 } from '@shop/core';
+import type { Kysely } from 'kysely';
 import { openDatabase } from '../connection.js';
 import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
+import type { Database as KyselyDatabase } from '../kysely-schema.js';
 import { KyselyCashSessionRepository } from './cash-session.repository.js';
+import { KyselyCashMovementRepository } from './cash-movement.repository.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../migrations');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -22,6 +25,7 @@ const DEVICE_CODE = 'A';
 let workDir: string;
 let dbPath: string;
 let rawDb: Database.Database;
+let kyselyDb: Kysely<KyselyDatabase>;
 let repo: KyselyCashSessionRepository;
 
 beforeEach(() => {
@@ -31,8 +35,8 @@ beforeEach(() => {
   rawDb = openDatabase(dbPath);
   seed(rawDb, TENANT_ID);
 
-  const kysely = createKyselyDb(rawDb);
-  repo = new KyselyCashSessionRepository(kysely, TENANT_ID, DEVICE_CODE);
+  kyselyDb = createKyselyDb(rawDb);
+  repo = new KyselyCashSessionRepository(kyselyDb, TENANT_ID, DEVICE_CODE);
 });
 
 afterEach(() => {
@@ -214,6 +218,31 @@ describe('KyselyCashSessionRepository.closeSession (EC-P7-5)', () => {
 
     expect(result.expectedCashPaisa).toBe(4_735_000);
     expect(result.differencePaisa).toBe(0);
+  });
+
+  // Phase 17.5 (docs/phases/PHASE_17_5.md SS5 T3), BUG-31's own priority
+  // exit test, kept verbatim from the plan's first draft.
+  it('BUG-31 fix: opening 10,000 + cash sale 5,000 - bank deposit 12,000 = expected 3,000, no shortage', async () => {
+    const date = '2026-08-17';
+    const opened = await repo.openSession({ date, openingCashPaisa: 1_000_000 }); // Rs 10,000
+
+    seedCashSale(date, 500_000); // Rs 5,000 cash sale
+
+    const movementRepo = new KyselyCashMovementRepository(kyselyDb, TENANT_ID, DEVICE_CODE);
+    await movementRepo.recordMovement({
+      movementType: 'bank_deposit',
+      amountPaisa: -1_200_000, // Rs 12,000 removed
+      note: 'Deposited at HBL Malakand branch',
+    });
+
+    // Hand-calc: 1,000,000 + 500,000 + 0 - 0 - 0 - 0 + (-1,200,000) = 300,000 paisa (Rs 3,000)
+    const result = await repo.closeSession({
+      sessionId: opened.id,
+      countedCashPaisa: 300_000,
+    });
+
+    expect(result.expectedCashPaisa).toBe(300_000);
+    expect(result.differencePaisa).toBe(0); // no shortage
   });
 });
 

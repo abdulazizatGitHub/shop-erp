@@ -11,10 +11,11 @@ Task 6 extended to expose `cash_session.notes`) and review round 4 (R8
 at most one session may ever be open — `openSession` refuses a second
 one, `getOpenSession()` throws rather than picking one; this closes
 BUG-33's "two sessions open at once" part, the sale-dating parts stay
-open). **Tasks 1–2 built** (migration `0021`; core validation +
-`getOpenSession`) — **R8 built as part of Task 3** (the single-open-
-session guard, ahead of the repository's own `recordMovement`/
-`reverseMovement`). **Blocks go-live** —
+open). **Tasks 1–3 built** (migration `0021`; core validation +
+`getOpenSession`; R8's single-open-session guard, then
+`KyselyCashMovementRepository.recordMovement`/`.reverseMovement`/
+`.listForDateRange` and the `expected_cash` formula change). Task 4
+(fixes BUG-32) next. **Blocks go-live** —
 accepted by the owner as a blocker (BUG-31, `PROJECT.md`). **Pauses
 Phase 17**: P17-3, P17-4, P17-5, P17-7, and the logged follow-up
 P17-2b all stay approved and resume once this phase's build is
@@ -604,14 +605,14 @@ scope and the reversal mechanics).
 
 ## 5. Exit criteria (with tests)
 
-- [ ] **T1** — Migration applies cleanly on a fresh DB (`migrate.ts`);
+- [x] **T1** (DONE) — Migration applies cleanly on a fresh DB (`migrate.ts`);
       `sqlite_master` query confirms `cash_movement` exists with the
       exact columns in §2.7's amended DDL (including `reverses_id`,
       `note NOT NULL`) plus `idx_cm_date` and both `UNIQUE` constraints.
       Table count is previous + 1 (Q11 baseline table, re-verified at
       that point — see `PROJECT.md` Q11 for the running count
       convention).
-- [ ] **T2** — `cash-movement.service.test.ts`:
+- [x] **T2** (DONE) — `cash-movement.service.test.ts`:
       `assertCashMovementValid` (original rows only) accepts
       `bank_deposit`/`owner_draw` only with a negative amount, rejects
       a positive one for either; accepts `float_add` only with a
@@ -627,10 +628,10 @@ scope and the reversal mechanics).
       session's `sessionDate`** (no session open at all, or a
       different date's session is open), with the exact message
       `"That day is closed — its cash difference already reflects
-  this. Add a note to the closed session instead."`; accepts a
+this. Add a note to the closed session instead."`; accepts a
       reversal when the original's `movementDate` **does** match the
       open session's date (same-day reversal, still open).
-- [ ] **T3** — **R8, built first (DONE):** opening a session while
+- [x] **T3** (DONE) — **R8, built first (DONE):** opening a session while
       another (same or different date) is already open is refused —
       `SessionAlreadyOpenError` for the same date (existing behaviour,
       unchanged), `AnotherSessionStillOpenError` naming the open date

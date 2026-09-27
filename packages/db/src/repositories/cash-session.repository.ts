@@ -11,6 +11,7 @@ import {
 } from '@shop/core';
 import { withRetry } from '../retry.js';
 import type { Database } from '../kysely-schema.js';
+import { sumCashMovementsForDate } from './cash-movement.repository.js';
 
 const CASH_SESSION_COLUMNS = [
   'id',
@@ -224,10 +225,16 @@ export class KyselyCashSessionRepository implements CashSessionRepositoryPort {
               AND direction = 'out' AND method = 'cash'
           `,
         );
+        // Phase 17.5 (docs/phases/PHASE_17_5.md §2.5), BUG-31. Already
+        // signed at insert time (+in / -out — cash_movement.amount,
+        // 0021_cash_movement.sql), so this one term folds directly into
+        // expectedCashPaisa below with no separate in/out split, unlike
+        // the four unsigned terms above.
+        const cashMovements = await sumCashMovementsForDate(trx, this.tenantId, date);
 
         const cashIn = existing.openingCash + cashSales + cashPaymentsIn;
         const cashOut = cashPurchases + cashExpenses + cashPaymentsOut;
-        const expectedCashPaisa = cashIn - cashOut;
+        const expectedCashPaisa = cashIn - cashOut + cashMovements;
         const differencePaisa = input.countedCashPaisa - expectedCashPaisa;
         const now = new Date().toISOString();
 

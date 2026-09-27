@@ -15,6 +15,10 @@ export { KyselyAttendanceRepository } from './repositories/attendance.repository
 export { KyselyAdvanceRepository } from './repositories/advance.repository.js';
 export { KyselyExpenseRepository } from './repositories/expense.repository.js';
 export { KyselyCashSessionRepository } from './repositories/cash-session.repository.js';
+export {
+  KyselyCashMovementRepository,
+  sumCashMovementsForDate,
+} from './repositories/cash-movement.repository.js';
 export { KyselyCommissionDecisionRepository } from './repositories/commission-decision.repository.js';
 export { getWageMonthReport } from './repositories/wage-report.repository.js';
 export type { WageMonthRow } from './repositories/wage-report.repository.js';

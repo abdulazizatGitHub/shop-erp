@@ -4,7 +4,11 @@ import {
   ReversalOfReversalError,
   type CashMovementRecord,
 } from './cash-movement.repository.port.js';
-import { assertCashMovementValid, assertReversalValid } from './cash-movement.service.js';
+import {
+  assertCashMovementValid,
+  assertNoteNotBlank,
+  assertReversalValid,
+} from './cash-movement.service.js';
 
 function makeOriginal(overrides: Partial<CashMovementRecord> = {}): CashMovementRecord {
   return {
@@ -79,6 +83,20 @@ describe('assertCashMovementValid', () => {
     }).not.toThrow();
     expect(() => {
       assertCashMovementValid('other', -1000, 'note');
+    }).not.toThrow();
+  });
+});
+
+describe('assertNoteNotBlank', () => {
+  it('rejects blank and whitespace-only notes, used by reverseMovement for its own note (not tied to the sign-per-type rule)', () => {
+    expect(() => {
+      assertNoteNotBlank('');
+    }).toThrow('A note is required for every cash movement.');
+    expect(() => {
+      assertNoteNotBlank('   ');
+    }).toThrow();
+    expect(() => {
+      assertNoteNotBlank('Correcting CM-0004, wrong amount entered');
     }).not.toThrow();
   });
 });

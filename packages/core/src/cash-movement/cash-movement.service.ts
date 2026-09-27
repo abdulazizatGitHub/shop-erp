@@ -6,6 +6,18 @@ import {
 } from './cash-movement.repository.port.js';
 
 /**
+ * Phase 17.5, review round 2 R4 — required (non-blank) on EVERY
+ * movement, original or reversal. Split out so `reverseMovement`'s own
+ * note can be checked without also running the sign-per-type rule
+ * below, which does not apply to reversal amounts.
+ */
+export function assertNoteNotBlank(note: string): void {
+  if (note.trim().length === 0) {
+    throw new Error('A note is required for every cash movement.');
+  }
+}
+
+/**
  * Phase 17.5 (docs/phases/PHASE_17_5.md), review round 2 R4 / round 3
  * R7. Pure validation — no DB, same `assertX` precedent as
  * `assertCommissionModeConsistent` (packages/core/src/job/service-charge.service.ts).
@@ -24,9 +36,7 @@ export function assertCashMovementValid(
   if (amountPaisa === 0) {
     throw new Error('Cash movement amount cannot be zero.');
   }
-  if (note.trim().length === 0) {
-    throw new Error('A note is required for every cash movement.');
-  }
+  assertNoteNotBlank(note);
 
   if ((type === 'bank_deposit' || type === 'owner_draw') && amountPaisa >= 0) {
     throw new Error(`"${type}" must be a negative amount (cash leaving the drawer).`);

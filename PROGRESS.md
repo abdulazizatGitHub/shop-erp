@@ -41,6 +41,91 @@
 
 ---
 
+## [2026-09-27] Session 94 — Phase 17.5 review round 4 (R8) + Task 3 built: cash_movement repository
+
+**Goal:** Address review-round-4 feedback (R8 — single-open-session
+invariant) on the Phase 17.5 plan, amend the plan/ADR, then build
+Task 3 (the `KyselyCashMovementRepository` itself, plus R8) in full.
+
+**Done:**
+
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` and
+  `docs/phases/PHASE_17_5.md` amended: **R8** — at most one cash
+  session may ever be open at a time, required for `getOpenSession()`
+  to be well-defined at all. `openSession` now refuses (inside its own
+  transaction, before the insert) if ANY session is open — the
+  pre-existing `SessionAlreadyOpenError` for the same date, unchanged;
+  a new `AnotherSessionStillOpenError` naming the open date otherwise
+  ("The drawer for {date} is still open — close it first.").
+  `getOpenSession()` throws `MultipleOpenSessionsError` rather than
+  picking one if it ever finds more than one. `CashSessionWidget.tsx`
+  resolves `cashSession:today` via `getOpenSession()` (renamed from
+  `getTodaySession`), so an older still-open session now renders as
+  "Open" (with its own date shown) instead of "Not started" — which is
+  what let a second session get opened over a forgotten one before
+  this fix. Dev DB (copy, per CLAUDE.md session rule): **0 open
+  sessions** currently (1 `cash_session` row total, already closed) —
+  no pre-existing violation. **BUG-33 updated**: part (c) — two
+  sessions open at once — marked FIXED; parts (a)/(b) — sale/expense/
+  purchase/payment dated by the wall clock — remain open, planned as
+  their own pre-go-live task pending an owner workflow question
+  (nightly close? sales after close?); refusing sales after close is
+  ruled out as a fix.
+- **Task 3 built in full**: new
+  `packages/db/src/repositories/cash-movement.repository.ts` —
+  `KyselyCashMovementRepository.recordMovement` (open-session gate,
+  `movementDate` resolved from the open session, insert + `audit_log` +
+  `sync_outbox` in one transaction, `CM`-prefixed `doc_no` via
+  `document_sequence`), `.reverseMovement` (session-match gate via
+  `assertReversalValid`, core-side `reverses_id` pre-check before the
+  insert), `.listForDateRange`; exported `sumCashMovementsForDate` used
+  by `KyselyCashSessionRepository.closeSession`'s new `cashMovements`
+  term in the `expected_cash` formula (`docs/phases/PHASE_17_5.md`
+  §2.5). 15 new tests in `cash-movement.repository.test.ts` (gate,
+  insert-triple, validation, R6 date-resolution, doc-no format, R7
+  reversal rules, R8-adjacent session-match refusal, `listForDateRange`,
+  and a byte-identical `getExpenseSummaryReport`/`v_unit_direct_expense`
+  proof of zero P&L effect); the priority hand-calculated exit test
+  (opening 10,000 + cash sale 5,000 − bank deposit 12,000 = expected
+  3,000, no shortage) added to `cash-session.repository.test.ts`.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **937/937** (up from 920 — 15 new cash-movement
+  repository tests, 1 priority hand-calculated test, 1
+  `assertNoteNotBlank` core test).
+- `npm run build --workspace=@shop/client` / `--workspace=@shop/server`
+  — both clean.
+
+**Not done / deferred:** Task 4 (fixes BUG-32 in `getCashBookReport`,
+adds its `cash_movement` branch), Task 5 (contracts/IPC), Task 6 (UI) —
+per instruction, only Task 3 (plus R8) was built this session.
+
+**Bugs found:** none new — BUG-33 updated (part c fixed, parts a/b
+still open).
+
+**Decisions taken:** ADR-0016 amended again (R8).
+
+**Blocked on:** nothing — Task 3 complete and verified; Task 4 is next.
+
+**Next session should:** build Task 4 (fix BUG-32's cash-filter gaps
+and missing outflow branches in `getCashBookReport`, add the
+`cash_movement` UNION branch with "Correction of CM-xxxx" labelling),
+per `docs/phases/PHASE_17_5.md` §4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (937/937)
+
+---
+
 ## [2026-09-27] Session 93 — Phase 17.5 review round 3 (BUG-33) + Task 2 built: core validation
 
 **Goal:** Address review-round-3 feedback (R6, R7) on the Phase 17.5

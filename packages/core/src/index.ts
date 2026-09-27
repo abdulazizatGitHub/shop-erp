@@ -134,6 +134,7 @@ export type {
 export {
   assertCashMovementValid,
   assertReversalValid,
+  assertNoteNotBlank,
 } from './cash-movement/cash-movement.service.js';
 export {
   CashMovementAlreadyReversedError,
