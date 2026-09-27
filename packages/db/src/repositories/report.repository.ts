@@ -193,15 +193,29 @@ export interface CashBookRow {
 }
 
 /**
- * R4 — cash book. No view backs this one; per the resolved Q12 (see
- * PROJECT.md), there is no cash_movement table. Outflows read
- * purchase.payment_mode='cash' directly; inflows are the union of cash
- * actually collected at sale time (sale.paid_amount) and later
- * customer payments (payment WHERE direction='in') — genuinely
- * separate events on separate dates, never double-counted. Never
- * party_ledger for either side (PHASE_3.md section 8's binding note —
- * its sign convention is incompatible with payment.amount).
- * runningBalancePaisa is accumulated in TypeScript using Money, over
+ * R4 — cash book. No view backs this one. **BUG-32 fixed here (Phase
+ * 17.5, docs/phases/PHASE_17_5.md Task 4):** the `sale`/`payment`(in)
+ * branches below now filter `payment_mode`/`method = 'cash'`, which
+ * this doc-comment always claimed but the SQL never actually did —
+ * every confirmed sale (or incoming payment) was counted here
+ * regardless of settlement method before this fix. Two entirely
+ * missing outflow branches are added too: `expense` (method='cash')
+ * and `payment` direction='out' (method='cash') — previously cash
+ * spent on expenses or paid out to a party never reduced this report's
+ * balance at all. A fifth branch, `cash_movement`
+ * (Phase 17.5, ADR-0016, BUG-31), folds in drawer movements (bank
+ * deposits, owner draws, float top-ups, corrections) with the same
+ * signed convention `closeSession` uses — `amount > 0` is an inflow,
+ * `amount < 0` an outflow, split into this report's own inPaisa/outPaisa
+ * columns since (unlike closeSession's single running total) this
+ * report needs the split for its own In/Out columns. A reversal row
+ * (`reverses_id IS NOT NULL`) is labelled "Correction of {original's
+ * doc_no}"; an original row is labelled by its `movement_type`, or by
+ * its own `note` when `movement_type = 'other'`.
+ *
+ * Never `party_ledger` for any side (PHASE_3.md section 8's binding
+ * note — its sign convention is incompatible with `payment.amount`).
+ * `runningBalancePaisa` is accumulated in TypeScript using Money, over
  * rows the SQL below has already sorted — not re-deriving any
  * aggregate a view already computes, since no view exists for this.
  */
@@ -224,6 +238,7 @@ export async function getCashBookReport(
            paid_amount AS inPaisa, 0 AS outPaisa
     FROM        sale
     WHERE       tenant_id = ${tenantId} AND status = 'confirmed' AND paid_amount > 0
+      AND       payment_mode = 'cash'
       AND       sale_date BETWEEN ${dateFrom} AND ${dateTo}
 
     UNION ALL
@@ -231,8 +246,44 @@ export async function getCashBookReport(
     SELECT payment_date AS date, doc_no AS docNo, 'Payment received' AS description,
            amount AS inPaisa, 0 AS outPaisa
     FROM        payment
-    WHERE       tenant_id = ${tenantId} AND direction = 'in'
+    WHERE       tenant_id = ${tenantId} AND direction = 'in' AND method = 'cash'
       AND       payment_date BETWEEN ${dateFrom} AND ${dateTo}
+
+    UNION ALL
+
+    SELECT expense_date AS date, doc_no AS docNo, 'Cash expense' AS description,
+           0 AS inPaisa, amount AS outPaisa
+    FROM        expense
+    WHERE       tenant_id = ${tenantId} AND method = 'cash'
+      AND       expense_date BETWEEN ${dateFrom} AND ${dateTo}
+
+    UNION ALL
+
+    SELECT payment_date AS date, doc_no AS docNo, 'Payment made' AS description,
+           0 AS inPaisa, amount AS outPaisa
+    FROM        payment
+    WHERE       tenant_id = ${tenantId} AND direction = 'out' AND method = 'cash'
+      AND       payment_date BETWEEN ${dateFrom} AND ${dateTo}
+
+    UNION ALL
+
+    SELECT movement_date AS date, doc_no AS docNo,
+           CASE
+             WHEN reverses_id IS NOT NULL
+               THEN 'Correction of ' || (
+                 SELECT doc_no FROM cash_movement AS original
+                 WHERE original.id = cash_movement.reverses_id
+               )
+             WHEN movement_type = 'bank_deposit' THEN 'Bank deposit'
+             WHEN movement_type = 'owner_draw' THEN 'Owner draw'
+             WHEN movement_type = 'float_add' THEN 'Float added'
+             ELSE note
+           END AS description,
+           CASE WHEN amount > 0 THEN amount ELSE 0 END AS inPaisa,
+           CASE WHEN amount < 0 THEN -amount ELSE 0 END AS outPaisa
+    FROM        cash_movement
+    WHERE       tenant_id = ${tenantId}
+      AND       movement_date BETWEEN ${dateFrom} AND ${dateTo}
 
     ORDER BY    date, docNo
   `.execute(db);

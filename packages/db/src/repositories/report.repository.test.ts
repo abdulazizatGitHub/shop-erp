@@ -10,6 +10,8 @@ import { migrate } from '../migration-runner.js';
 import { seed } from '../bootstrap.js';
 import { createKyselyDb } from '../kysely-db.js';
 import type { Database as Schema } from '../kysely-schema.js';
+import { KyselyCashMovementRepository } from './cash-movement.repository.js';
+import { KyselyCashSessionRepository } from './cash-session.repository.js';
 import { KyselyExpenseRepository } from './expense.repository.js';
 import { KyselyItemRepository } from './item.repository.js';
 import { KyselyPartyRepository } from './party.repository.js';
@@ -77,6 +79,41 @@ function insertLedgerEntry(partyId: string, entryDate: string, amountPaisa: numb
        VALUES (?, ?, ?, ?, 'sale', ?, 'sale', ?, ?)`,
     )
     .run(newId(), TENANT_ID, partyId, entryDate, amountPaisa, newId(), new Date().toISOString());
+}
+
+// KyselySaleRepository.createSale's own SalePaymentMode is narrowly
+// 'cash' | 'credit' — a raw insert is the only way to seed a
+// non-cash-but-fully-paid sale (e.g. easypaisa) for a BUG-32 test.
+function seedNonCashSale(date: string, paymentMode: string, paidAmountPaisa: number): void {
+  const now = new Date().toISOString();
+  rawDb
+    .prepare(
+      `INSERT INTO sale
+         (id, tenant_id, doc_no, warehouse_id, price_level_id, sale_date, sale_type,
+          total_amount, paid_amount, payment_mode, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'counter', ?, ?, ?, 'confirmed', ?, ?)`,
+    )
+    .run(
+      newId(),
+      TENANT_ID,
+      'INV-NONCASH-' + date,
+      warehouseId,
+      priceLevelId(),
+      date,
+      paidAmountPaisa,
+      paidAmountPaisa,
+      paymentMode,
+      now,
+      now,
+    );
+}
+
+function priceLevelId(): string {
+  return (
+    rawDb
+      .prepare(`SELECT id FROM price_level WHERE tenant_id = ? AND is_default = 1`)
+      .get(TENANT_ID) as { id: string }
+  ).id;
 }
 
 function insertStockMovement(itemId: string, quantityMilli: number): void {
@@ -817,6 +854,203 @@ describe('R4 — getCashBookReport', () => {
     expect(rows[3]?.date).toBe('2026-08-13');
     expect(rows[3]?.inPaisa).toBe(800000);
     expect(rows[3]?.runningBalancePaisa).toBe(400000);
+  });
+
+  // BUG-32 fix (Phase 17.5, docs/phases/PHASE_17_5.md Task 4). The
+  // doc-comment above getCashBookReport always claimed the sale/payment
+  // branches were cash-only; the SQL never actually filtered on
+  // payment_mode/method until this fix.
+  it('excludes a non-cash sale and a non-cash incoming payment from the totals (BUG-32)', async () => {
+    // Confirmed sale paid via easypaisa, not cash — must NOT appear.
+    seedNonCashSale('2026-08-20', 'easypaisa', 500000);
+
+    const customer = await partyRepo.createCustomer({
+      partyCode: null,
+      name: 'Bank Transfer Customer',
+      shopName: null,
+      phone: null,
+      address: null,
+      customerType: 'retail',
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    const now = new Date().toISOString();
+    rawDb
+      .prepare(
+        `INSERT INTO payment (id, tenant_id, doc_no, direction, party_id, payment_date, amount, method, created_at)
+         VALUES (?, ?, 'RCP-TEST-1', 'in', ?, ?, ?, 'bank', ?)`,
+      )
+      .run(newId(), TENANT_ID, customer.id, '2026-08-20', 300000, now);
+
+    const rows = await getCashBookReport(kysely, TENANT_ID, '2026-08-20', '2026-08-20');
+
+    expect(rows).toHaveLength(0);
+  });
+
+  // BUG-32 fix — previously-missing outflow branches.
+  it('includes cash expenses and cash outgoing payments as new Out rows', async () => {
+    const category = insertExpenseCategory('Cash Book Test Category 1');
+    await expenseRepo.createExpense({
+      categoryId: category,
+      expenseDate: '2026-08-21',
+      amountPaisa: 50000,
+      businessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+
+    const supplier = await partyRepo.createSupplier({
+      partyCode: null,
+      name: 'Cash-Paid Supplier',
+      shopName: null,
+      phone: '0300-0000000',
+      cityArea: null,
+      paymentTerms: null,
+      notes: null,
+    });
+    const now = new Date().toISOString();
+    rawDb
+      .prepare(
+        `INSERT INTO payment (id, tenant_id, doc_no, direction, party_id, payment_date, amount, method, created_at)
+         VALUES (?, ?, 'PMT-TEST-1', 'out', ?, ?, ?, 'cash', ?)`,
+      )
+      .run(newId(), TENANT_ID, supplier.id, '2026-08-21', 70000, now);
+
+    const rows = await getCashBookReport(kysely, TENANT_ID, '2026-08-21', '2026-08-21');
+
+    expect(rows).toHaveLength(2);
+    const descriptions = rows.map((r) => r.description).sort();
+    expect(descriptions).toEqual(['Cash expense', 'Payment made']);
+    expect(rows.reduce((sum, r) => sum + r.outPaisa, 0)).toBe(120000);
+    expect(rows.every((r) => r.inPaisa === 0)).toBe(true);
+  });
+
+  // BUG-31/ADR-0016 — new cash_movement branch, same signed convention
+  // closeSession uses, split into inPaisa/outPaisa for this report.
+  it('includes a cash_movement row with the correct sign split, and labels a reversal as "Correction of {original doc_no}"', async () => {
+    const sessionRepo = new KyselyCashSessionRepository(kysely, TENANT_ID, DEVICE_CODE);
+    const movementRepo = new KyselyCashMovementRepository(kysely, TENANT_ID, DEVICE_CODE);
+
+    await sessionRepo.openSession({ date: '2026-08-22', openingCashPaisa: 500000 });
+    const original = await movementRepo.recordMovement({
+      movementType: 'bank_deposit',
+      amountPaisa: -120000,
+      note: 'Deposited at HBL',
+    });
+    const reversal = await movementRepo.reverseMovement({
+      originalId: original.id,
+      note: 'Wrong amount entered, correcting',
+    });
+
+    const rows = await getCashBookReport(kysely, TENANT_ID, '2026-08-22', '2026-08-22');
+
+    const originalRow = rows.find((r) => r.docNo === original.docNo);
+    expect(originalRow?.description).toBe('Bank deposit');
+    expect(originalRow?.outPaisa).toBe(120000);
+    expect(originalRow?.inPaisa).toBe(0);
+
+    const reversalRow = rows.find((r) => r.docNo === reversal.docNo);
+    expect(reversalRow?.description).toBe(`Correction of ${original.docNo}`);
+    expect(reversalRow?.inPaisa).toBe(120000);
+    expect(reversalRow?.outPaisa).toBe(0);
+  });
+
+  // Review round 1 (R1) priority test, now built for real against BOTH
+  // getCashBookReport and closeSession, per the follow-up instruction:
+  // same inputs, same closing balance, confirmed equal.
+  it("R1 mixed-day test: getCashBookReport's net for one day + opening cash equals closeSession's expectedCashPaisa — a cash sale, an Easypaisa sale, a bank-method payment in, a cash expense, and a bank-deposit movement, all on one day", async () => {
+    const date = '2026-08-23';
+    const sessionRepo = new KyselyCashSessionRepository(kysely, TENANT_ID, DEVICE_CODE);
+    const movementRepo = new KyselyCashMovementRepository(kysely, TENANT_ID, DEVICE_CODE);
+
+    const saleItem = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Mixed Day Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: uomId('Piece'),
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    insertStockMovement(saleItem.id, 20000);
+
+    const opened = await sessionRepo.openSession({ date, openingCashPaisa: 1_000_000 }); // Rs 10,000
+
+    // Cash sale — 600,000 paisa (Rs 6,000)
+    await saleRepo.createSale({
+      customerId: null,
+      warehouseId: null,
+      saleDate: date,
+      paymentMode: 'cash',
+      paidAmountPaisa: 600_000,
+      notes: null,
+      lines: [{ itemId: saleItem.id, quantityMilli: 6000, unitPricePaisa: null }],
+    });
+
+    // Easypaisa sale — 400,000 paisa (Rs 4,000) — must NOT count as cash
+    seedNonCashSale(date, 'easypaisa', 400_000);
+
+    // Bank-method payment in — 200,000 paisa (Rs 2,000) — must NOT count as cash
+    const customer = await partyRepo.createCustomer({
+      partyCode: null,
+      name: 'Mixed Day Customer',
+      shopName: null,
+      phone: null,
+      address: null,
+      customerType: 'retail',
+      priceLevelId: null,
+      creditLimitPaisa: null,
+      notes: null,
+    });
+    const now = new Date().toISOString();
+    rawDb
+      .prepare(
+        `INSERT INTO payment (id, tenant_id, doc_no, direction, party_id, payment_date, amount, method, created_at)
+         VALUES (?, ?, 'RCP-TEST-MIXED', 'in', ?, ?, ?, 'bank', ?)`,
+      )
+      .run(newId(), TENANT_ID, customer.id, date, 200_000, now);
+
+    // Cash expense — 150,000 paisa (Rs 1,500)
+    const category = insertExpenseCategory('Cash Book Test Category 2');
+    await expenseRepo.createExpense({
+      categoryId: category,
+      expenseDate: date,
+      amountPaisa: 150_000,
+      businessUnitId,
+      vehicle: null,
+      method: 'cash',
+      notes: null,
+    });
+
+    // Bank deposit movement — 500,000 paisa (Rs 5,000) removed
+    await movementRepo.recordMovement({
+      movementType: 'bank_deposit',
+      amountPaisa: -500_000,
+      note: 'Deposited at HBL',
+    });
+
+    // closeSession's own figure — the authoritative one.
+    const closed = await sessionRepo.closeSession({
+      sessionId: opened.id,
+      countedCashPaisa: 950_000, // hand-calculated below, so this is "no shortage"
+    });
+
+    // Hand-calc, closeSession: 1,000,000 + 600,000 + 0 - (0 + 150,000 + 0) + (-500,000) = 950,000
+    expect(closed.expectedCashPaisa).toBe(950_000);
+    expect(closed.differencePaisa).toBe(0);
+
+    // getCashBookReport, same single day: in = 600,000 (cash sale only);
+    // out = 150,000 (expense) + 500,000 (bank deposit) = 650,000.
+    // Net for the day = 600,000 - 650,000 = -50,000.
+    const rows = await getCashBookReport(kysely, TENANT_ID, date, date);
+    const netForDay = rows.reduce((sum, r) => sum + r.inPaisa - r.outPaisa, 0);
+    expect(netForDay).toBe(-50_000);
+
+    // The two independently-computed figures agree exactly.
+    const openingCashPaisa = 1_000_000;
+    expect(openingCashPaisa + netForDay).toBe(closed.expectedCashPaisa);
   });
 });
 

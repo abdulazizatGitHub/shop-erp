@@ -4248,7 +4248,7 @@ Status: UNFIXED, build in progress — **its own task, higher priority
 than Phase 17's P17-3/P17-4/P17-5/P17-7/P17-2b**, all of which stay
 paused until this phase's build completes (`docs/phases/PHASE_17_5.md`).
 
-### BUG-32: `getCashBookReport`'s sale/payment inflows are not actually filtered to cash, and expense/payment-out are missing entirely — MEDIUM, not yet fixed
+### BUG-32: `getCashBookReport`'s sale/payment inflows were not actually filtered to cash, and expense/payment-out were missing entirely — MEDIUM, FIXED
 
 Found in: Phase 17.5 planning, 2026-09-27 — while verifying whether the
 system tracks a bank balance anywhere (question (1) of BUG-31's
@@ -4275,14 +4275,15 @@ omits cash expenses/cash payouts from outflows entirely — its running
 balance and KPI totals don't mean what the report's own title and
 doc-comment say they mean. Not a stock/money-movement bug (no wrong row
 is written anywhere) — a report-scope bug.
-Fix: **Folded into Phase 17.5 (`docs/phases/PHASE_17_5.md` Task 4,
-ahead of that phase's own UI task)** rather than left for a separate
-bug-fix phase — add the missing `payment_mode`/`method = 'cash'`
-filters, add the two missing outflow branches, and add the new
-`cash_movement` branch in the same pass, since Task 4 already touches
-this exact query.
-Status: UNFIXED, fix scheduled inside Phase 17.5 Task 4 (build in
-progress, see `docs/phases/PHASE_17_5.md`).
+Fix: **Fixed in Phase 17.5 Task 4, 2026-09-27** — added the missing
+`payment_mode = 'cash'` filter to the `sale` branch and `method = 'cash'`
+to the `payment` direction='in' branch; added the two missing outflow
+branches (`expense`, `payment` direction='out', both `method = 'cash'`);
+added a fifth `cash_movement` branch (BUG-31/ADR-0016) with the same
+signed convention `closeSession` uses. `report.repository.ts`'s
+`getCashBookReport`; 5 new tests in `report.repository.test.ts`, the 25
+pre-existing tests in that file untouched.
+Status: **FIXED**, see `docs/phases/PHASE_17_5.md` Task 4.
 
 ### BUG-33: A cash session left open past midnight silently drops later sales from its own close (parts a/b, open); two sessions could be open at once (part c, FIXED in Phase 17.5) — MEDIUM
 

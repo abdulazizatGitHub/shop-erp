@@ -41,6 +41,73 @@
 
 ---
 
+## [2026-09-27] Session 95 — Phase 17.5 Task 4 built: BUG-32 fixed in getCashBookReport
+
+**Goal:** Build Task 4 only — fix BUG-32 in `getCashBookReport` (cash
+filter missing on `sale`/`payment`(in); `expense`/`payment`(out)
+branches missing entirely), per the earlier finding.
+
+**Done:**
+
+- `report.repository.ts`'s `getCashBookReport`: added
+  `payment_mode = 'cash'` to the `sale` branch and `method = 'cash'` to
+  the `payment` direction='in' branch (the cash-filter fix); added two
+  new outflow branches, `expense` (method='cash') and `payment`
+  direction='out' (method='cash'); added a fifth branch for
+  `cash_movement` (both signs via `CASE`, split into `inPaisa`/`outPaisa`
+  — same signed convention `closeSession` uses), labelling a reversal
+  row `"Correction of {original's doc_no}"` via a self-referencing
+  subquery on `reverses_id`, and an original row by its `movement_type`
+  (or its own `note` for `'other'`). `CashBookReport.tsx` needed no
+  change — it renders `row.description` as plain text.
+- 5 new tests in `report.repository.test.ts`: the cash-filter exclusion
+  test, the two-new-outflow-branches test, the `cash_movement`
+  branch/correction-label test, and the R1 mixed-day test built for
+  real against **both** `getCashBookReport` and `closeSession` on the
+  same session/date, asserting the two independently-computed figures
+  are equal. The 25 pre-existing tests in that file, including the
+  original `getCashBookReport` union test, are unmodified and still
+  pass (its sales already used `paymentMode: 'cash'` explicitly, so the
+  new filter changes nothing for it).
+- `PROJECT.md` — BUG-32 marked FIXED.
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` and
+  `docs/phases/PHASE_17_5.md` — Task 4 marked done in the task table
+  and §5 exit criteria, with every new test named.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **941/941** (up from 937 — 5 new `report.repository.test.ts`
+  tests).
+- `npm run build --workspace=@shop/client` / `--workspace=@shop/server`
+  — both clean.
+
+**Not done / deferred:** Task 5 (contracts + IPC), Task 6 (UI) — per
+instruction, only Task 4 was built this session.
+
+**Bugs found:** none new — BUG-32 fixed.
+
+**Decisions taken:** none new this session.
+
+**Blocked on:** nothing — Task 4 complete and verified; Task 5 is next.
+
+**Next session should:** build Task 5 (contracts:
+`RecordCashMovementInput`, `ReverseCashMovementInput`, `CashMovementDto`;
+IPC channels `cashMovement.record`/`.reverse`/`.listForDateRange`; new
+`cash-movement.handler.ts`), per `docs/phases/PHASE_17_5.md` §4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (941/941)
+
+---
+
 ## [2026-09-27] Session 94 — Phase 17.5 review round 4 (R8) + Task 3 built: cash_movement repository
 
 **Goal:** Address review-round-4 feedback (R8 — single-open-session
