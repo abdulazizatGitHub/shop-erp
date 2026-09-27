@@ -123,12 +123,13 @@ export function ItemSearchPanel({
     // deliberate reversal; the server's confirmation dialog handles the
     // rest at commit time. Defense in depth — onSelect below already
     // keeps a block-mode out-of-stock item from ever reaching pendingItem.
-    if (
-      negativeStockPolicy === 'block' &&
-      pendingItem.counterStockMilli !== null &&
-      pendingItem.counterStockMilli <= 0
-    )
-      return;
+    // P17-2 review round 2, item 1(c): a never-moved item's
+    // counterStockMilli is null (D17-3's own convention), which is NOT
+    // the same as "in stock" for this guard's purposes — treat null as 0
+    // here (the server's own readStockOnHandMilli does the same, via its
+    // `?? 0`). Never apply this fallback to the low-stock badge, which
+    // deliberately shows nothing at all for a null counterStockMilli.
+    if (negativeStockPolicy === 'block' && (pendingItem.counterStockMilli ?? 0) <= 0) return;
     let quantityMilli: number;
     try {
       quantityMilli = Qty.fromUnits(qtyInput);
@@ -183,12 +184,10 @@ export function ItemSearchPanel({
         // 'warn' an out-of-stock item is selectable (the badge still
         // shows "Out of stock" — see ItemProductCard.tsx's own
         // counterStockMilli-based badge).
-        if (
-          negativeStockPolicy === 'block' &&
-          item.counterStockMilli !== null &&
-          item.counterStockMilli <= 0
-        )
-          return;
+        // P17-2 review round 2, item 1(c): treat a never-moved item
+        // (counterStockMilli === null) as 0 for this guard — never for
+        // the low-stock badge, which stays null-means-no-badge.
+        if (negativeStockPolicy === 'block' && (item.counterStockMilli ?? 0) <= 0) return;
         setPendingItem(item);
         setQtyInput('1');
         setSaleUnit('stock');

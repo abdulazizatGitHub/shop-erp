@@ -260,6 +260,24 @@ test:**
 - A **deleted** item (`deletedAt` not null) is **never flagged and never
   counted** — a deactivated item should not appear as a false alarm on a
   list or dashboard the owner is actively working from.
+- An item with `counterStockMilli = null` (never had a single
+  `stock_movement` row at the Shop warehouse — i.e. genuinely never
+  received) is **never flagged**, distinct from a confirmed `0`
+  (custody test: `0` at Shop with stock elsewhere IS flagged).
+
+**Q17-7, PENDING OWNER (raised in review, P17-2 build):** the
+null-not-flagged rule above is a **deviation from Q17-3 as literally
+worded** ("`<= shop default` when `reorder_level` is `NULL`" says
+nothing about excluding a never-received item — read strictly, `null`
+on-hand `<= 0` default would flag it). Built as an exclusion anyway, for
+a reason Q17-3 didn't anticipate: **should an item with no stock history
+(never received) be flagged as low stock?** Current build: **no**, to
+avoid flooding the dashboard/Items list with every newly-created,
+not-yet-stocked item before its opening stock is ever entered — this
+directly follows `stockOnHandMilli`'s own established null convention
+("never moved" is not "confirmed empty"), and matches P17-1's own D17-3
+custody-vs-never-moved distinction. Kept as built; owner should confirm
+or override before treating this as settled.
 
 | ID         | Setting                                                              | Source                                                                                                                                          | Today's behaviour                                                                                                                                            | Proposed control & default                                                                                                                                                                       | Storage                                                                                                | Money/stock impact & history protection | Effort | Tier |
 | ---------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------- | ------ | ---- |
@@ -289,11 +307,18 @@ technicians: Y` (`Y = stockOnHandMilli − counterStockMilli`; the line is
   it. Covered by `packages/core/src/item/low-stock.test.ts`,
   `apps/server/src/ipc/handlers/item.handler.test.ts` (`runLowStockCount`
   custody case), and `apps/client/src/components/shared/StockBadge.test.ts`.
-- A **"Low stock only"** filter checkbox was added to the Items list. The
-  Dashboard's low-stock widget click only switches the sidebar tab to
-  Items — no cross-tab pre-filter wiring, since that exact pattern was
-  deliberately removed as dead code in P15-5; the owner toggles the
-  filter themselves once there.
+- A **"Low stock only"** filter checkbox was added to the Items list.
+  **Review round 2, item 3 — corrected:** the first build had the
+  Dashboard's low-stock widget click only switch the sidebar tab,
+  reasoning (wrongly) that pre-filter cross-tab wiring was the exact
+  pattern removed as dead code in P15-5. Overruled: Q17-3 as approved
+  means the click should open Items with the filter **already ON**, not
+  leave the owner to tick it themselves. Fixed via a one-shot flag in
+  `App.tsx` (`itemsInitialLowStockOnly`) that seeds `ItemsPage`'s own
+  filter state only at mount — any direct sidebar/keyboard tab switch
+  (`App.tsx`'s `handleSelectTab`) resets the flag first, so a later,
+  unrelated visit to Items never inherits a stale "on" filter from an
+  earlier dashboard click. Covered by the new `App.test.tsx`.
 - **Review fix — one rule, one place (not two implementations):** the
   first build had a second, client-side `isLowStock` copy in
   `StockBadge.tsx` (required, it was argued, since `apps/client` may
@@ -881,13 +906,17 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       exactly 8 (`ceil(30/4)`) and therefore equal. `LowStockWidget.test.tsx`
       (4 tests): renders the count from a mocked IPC response, singular
       wording at exactly 1, click navigates via `onNavigateToItems`, error
-      state on a rejected call. UI action (owner click-through): clicking
-      the Dashboard's low-stock card switches to the Items tab; the owner
-      then ticks the new "Low stock only" filter checkbox there (no
-      cross-tab pre-filter wiring — deliberately not reintroducing the
-      pattern removed as dead code in P15-5); for the custody item, the
-      Items list shows both figures under the badge: "Shop: 0 · With
-      technicians: 5".
+      state on a rejected call. **Review round 2, item 3 — corrected:**
+      the Dashboard's low-stock card click opens Items with the "Low
+      stock only" filter **already ON** (Q17-3, as approved), not merely
+      switched to the tab for the owner to filter themselves — a
+      one-shot flag in `App.tsx` seeds `ItemsPage`'s filter state at
+      mount, reset by any direct sidebar/keyboard tab switch so a later
+      unrelated visit to Items never inherits it. New `App.test.tsx` (2
+      tests): the widget click opens Items with the checkbox checked;
+      a later direct sidebar visit to Items opens with it unchecked. For
+      the custody item, the Items list shows both figures under the
+      badge: "Shop: 0 · With technicians: 5".
 - [ ] **P17-3** — All 11 existing report-table tests plus a
       `CustomerLedgerTable` render test still pass after switching from a
       local constant to the shared `useRowsPerPage()` hook, with the

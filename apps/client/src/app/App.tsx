@@ -24,10 +24,23 @@ export function App(): React.JSX.Element {
   // Kept independent of `tab` so it's remembered if the owner leaves Reports
   // and comes back via Alt+5 or another nav item, not just via the sidebar.
   const [reportsGroup, setReportsGroup] = useState<ReportsGroup>('daily');
+  // P17-2 review round 2, item 3: one-shot flag for the Dashboard
+  // low-stock widget's click — ItemsPage reads it only at mount to seed
+  // its own "Low stock only" filter. Any DIRECT tab switch (sidebar
+  // click, Alt+N) goes through handleSelectTab below, which resets this
+  // back to false first — only the widget's own onNavigateToItems below
+  // sets it true, so a later plain sidebar visit to Items never
+  // inherits a stale "on" filter from an earlier dashboard click.
+  const [itemsInitialLowStockOnly, setItemsInitialLowStockOnly] = useState(false);
+
+  function handleSelectTab(nextTab: Tab): void {
+    setItemsInitialLowStockOnly(false);
+    setTab(nextTab);
+  }
 
   function handleSelectReportsGroup(group: ReportsGroup): void {
     setReportsGroup(group);
-    setTab('reports');
+    handleSelectTab('reports');
   }
 
   // Alt+1..9 — direct tab switching, documented on each sidebar item.
@@ -37,7 +50,7 @@ export function App(): React.JSX.Element {
       const item = NAV_ITEMS.find((i) => i.shortcutDigit === event.key);
       if (!item) return;
       event.preventDefault();
-      setTab(item.key);
+      handleSelectTab(item.key);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => {
@@ -51,13 +64,13 @@ export function App(): React.JSX.Element {
         <div className="flex h-screen bg-surface-sunken">
           <Sidebar
             activeTab={tab}
-            onSelectTab={setTab}
+            onSelectTab={handleSelectTab}
             activeReportsGroup={reportsGroup}
             onSelectReportsGroup={handleSelectReportsGroup}
           />
           <main className="flex-1 overflow-y-auto p-6">
             {tab === 'sales' && <SalePage />}
-            {tab === 'items' && <ItemsPage />}
+            {tab === 'items' && <ItemsPage initialLowStockOnly={itemsInitialLowStockOnly} />}
             {tab === 'suppliers' && <SuppliersPage />}
             {tab === 'purchase-orders' && <PurchaseOrdersPage />}
             {tab === 'jobs' && <JobsPage />}
@@ -72,6 +85,9 @@ export function App(): React.JSX.Element {
             {tab === 'dashboard' && (
               <DashboardPage
                 onNavigateToItems={() => {
+                  // Q17-3, as approved: opens Items with the low-stock
+                  // filter already ON, not just switched to the tab.
+                  setItemsInitialLowStockOnly(true);
                   setTab('items');
                 }}
               />

@@ -208,6 +208,16 @@ describe('runLowStockCount', () => {
     expect(count).toBe(1);
   });
 
+  // This test's guarantee is only as strong as its premise: searchItems
+  // (packages/db/src/repositories/item.repository.ts) has no LIMIT/OFFSET
+  // anywhere in its SQL today, so one item:search call always returns the
+  // WHOLE catalogue and there is no page boundary for the Items-list
+  // filter and runLowStockCount to disagree across. If pagination is ever
+  // added to that query, this equality stops being guaranteed by
+  // construction — the low-stock filter would then need to move
+  // server-side (e.g. a lowStockOnly query param applied before any
+  // LIMIT), and this test would need to assert against a paginated
+  // fetch-all-pages loop instead of a single call.
   it(
     'review fix: with low-stock items scattered across a catalogue larger than any assumed page ' +
       "size, the Items list's client-side filter (item.isLowStock, no re-derivation) and the " +

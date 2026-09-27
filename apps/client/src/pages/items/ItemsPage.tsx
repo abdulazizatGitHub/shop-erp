@@ -20,12 +20,25 @@ import { ImportOpeningStockModal } from './ImportOpeningStockModal.js';
 import { ItemPriceHistoryModal } from './ItemPriceHistoryModal.js';
 import { ItemsTableRow } from './ItemsTableRow.js';
 
-export function ItemsPage(): React.JSX.Element {
+export interface ItemsPageProps {
+  /**
+   * P17-2 review round 2, item 3: the Dashboard low-stock widget's click
+   * should open Items with the filter already ON (Q17-3, as approved) —
+   * not just switch tabs and leave the owner to tick the checkbox
+   * themselves. Seeds the internal `lowStockOnly` state only at mount —
+   * ItemsPage remounts fresh every time App.tsx's tab switches away from
+   * and back to 'items' (see App.tsx's handleSelectTab, which resets this
+   * back to false for a direct sidebar/keyboard tab switch).
+   */
+  readonly initialLowStockOnly?: boolean;
+}
+
+export function ItemsPage({ initialLowStockOnly = false }: ItemsPageProps): React.JSX.Element {
   const { showToast } = useToast();
   const [lookups, setLookups] = useState<ItemLookups | null>(null);
   const [items, setItems] = useState<readonly ItemDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [lowStockOnly, setLowStockOnly] = useState(initialLowStockOnly);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importOpeningStockOpen, setImportOpeningStockOpen] = useState(false);

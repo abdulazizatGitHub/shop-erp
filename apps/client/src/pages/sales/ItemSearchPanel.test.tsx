@@ -145,7 +145,15 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
     expect(onConfirmLine).toHaveBeenCalledWith(inStock, 1000, 'stock');
   });
 
-  it('a stock-tracked item that has never had a movement (counterStockMilli = null) is NOT blocked, in either mode', async () => {
+  // P17-2 review round 2, item 1(c): the guard used to read
+  // `counterStockMilli !== null && counterStockMilli <= 0`, which let a
+  // never-moved item (counterStockMilli === null) straight through
+  // 'block' mode — a real hole, since null here means "never received",
+  // not "in stock". Fixed to `(counterStockMilli ?? 0) <= 0`, matching
+  // the server's own readStockOnHandMilli fallback. The badge is
+  // deliberately untouched by this fix — it still shows nothing at all
+  // for a null counterStockMilli (resolveStockBadge's own condition).
+  it("'block' mode refuses a never-moved item (counterStockMilli = null) — the null-as-0 guard fix", async () => {
     const neverMoved = makeItem({
       id: 'item-null',
       nameEn: 'Never Moved Item',
@@ -167,7 +175,39 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
     );
 
     const card = await screen.findByText('Never Moved Item');
-    // No stock badge at all for null — matches resolveStockBadge's own condition.
+    // No stock badge at all for null — matches resolveStockBadge's own
+    // condition; the guard fix below does NOT touch this.
+    expect(screen.queryByText('Out of stock')).toBeNull();
+
+    // Click: must not open the inline qty row (no way left to confirm) —
+    // same shape as the existing ≤0-counterStockMilli 'block' test above.
+    fireEvent.click(card.closest('button') ?? card);
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(onConfirmLine).not.toHaveBeenCalled();
+  });
+
+  it("'warn' mode still allows a never-moved item (counterStockMilli = null) — unaffected by the guard fix", async () => {
+    const neverMoved = makeItem({
+      id: 'item-null',
+      nameEn: 'Never Moved Item',
+      stockOnHandMilli: null,
+      counterStockMilli: null,
+    });
+    vi.mocked(ipc.item.topSelling).mockResolvedValue([neverMoved]);
+    const onConfirmLine = vi.fn();
+
+    render(
+      <ItemSearchPanel
+        lookups={null}
+        uomName={() => 'Piece'}
+        onConfirmLine={onConfirmLine}
+        onCheckoutTrigger={() => {}}
+        onError={() => {}}
+        negativeStockPolicy="warn"
+      />,
+    );
+
+    const card = await screen.findByText('Never Moved Item');
     expect(screen.queryByText('Out of stock')).toBeNull();
 
     fireEvent.click(card.closest('button') ?? card);
@@ -175,7 +215,7 @@ describe('ItemSearchPanel — negative-stock policy (P17-1)', () => {
     const textboxes = screen.getAllByRole('textbox');
     expect(textboxes).toHaveLength(2);
     const qtyInput = textboxes.find((el) => el !== searchBox);
-    if (!qtyInput) throw new Error('qty input did not open for a never-moved item');
+    if (!qtyInput) throw new Error('qty input did not open for a never-moved item under warn');
     fireEvent.keyDown(qtyInput, { key: 'Enter' });
 
     expect(onConfirmLine).toHaveBeenCalledWith(neverMoved, 1000, 'stock');

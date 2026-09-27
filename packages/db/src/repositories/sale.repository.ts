@@ -84,6 +84,15 @@ export class KyselySaleRepository implements SaleRepositoryPort {
     warehouseId: string,
   ): Promise<number> {
     // Reads the view, never re-implements the SUM (docs/SYSTEM_DESIGN.md §7).
+    // P17-2 review round 2, item 1(a): a never-stocked item (zero
+    // stock_movement rows anywhere) yields zero RESULT ROWS from
+    // v_stock_on_hand, not a row with a NULL qty_milli — the `?? 0` below
+    // is what turns "no rows" into 0, deliberately, so
+    // computeNegativeStockItems always compares against a real number
+    // (this function's return type is `number`, never `number | null`).
+    // This is the one place the block/warn predicate reads on-hand — it
+    // was never the gap the client-side hole (see ItemSearchPanel.tsx)
+    // turned out to be.
     const result = await sql<{ qtyMilli: number }>`
       SELECT qty_milli AS qtyMilli
       FROM v_stock_on_hand

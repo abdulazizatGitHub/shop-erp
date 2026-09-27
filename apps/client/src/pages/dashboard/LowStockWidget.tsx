@@ -3,7 +3,13 @@ import { Card } from '@shop/ui';
 import { ipc } from '../../lib/ipc.js';
 
 export interface LowStockWidgetProps {
-  /** P17-2 (docs/phases/PHASE_17.md §2.2, S17-DASH-1) — switches the main sidebar tab to Items. No pre-filter navigation (that cross-tab wiring was deliberately removed as dead code in P15-5); the owner uses the Items list's own "Low stock only" toggle once there. */
+  /**
+   * P17-2 (docs/phases/PHASE_17.md §2.2, S17-DASH-1) — switches the main
+   * sidebar tab to Items. Review round 2, item 3: the caller
+   * (App.tsx) also seeds the Items list's own "Low stock only" filter
+   * as already ON for this one navigation (Q17-3, as approved) — this
+   * component has no opinion on that; it just triggers the tab switch.
+   */
   readonly onNavigateToItems: () => void;
 }
 

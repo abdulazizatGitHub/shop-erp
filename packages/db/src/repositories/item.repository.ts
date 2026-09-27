@@ -181,6 +181,12 @@ export class KyselyItemRepository implements ItemRepositoryPort {
     };
   }
 
+  // Deliberately no LIMIT/OFFSET — ItemsPage.tsx's "Low stock only"
+  // filter and item.handler.ts's runLowStockCount both rely on every
+  // call here returning the entire catalogue (proved in
+  // item.handler.test.ts's 30-item equality test). Adding pagination
+  // requires moving the low-stock filter server-side (a lowStockOnly
+  // query param applied before any LIMIT) — see that test's own comment.
   async searchItems(query: ItemSearchQuery): Promise<readonly ItemRecord[]> {
     let q = this.db
       .selectFrom('item')

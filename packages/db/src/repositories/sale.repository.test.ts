@@ -576,6 +576,85 @@ describe('KyselySaleRepository.createSale', () => {
       const items = (caught as { items?: readonly { requestedMilli: number }[] }).items;
       expect(items?.[0]?.requestedMilli).toBe(13600);
     });
+
+    // P17-2 review round 2, item 1(b). A never-stocked item (zero
+    // stock_movement rows anywhere, not even an opening-stock row) must
+    // be refused exactly like any other item with onHandMilli=0 —
+    // readStockOnHandMilli's `result.rows[0]?.qtyMilli ?? 0` already
+    // treats "no rows" as 0, not null, so this predicate was never the
+    // actual hole (see ItemSearchPanel's client-side guard fix instead,
+    // covered by ItemSearchPanel.test.tsx).
+    async function createNeverStockedItem(): Promise<string> {
+      const businessUnit = rawDb
+        .prepare(`SELECT id FROM business_unit WHERE tenant_id = ? AND code = 'PARTS'`)
+        .get(TENANT_ID) as { id: string };
+      const pieceUom = rawDb
+        .prepare(`SELECT id FROM uom WHERE tenant_id = ? AND name = 'Piece'`)
+        .get(TENANT_ID) as { id: string };
+      const item = await itemRepo.createItem({
+        itemCode: null,
+        nameEn: 'Never Stocked Item',
+        nameUr: null,
+        businessUnitId: businessUnit.id,
+        stockUomId: pieceUom.id,
+        trackStock: true,
+        retailPricePaisa: RETAIL_UNIT_PRICE_PAISA,
+      });
+      // Deliberately no insertOpeningStock call — zero stock_movement
+      // rows anywhere for this item, not even a 0-quantity one.
+      return item.id;
+    }
+
+    it('a never-stocked item (zero stock_movement rows anywhere) requesting qty 1 under block is refused, zero rows inserted', async () => {
+      setPolicy('block');
+      const neverStockedId = await createNeverStockedItem();
+
+      await expect(
+        saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA,
+          notes: null,
+          lines: [{ itemId: neverStockedId, quantityMilli: 1000, unitPricePaisa: null }],
+        }),
+      ).rejects.toMatchObject({ code: 'NEGATIVE_STOCK_BLOCKED' });
+
+      const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+      expect(saleCount.n).toBe(0);
+      expect(stockOnHand(neverStockedId)).toBe(0);
+    });
+
+    it('a never-stocked item requesting qty 1 under warn, unacknowledged, gets the confirmation outcome (not a silent oversell)', async () => {
+      const neverStockedId = await createNeverStockedItem();
+
+      let caught: unknown;
+      try {
+        await saleRepo.createSale({
+          customerId: null,
+          warehouseId: null,
+          saleDate: '2026-08-26',
+          paymentMode: 'cash',
+          paidAmountPaisa: RETAIL_UNIT_PRICE_PAISA,
+          notes: null,
+          lines: [{ itemId: neverStockedId, quantityMilli: 1000, unitPricePaisa: null }],
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as { code?: string }).code).toBe('NEGATIVE_STOCK_CONFIRMATION_REQUIRED');
+      const items = (caught as { items?: readonly { itemId: string; onHandMilli: number }[] })
+        .items;
+      expect(items?.[0]?.itemId).toBe(neverStockedId);
+      // The server's on-hand read treats "no rows" as 0, not null.
+      expect(items?.[0]?.onHandMilli).toBe(0);
+
+      const saleCount = rawDb.prepare(`SELECT COUNT(*) AS n FROM sale`).get() as { n: number };
+      expect(saleCount.n).toBe(0);
+    });
   });
 
   it('test 6 — business_unit_id on sale_line matches item.business_unit_id', async () => {
