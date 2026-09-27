@@ -4284,6 +4284,57 @@ this exact query.
 Status: UNFIXED, fix scheduled inside Phase 17.5 Task 4 (build in
 progress, see `docs/phases/PHASE_17_5.md`).
 
+### BUG-33: A cash session left open past midnight silently drops later sales from its own close; nothing prevents a second session opening while an older one is still open — MEDIUM, not fixed
+
+Found in: Phase 17.5 review round 3, 2026-09-27 — while verifying,
+before designing `cash_movement`'s own date-handling, whether the
+existing `sale`/`expense`/`purchase`/`payment` tables' dates are tied
+to which cash session is open.
+Description: `sale_date` (and its siblings) is set from the client's
+**wall clock** at submit time
+(`apps/client/src/pages/sales/useSaleFlow.ts:280`,
+`new Date().toISOString().slice(0, 10)`), with no relationship
+whatsoever to which `cash_session` is currently open. Three concrete
+consequences, verified directly: **(a)** a cash sale made while day D's
+session is still open on wall-clock D+1 gets `saleDate = D+1`, not D —
+`closeSession` sums `WHERE sale_date = ${sessionDate}`
+(`cash-session.repository.ts:168` and its four siblings), so this sale
+is never included in D's close, the very session that was open when it
+happened. **(b)** A sale entered for date D after D's session has
+already closed can still be inserted (nothing gates document creation
+on session status) but is never counted by any close — `expected_cash`
+is computed once, at close, and never recomputed
+(`cash-session.repository.ts:211-222`), so this late sale is
+permanently invisible to cash reconciliation. **(c)** Two sessions for
+the _same_ date are correctly prevented
+(`UNIQUE(tenant_id, session_date)`, existing passing test), but two
+sessions for _different_ dates can be open simultaneously: `cashSession:today`
+(`cash-session.handler.ts:72-88`) resolves via a lookup keyed on
+**today's** wall-clock date, blind to an older still-open session, so
+`CashSessionWidget.tsx`'s "no session today" state lets the owner open
+a brand-new session for the new date while the old one sits open and
+forgotten — `openSession` never checks "is any session already open,"
+only "is one already open for this exact date."
+Impact: A shop that runs a session past midnight (a late night, or
+simply forgetting to close) gets an `expected_cash` at close that
+silently excludes real sales/expenses that happened after midnight —
+an incorrect reconciliation figure with no error or warning shown
+anywhere. The excluded activity is not lost data (the rows exist,
+correctly), just permanently unreconciled unless someone builds a
+manual recompute/backfill tool.
+Fix: Needs a session-scoped notion of "which business day is this
+document for" independent of wall-clock date — e.g. resolving
+`sale_date`/etc. from the currently-open session's `sessionDate`
+(the same fix `cash_movement`'s own `movement_date` uses, per
+`docs/decisions/ADR-0016-cash-drawer-movements.md` R6/R7) rather than
+`new Date()`, plus a check in `openSession` refusing to open a second
+session while any other is still open. Design not decided here — a
+future phase's own scope, affecting `sale`/`expense`/`purchase`/
+`payment` uniformly, broader than Phase 17.5's own scope.
+Status: UNFIXED — logged for a future bug-fix phase. Not blocking
+Phase 17.5, which avoids the same defect for its own new table by
+design (§2.8/§2.9, `docs/phases/PHASE_17_5.md`).
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]

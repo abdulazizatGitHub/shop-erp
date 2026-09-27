@@ -1,6 +1,6 @@
 # ADR-0016: Drawer cash movements are their own append-only table, outside both units' P&L
 
-**Status:** Accepted — 2026-09-27 (amended after review round 2: R1 BUG-32 scope/fix, R2 session-open gate, R3 reversal mechanism, R4 accepted risk). Build starts at Phase 17.5 Task 1.
+**Status:** Accepted — 2026-09-27 (amended after review round 2: R1 BUG-32 scope/fix, R2 session-open gate, R3 reversal mechanism, R4 accepted risk; amended again after review round 3: R6 movement_date follows the open session not the wall clock — BUG-33 logged, not fixed; R7 reversal scoped to the still-open original session). Task 1 built (migration 0021). Task 2 next.
 
 ## Context
 
@@ -28,9 +28,12 @@ is **append-only** (ADR-0004) and participates in the cash session's
 **no `business_unit_id` column** and **no effect on either unit's
 P&L** — see Consequences. **A movement may only be recorded while a
 cash session is open** (review round 2, R2), refused with a plain,
-typed error otherwise. **A movement can be reversed** — a new row,
-`reverses_id` pointing back at the original, amount negated, at most
-once per original — see Consequences.
+typed error otherwise. **Its `movement_date` is always the currently
+open session's `sessionDate`, never the wall clock** (review round 3,
+R6). **A movement can be reversed** — a new row, `reverses_id` pointing
+back at the original, amount negated, at most once per original — but
+**only while the original's own session is still the open one**
+(review round 3, R7) — see Consequences.
 
 ## Reasoning
 
@@ -128,6 +131,42 @@ way `sale`/`purchase`/`expense`/`payment` already are.
   verified and stored — the exact kind of after-the-fact tampering R4
   below is concerned about. `CashSessionNotOpenError`, checked and
   inserted in one transaction.
+- **`movement_date` is resolved from the currently-open session, never
+  `new Date()` (R3, R6).** Found while designing this: `sale`
+  (`useSaleFlow.ts:280`) and every sibling document set their own date
+  from the client's wall clock at submit time, entirely decoupled from
+  which `cash_session` is open — logged as **BUG-33** (`PROJECT.md`,
+  not fixed here): a session left open past midnight silently excludes
+  every sale made after midnight from its own close (they get
+  tomorrow's date), and nothing checks for an already-open older
+  session before letting a new one be opened. `cash_movement` does not
+  repeat this: a new `getOpenSession()` port method
+  (`WHERE closed_at IS NULL`) resolves `movement_date` from whichever
+  session is actually open, so a movement recorded late always lands in
+  the correct close regardless of wall-clock date.
+- **A movement can be reversed only while its original's session is
+  still the open one (R7).** Verified first (per instruction) that
+  opening cash is manually counted and typed in every time
+  (`CashSessionWidget.tsx:48-56`), never carried over from the prior
+  close — the reasoning below holds. A session's `expected_cash` is
+  computed once, at close, and never recomputed. Reversing a
+  closed-day's movement from a later, currently-open day would record
+  the reversal against _that later day_ (per R6's own rule — a
+  movement's date always follows whichever session is open _now_),
+  leaving the closed day's stored figure wrong forever while
+  "correcting" a day the error never happened on — the mistake is
+  double-counted, not fixed. Refused with: _"That day is closed — its
+  cash difference already reflects this. Add a note to the closed
+  session instead."_ That message names `cash_session.notes`, an
+  existing column with zero reads or writes anywhere in application
+  code today — Task 6 (`docs/phases/PHASE_17_5.md`) is extended to add
+  a minimal way to set it, so the message doesn't point at a dead end.
+  Additional core rules: `amount !== 0` (rejected for both original and
+  reversal rows); a reversal row cannot itself be reversed (kept from
+  R3); `reverses_id` uniqueness is checked in core before the insert is
+  attempted (a plain "already reversed" message, no DB round trip for a
+  doomed insert), with the DB's `UNIQUE(reverses_id)` kept as the
+  backstop for the check-then-insert race window.
 - `getCashBookReport` (`report.repository.ts:208-255`) is **fixed as
   part of this ADR's own scope, not left as a separate bug (R1)** —
   gains a fourth `UNION ALL` branch for `cash_movement` (both signs,

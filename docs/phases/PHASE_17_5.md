@@ -3,8 +3,12 @@
 **Status:** **APPROVED — 2026-09-27**, amended after review round 2
 (R1 BUG-32 scope verified and folded into this phase as Task 4, ahead
 of the UI task; R2 movements require an open session; R3 adds
-`reverses_id` reversal support; R4 accepted risk recorded in ADR-0016).
-Build begins at Task 1 (migration `0021`). **Blocks go-live** —
+`reverses_id` reversal support; R4 accepted risk recorded in ADR-0016)
+and review round 3 (R6 `movement_date` follows the currently-open
+session, never the wall clock — BUG-33 logged, not fixed this phase;
+R7 a reversal is scoped to the original's own still-open session, with
+Task 6 extended to expose `cash_session.notes`). **Task 1 built**
+(migration `0021`) — Task 2 next. **Blocks go-live** —
 accepted by the owner as a blocker (BUG-31, `PROJECT.md`). **Pauses
 Phase 17**: P17-3, P17-4, P17-5, P17-7, and the logged follow-up
 P17-2b all stay approved and resume once this phase's build is
@@ -346,6 +350,136 @@ multi-device-collision-sensitive document). A reversal row gets its
 own new `doc_no` too (it's its own document, referencing the original
 via `reverses_id`, not reusing the original's number).
 
+### (8) R6 — `movement_date` is always the open session's business date, never the wall clock
+
+**Review round 3.** Confirmed the root problem by reading how `sale`
+sets its own date, since `cash_movement` was about to copy that exact
+pattern: `apps/client/src/pages/sales/useSaleFlow.ts:280` sets
+`saleDate: new Date().toISOString().slice(0, 10)` — **the client's
+wall-clock date at submit time**, entirely decoupled from which
+`cash_session` happens to be open. `expense`/`purchase`/`payment` all
+follow the identical client-wall-clock pattern (grepped every
+`new Date().toISOString().slice(0, 10)` call site feeding a `*_date`
+field). **Decision: `cash_movement` does NOT repeat this pattern.**
+`movement_date` is resolved server-side from **whichever session is
+currently open** (`sessionDate`, a new `getOpenSession()` port method —
+`WHERE closed_at IS NULL`, not `WHERE session_date = today`), not from
+`new Date()`. If the open session was opened on day D and is still
+open when a movement is recorded on wall-clock D+1, the movement gets
+`movement_date = D` — the day it actually happened, from the business's
+point of view — and is therefore always included in that same
+session's eventual close, regardless of how late it runs.
+
+**(a) A cash sale made while day D's session is still open on D+1
+wall-clock — which date does it get, is it in D's close?** It gets
+`saleDate = D+1` (today's real wall-clock date, per
+`useSaleFlow.ts:280` above) — **not** D, and **not** included in D's
+close. `closeSession` sums `WHERE sale_date = ${existing.sessionDate}`
+(`cash-session.repository.ts:168`), i.e. exactly `D` when D's session
+is eventually closed — a D+1-dated sale can never match that filter.
+The sale is silently excluded from the very session that was open when
+it was made.
+
+**(b) A cash sale entered for date D after D's session is already
+closed — does any close ever count it?** No, and it is **permanently
+uncounted**. Nothing gates sale/expense/purchase/payment creation on
+cash-session status (confirmed in §2.3) — such a sale can still be
+inserted with `sale_date = D`. But `closeSession` computes and stores
+`expected_cash` once, at the moment of closing, and never recomputes
+(`cash-session.repository.ts:211-222`; confirmed by the consumer table
+in §2.6 — nothing else ever recomputes it either). D's close already
+ran; no future close will ever re-query `sale_date = D` (each session's
+close only filters its _own_ date). The late sale sits in the ledger
+forever, never reflected in any `cash_session` row's figures.
+
+**(c) Can two sessions exist for one date?** No — `UNIQUE(tenant_id,
+session_date)` on `cash_session` prevents it at the DB level, and
+`openSession` already has a passing test for this
+(`SessionAlreadyOpenError`). **But a related, more serious gap exists:
+two sessions for _different_ dates can be open simultaneously**, which
+is the actual mechanism behind (a). `cashSession:today`
+(`cash-session.handler.ts:72-88`) resolves via
+`getSessionByDate(todayIso())` — a lookup keyed on **today's wall-clock
+date**, blind to an older session that's still open. If D's session is
+never closed and wall-clock rolls to D+1, `CashSessionWidget.tsx`'s
+`loadToday()` finds no session for D+1, shows "no session today," and
+lets the owner **open a brand-new session for D+1** — while D's sits
+open and forgotten. `openSession` itself never checks "is any session
+already open," only "is one already open **for this exact date**."
+
+**Logged as BUG-33 (`PROJECT.md`) — not fixed this phase.** Root cause:
+`sale`/`expense`/`purchase`/`payment` dates are all wall-clock at
+creation time, with no concept of "which session is this for"; opening
+a new session never checks for an already-open older one. Both are
+pre-existing, unrelated to `cash_movement`'s own scope, and not fixed
+here — `cash_movement` sidesteps the whole problem for itself by
+resolving its own date from the open session, never the wall clock.
+
+### (9) R7 — reversals are scoped to the currently-open session
+
+**How opening cash is set (checked first, per instruction — this
+changes the reasoning if it's automatic):** **Manually counted and
+typed in by the owner every time**, never carried over.
+`CashSessionWidget.tsx:48-56`'s `handleOpen()` reads `amountInput` (a
+plain text field the owner fills in, converted via `Money.fromRupees`)
+— there is no read of the previous session's `countedCash` anywhere in
+that flow, and `openSession`'s own repo method
+(`cash-session.repository.ts:56-95`) takes `openingCashPaisa` as a
+plain caller-supplied number, never derived from a prior row. **Not a
+STOP condition** — proceeding with the reasoning below as given.
+
+**Rule: a movement can be reversed only while its ORIGINAL's session
+is still the currently-open one.** Checked via `getOpenSession()`
+(§2.8) — if there is no open session, or the open session's
+`sessionDate` doesn't match the original movement's `movementDate`,
+reversal is refused with: _"That day is closed — its cash difference
+already reflects this. Add a note to the closed session instead."_
+
+**Why (double-counting risk):** a session's `expected_cash` and
+`difference` are computed once, at close, from that date's rows as
+they existed **at that moment** (§2.3/§2.6) — a closed session never
+recomputes. If a movement belonging to an already-closed day D were
+reversed **today** (a later, currently-open day), the reversal row
+would get today's `movement_date` (per §2.8's own rule — it's recorded
+against whichever session is open _now_), so it would adjust _today's_
+`expected_cash`, not D's. The result: D's stored `expected_cash` still
+reflects the original (uncorrected) movement — permanently, since D's
+close already ran — while today's close now carries an adjustment for
+an error that occurred on a different day entirely. The mistake is
+effectively double-counted: still wrong on the day it happened, and
+wrongly "corrected" on a day it didn't happen on. Scoping reversal to
+"only while the original's own day is still open" is what keeps a
+correction inside the same day's figures it's actually correcting.
+
+**Found while designing this: `cash_session.notes` (the column the
+refusal message points the owner toward) is currently unused —
+grepped every read/write site, zero hits anywhere in application code.**
+The message names a real column that already exists and is already
+nullable/always-NULL today, but no UI currently lets the owner set it,
+even on an open session. **Task 6 (§4) is extended to add a minimal
+"Add note" action on a closed session's detail view**, writing to this
+existing column (no migration needed) — otherwise the refusal message
+sends the owner toward a feature that doesn't exist.
+
+**Additional core rules (this review round):**
+
+- `amount !== 0` — a movement of exactly zero paisa records nothing
+  and serves no purpose; rejected for both original and reversal rows.
+- **A reversal row cannot itself be reversed** (kept from R3, restated
+  here since R7 adds the session-scoping check alongside it —
+  `reversesId !== null` on the row being reversed is refused before
+  the session check even runs).
+- **`reverses_id` uniqueness is checked in core before the insert is
+  attempted** (`SELECT` for an existing row with
+  `reverses_id = originalId`; if found, throw immediately with a plain
+  "already reversed" message) — **the DB's `UNIQUE(reverses_id)`
+  constraint stays as the backstop** for the race window between that
+  check and the insert (same two-layer shape CLAUDE.md's own
+  concurrency guidance expects: application-level check first, DB
+  constraint as the guarantee), mapped to the same typed error via
+  `isUniqueConstraintError`, the existing precedent
+  (`cash-session.repository.ts:24-31`).
+
 ---
 
 ## 3. Rejected alternatives (see ADR-0016 for full reasoning)
@@ -398,14 +532,14 @@ Book report fix) is ordered before Task 6 (the UI), per review round
 2's instruction** — BUG-32 is fixed inside this phase, ahead of the
 `cash_movement` UI.
 
-| Task | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Files touched                                                                                                                                                                                                                                                | Migration? | Effort |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------ |
-| T1   | Migration `0021_cash_movement.sql` (§2.7's amended DDL — `reverses_id` + `UNIQUE(reverses_id)`, `note NOT NULL`), verbatim                                                                                                                                                                                                                                                                                                                                                                | New migration file, `kysely-schema.ts` (new `CashMovement` table type)                                                                                                                                                                                       | **Yes**    | S      |
-| T2   | Core: `CashMovementType`, `CashMovementRecord`, `NewCashMovementInput`, `CashMovementRepositoryPort`, `CashSessionNotOpenError`; pure `assertCashMovementValid(type, amountPaisa, note)` (sign-per-type for _original_ rows, non-blank `note` always) and `assertReversalValid(original, reversalAmountPaisa)` (exact negation; refuses reversing an already-reversed or already-reversal row)                                                                                            | New `packages/core/src/cash-movement/cash-movement.repository.port.ts`, `cash-movement.service.ts`, `cash-movement.service.test.ts`, `packages/core/src/index.ts` exports                                                                                    | No         | S      |
-| T3   | DB: `KyselyCashMovementRepository.recordMovement` (session-open gate + insert + `audit_log` + `sync_outbox`, one transaction, same pattern as `cash-session.repository.ts:63-110`) and `.reverseMovement` (same gate + shape, `UNIQUE(reverses_id)` violation mapped to a typed "already reversed" error, same `isUniqueConstraintError` precedent as `SessionAlreadyOpenError`); `listForDateRange` for the Cash Book report; modify `KyselyCashSessionRepository.closeSession` per §2.5 | New `packages/db/src/repositories/cash-movement.repository.ts` (+ `.test.ts`), `packages/db/src/repositories/cash-session.repository.ts` (+ its own `.test.ts`, new hand-calculated cases including R1's mixed-day test), `packages/db/src/index.ts`         | No         | M      |
-| T4   | **Fix BUG-32** in `getCashBookReport`: add `payment_mode='cash'`/`method='cash'` to the existing `sale`/`payment(in)` branches; add the two missing outflow branches (`expense`, `payment` direction='out', both `method='cash'`); add the new `cash_movement` branch (both signs via `CASE`, description `'Correction of ' \|\| (doc_no of what reverses_id points to)` when reversing, else the type's human label or the note for `'other'`)                                           | `report.repository.ts` (`getCashBookReport`), `report.repository.test.ts` (new cases for the fixed filters and the missing branches), `CashBookReport.tsx` if a new description case needs client-side handling                                              | No         | M      |
-| T5   | Contracts + IPC: `RecordCashMovementInput`, `ReverseCashMovementInput`, `CashMovementDto`; new channels `cashMovement.record` / `cashMovement.reverse` / `cashMovement.listForDateRange`; new `cash-movement.handler.ts`                                                                                                                                                                                                                                                                  | `packages/contracts/src/cash-movement/cash-movement.ts` (+ `index.ts`), `apps/server/src/ipc/channels.ts`, new `cash-movement.handler.ts` (+ `.test.ts`), `apps/server/src/main.ts`, `apps/server/src/preload.ts`, `apps/client/src/types/electron-api.d.ts` | No         | S      |
-| T6   | UI: a "Record cash movement" action on `CashSessionWidget.tsx` (reason picker, amount, note — note always required), a per-movement list underneath with a "Reverse" action on each (R4's mitigation #2); Cash Book display of corrections                                                                                                                                                                                                                                                | `CashSessionWidget.tsx` (+ `.test.tsx`), new small modal component, `CashBookReport.tsx` (if needed)                                                                                                                                                         | No         | M      |
+| Task | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Files touched                                                                                                                                                                                                                                                                         | Migration? | Effort |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ |
+| T1   | Migration `0021_cash_movement.sql` (§2.7's amended DDL — `reverses_id` + `UNIQUE(reverses_id)`, `note NOT NULL`), verbatim                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | New migration file, `kysely-schema.ts` (new `CashMovement` table type)                                                                                                                                                                                                                | **Yes**    | S      |
+| T2   | Core: `CashMovementType`, `CashMovementRecord`, `NewCashMovementInput`, `CashMovementRepositoryPort` (now including `getOpenSession()` on the cash-session port, §2.8), `CashSessionNotOpenError`, `CashMovementAlreadyReversedError`; pure `assertCashMovementValid(type, amountPaisa, note)` (sign-per-type for _original_ rows, non-blank `note` always, `amount !== 0`) and `assertReversalValid(original, reversalAmountPaisa, openSessionDate)` (exact negation; refuses reversing an already-reversed or already-reversal row; refuses when `openSessionDate !== original.movementDate`, per R7 — the plain "that day is closed" message) | New `packages/core/src/cash-movement/cash-movement.repository.port.ts`, `cash-movement.service.ts`, `cash-movement.service.test.ts`, `packages/core/src/index.ts` exports                                                                                                             | No         | S      |
+| T3   | DB: `getOpenSession()` on `KyselyCashSessionRepository` (`WHERE closed_at IS NULL`, §2.8); `KyselyCashMovementRepository.recordMovement` (open-session gate, `movementDate` resolved from the open session's `sessionDate` — never wall-clock — insert + `audit_log` + `sync_outbox`, one transaction) and `.reverseMovement` (same gate, R7's session-match check, core-side `reverses_id` pre-check + DB `UNIQUE` backstop); `listForDateRange` for the Cash Book report; modify `KyselyCashSessionRepository.closeSession` per §2.5                                                                                                           | New `packages/db/src/repositories/cash-movement.repository.ts` (+ `.test.ts`), `packages/db/src/repositories/cash-session.repository.ts` (+ its own `.test.ts`, new hand-calculated cases including R1's mixed-day test and R6's stale-open-session test), `packages/db/src/index.ts` | No         | M      |
+| T4   | **Fix BUG-32** in `getCashBookReport`: add `payment_mode='cash'`/`method='cash'` to the existing `sale`/`payment(in)` branches; add the two missing outflow branches (`expense`, `payment` direction='out', both `method='cash'`); add the new `cash_movement` branch (both signs via `CASE`, description `'Correction of ' \|\| (doc_no of what reverses_id points to)` when reversing, else the type's human label or the note for `'other'`)                                                                                                                                                                                                  | `report.repository.ts` (`getCashBookReport`), `report.repository.test.ts` (new cases for the fixed filters and the missing branches), `CashBookReport.tsx` if a new description case needs client-side handling                                                                       | No         | M      |
+| T5   | Contracts + IPC: `RecordCashMovementInput`, `ReverseCashMovementInput`, `CashMovementDto`; new channels `cashMovement.record` / `cashMovement.reverse` / `cashMovement.listForDateRange`; new `cash-movement.handler.ts`                                                                                                                                                                                                                                                                                                                                                                                                                         | `packages/contracts/src/cash-movement/cash-movement.ts` (+ `index.ts`), `apps/server/src/ipc/channels.ts`, new `cash-movement.handler.ts` (+ `.test.ts`), `apps/server/src/main.ts`, `apps/server/src/preload.ts`, `apps/client/src/types/electron-api.d.ts`                          | No         | S      |
+| T6   | UI: a "Record cash movement" action on `CashSessionWidget.tsx` (reason picker, amount, note — note always required), a per-movement list underneath with a "Reverse" action on each (R4's mitigation #2), disabled/refused per R7's session-scoping with the exact plain message; a minimal "Add note" action on a closed session's detail view, writing to the existing (currently unused anywhere) `cash_session.notes` column — R7's refusal message points the owner here, so it must exist; Cash Book display of corrections                                                                                                                | `CashSessionWidget.tsx` (+ `.test.tsx`), new small modal component, `CashBookReport.tsx` (if needed)                                                                                                                                                                                  | No         | M      |
 
 **Total effort estimate:** S + S + M + M + S + M ≈ **2–3 focused
 sessions** (up from the first draft's 1–2, reflecting BUG-32's fuller
@@ -428,11 +562,19 @@ scope and the reversal mechanics).
       a positive one for either; accepts `float_add` only with a
       positive amount, rejects a negative one; accepts `other` with
       either sign; rejects a blank/whitespace-only `note` **regardless
-      of type** (R4 — required on every movement, not just `'other'`).
+      of type** (R4 — required on every movement, not just `'other'`);
+      rejects `amount === 0` for every type (R7).
       `assertReversalValid`: accepts a reversal amount that is the
       exact negation of the original's; rejects one that isn't (even
       by 1 paisa); rejects reversing a row that is itself already a
-      reversal (`reversesId !== null`).
+      reversal (`reversesId !== null`); **R7 — rejects reversing an
+      original whose `movementDate` doesn't match the currently-open
+      session's `sessionDate`** (no session open at all, or a
+      different date's session is open), with the exact message
+      `"That day is closed — its cash difference already reflects
+    this. Add a note to the closed session instead."`; accepts a
+      reversal when the original's `movementDate` **does** match the
+      open session's date (same-day reversal, still open).
 - [ ] **T3** — Repository tests, real temp DB: recording a movement
       inserts exactly one `cash_movement` row plus one `audit_log` row
       plus one `sync_outbox` row, in one transaction (mirrors
@@ -471,6 +613,23 @@ scope and the reversal mechanics).
       `bank_deposit` (originally negative) succeeds with a **positive**
       reversal amount without tripping the sign-per-type rule (proving
       that rule is correctly scoped to original rows only, per §2.4).
+      **R6 — `movement_date` follows the open session, not the wall
+      clock:** open a session dated D; without closing it, insert a
+      movement whose recording logic runs against a clock/date stubbed
+      to D+1 — assert the inserted row's `movementDate === D`, and that
+      closing D's session (still using the real `sessionDate` D) sums
+      it correctly. A second test proves `getOpenSession()` finds D's
+      session by `closedAt IS NULL`, regardless of what "today" is.
+      **R7 — reversal core-side uniqueness check:** reversing a
+      movement twice in immediate succession (simulating the
+      check-then-insert race) still results in exactly one reversal
+      row and one thrown "already reversed" error for the second
+      attempt — first via the core pre-check (no DB round trip for the
+      insert attempt), separately confirmed the DB's own
+      `UNIQUE(reverses_id)` constraint independently refuses a
+      hand-crafted second insert that bypasses the core check
+      entirely (the backstop, tested directly against the repository's
+      raw SQL path, not just through the public method).
 - [ ] **T4 — fixes BUG-32.** `report.repository.test.ts` new cases:
       an Easypaisa sale and a bank-method incoming payment are **excluded**
       from `getCashBookReport`'s totals (the cash-filter fix); a cash
@@ -487,15 +646,14 @@ scope and the reversal mechanics).
       cash expense of `150,000` paisa (`method='cash'`); a `bank_deposit`
       cash movement of `-500,000` paisa. Compute `closeSession`'s
       `expectedCashPaisa`: `1,000,000 + 600,000 + 0 − (0 + 150,000 + 0)
-    + (−500,000) = 950,000`. Compute `getCashBookReport`'s net for
-      that single day (`dateFrom = dateTo =` the session date, so its
-      internal running balance starts at 0 for the query): inflows
-      `600,000` (cash sale only — Easypaisa and the bank payment are
-      correctly excluded) minus outflows `150,000 + 500,000 = 650,000`
-      = **`−50,000`**. Assert
-      `sessionOpeningCashPaisa + cashBookNetForDay === expectedCashPaisa`
-      (`1,000,000 + (−50,000) = 950,000`) — the two independently-computed
-      figures agree exactly, for a day exercising every branch at once.
+  - (−500,000) = 950,000`. Compute `getCashBookReport`'s net for
+that single day (`dateFrom = dateTo =`the session date, so its
+internal running balance starts at 0 for the query): inflows`600,000`(cash sale only — Easypaisa and the bank payment are
+correctly excluded) minus outflows`150,000 + 500,000 = 650,000`
+= **`−50,000`**. Assert
+`sessionOpeningCashPaisa + cashBookNetForDay === expectedCashPaisa`
+(`1,000,000 + (−50,000) = 950,000`) — the two independently-computed
+    figures agree exactly, for a day exercising every branch at once.
 - [ ] **T5** — Handler tests (real temp DB, no Electron mocking, same
       `runX`-plain-function precedent as `item.handler.test.ts`/
       `sale.handler.test.ts`): `record` and `reverse` both round-trip
@@ -515,7 +673,12 @@ scope and the reversal mechanics).
       submission when the note is blank (R4); the movement list shows
       each recorded entry individually with a "Reverse" action;
       clicking "Reverse" on an already-reversed entry is disabled/
-      hidden, not merely re-clickable-and-erroring.
+      hidden, not merely re-clickable-and-erroring. **R7 addition:** a
+      movement belonging to a closed session's date renders its
+      "Reverse" action disabled with the exact refusal copy shown as a
+      tooltip/inline message, not merely a silently-ignored click; the
+      closed session's own detail view has an "Add note" field that
+      calls a save method writing to `cash_session.notes`.
 - [ ] `npm run verify` exits 0 after every task above, count pasted
       each time (Golden Rule #4).
 - [ ] `PROJECT.md` (BUG-31 → FIXED, BUG-32 → FIXED) and `PROGRESS.md`
