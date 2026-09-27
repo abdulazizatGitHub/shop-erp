@@ -202,3 +202,36 @@ describe('KyselyCashSessionRepository.getSessionByDate', () => {
     expect(result?.openingCashPaisa).toBe(500000);
   });
 });
+
+// Phase 17.5, review round 3 R6/R7 (docs/phases/PHASE_17_5.md §2.8) —
+// used by cash_movement to resolve movementDate from whichever session
+// is actually open, never from "today"'s wall-clock date.
+describe('KyselyCashSessionRepository.getOpenSession', () => {
+  it('returns null when no session is open at all', async () => {
+    const result = await repo.getOpenSession();
+    expect(result).toBeNull();
+  });
+
+  it("finds a session opened on an earlier date and never closed, even though 'today' (by session_date lookup) would find nothing", async () => {
+    const opened = await repo.openSession({ date: '2026-08-15', openingCashPaisa: 500000 });
+
+    // Simulates wall-clock having rolled forward past the session's own
+    // date — getSessionByDate('2026-08-16') finds nothing, but
+    // getOpenSession() must still find the still-open 2026-08-15 session.
+    const staleDateLookup = await repo.getSessionByDate('2026-08-16');
+    const openLookup = await repo.getOpenSession();
+
+    expect(staleDateLookup).toBeNull();
+    expect(openLookup).not.toBeNull();
+    expect(openLookup?.id).toBe(opened.id);
+    expect(openLookup?.sessionDate).toBe('2026-08-15');
+  });
+
+  it('returns null once the open session has been closed', async () => {
+    const opened = await repo.openSession({ date: '2026-08-15', openingCashPaisa: 500000 });
+    await repo.closeSession({ sessionId: opened.id, countedCashPaisa: 500000 });
+
+    const result = await repo.getOpenSession();
+    expect(result).toBeNull();
+  });
+});

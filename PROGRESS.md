@@ -41,6 +41,96 @@
 
 ---
 
+## [2026-09-27] Session 93 — Phase 17.5 review round 3 (BUG-33) + Task 2 built: core validation
+
+**Goal:** Address review-round-3 feedback (R6, R7) on the Phase 17.5
+plan, amend the plan/ADR, then build Task 2 (core validation) only.
+
+**Done:**
+
+- `docs/decisions/ADR-0016-cash-drawer-movements.md` and
+  `docs/phases/PHASE_17_5.md` amended: **R6** — verified `sale`/
+  `expense`/`purchase`/`payment` all set their own date from the
+  client's wall clock at submit time, with no relationship to which
+  `cash_session` is open. Found and reported three consequences: (a) a
+  sale made while an older day's session is still open past midnight
+  gets today's date and is excluded from that session's close; (b) a
+  sale entered for an already-closed date is never counted by any
+  close; (c) two sessions for the same date are correctly prevented,
+  but two sessions for _different_ dates can be open simultaneously —
+  nothing checks for an already-open older session before letting a
+  new one open. Logged as **BUG-33** in `PROJECT.md`, not fixed this
+  phase. `cash_movement` avoids the whole problem: `movement_date` is
+  resolved from whichever session is currently open (new
+  `getOpenSession()` port method), never the wall clock.
+  **R7** — confirmed opening cash is manually counted and typed in
+  every time, never carried over (no STOP needed). A reversal is now
+  allowed only while the original movement's own session is still the
+  open one — reversing across a session boundary would double-count
+  the correction. Refused with a message pointing at
+  `cash_session.notes`; found that column is currently unused anywhere,
+  so Task 6 is extended to expose it. New core rules: `amount !== 0`; a
+  reversal cannot itself be reversed; `reverses_id` uniqueness checked
+  in the repository before the insert, DB `UNIQUE` kept as the race
+  backstop.
+- **Task 2 built**: new `packages/core/src/cash-movement/` module —
+  `cash-movement.repository.port.ts` (`CashMovementType`,
+  `CashMovementRecord`, `NewCashMovementInput`,
+  `ReverseCashMovementRepoInput`, `CashMovementRepositoryPort`, and
+  three new typed errors: `CashMovementAlreadyReversedError`,
+  `CashMovementSessionClosedError`, `ReversalOfReversalError`);
+  `cash-movement.service.ts` (`assertCashMovementValid`,
+  `assertReversalValid`); `cash-movement.service.test.ts` (11 tests).
+  `packages/core/src/expense/cash-session.repository.port.ts` gained
+  `getOpenSession()` on the port and a new `CashSessionNotOpenError`.
+  Since the port change required implementing it to keep the build
+  green, also added `KyselyCashSessionRepository.getOpenSession()`
+  (`WHERE closed_at IS NULL`) with 3 new tests in
+  `cash-session.repository.test.ts`, proving it finds a stale
+  still-open session that a same-day lookup would miss.
+  `packages/core/src/index.ts` exports updated.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean (one lint autofix
+  needed for arrow-shorthand void-expression style in the new test
+  file, applied via `eslint --fix`).
+- `npm test` — **914/914** (up from 900 — 11 new core tests + 3 new
+  `getOpenSession` repository tests).
+- `npm run build --workspace=@shop/client` / `--workspace=@shop/server`
+  — both clean.
+
+**Not done / deferred:** Tasks 3–6 of Phase 17.5 (the
+`KyselyCashMovementRepository` itself, the BUG-32 report fix,
+contracts/IPC, UI) — per instruction, only Task 2 was built this
+session.
+
+**Bugs found:** BUG-33 (`sale`/`expense`/`purchase`/`payment` dates are
+wall-clock, decoupled from cash-session status — MEDIUM, UNFIXED,
+logged for a future bug-fix phase).
+
+**Decisions taken:** ADR-0016 amended again (R6, R7).
+
+**Blocked on:** nothing — Task 2 complete and verified; Task 3 is next.
+
+**Next session should:** build Task 3 (the `KyselyCashMovementRepository`
+itself — `recordMovement`/`reverseMovement`/`listForDateRange`, the
+`closeSession` formula change, and the R6 stale-open-session /
+R7 reversal-scoping tests at the repository level), per
+`docs/phases/PHASE_17_5.md` §4.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this session
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md
+- [x] Test suite passing (914/914)
+
+---
+
 ## [2026-09-27] Session 92 — Phase 17.5 review round 2 (APPROVED) + Task 1 built: migration 0021
 
 **Goal:** Address review-round-2 feedback on the Phase 17.5 plan (R1–R4),

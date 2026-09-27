@@ -117,7 +117,10 @@ export type {
 } from './expense/expense.repository.port.js';
 
 export { openSession, closeSession, getTodaySession } from './expense/cash-session.service.js';
-export { SessionAlreadyOpenError } from './expense/cash-session.repository.port.js';
+export {
+  SessionAlreadyOpenError,
+  CashSessionNotOpenError,
+} from './expense/cash-session.repository.port.js';
 export type {
   CashSessionStatus,
   CashSessionRecord,
@@ -125,6 +128,23 @@ export type {
   CloseSessionRepoInput,
   CashSessionRepositoryPort,
 } from './expense/cash-session.repository.port.js';
+
+export {
+  assertCashMovementValid,
+  assertReversalValid,
+} from './cash-movement/cash-movement.service.js';
+export {
+  CashMovementAlreadyReversedError,
+  CashMovementSessionClosedError,
+  ReversalOfReversalError,
+} from './cash-movement/cash-movement.repository.port.js';
+export type {
+  CashMovementType,
+  CashMovementRecord,
+  NewCashMovementInput,
+  ReverseCashMovementRepoInput,
+  CashMovementRepositoryPort,
+} from './cash-movement/cash-movement.repository.port.js';
 
 export { recordAdvance, listAdvances } from './payroll/advance.service.js';
 export type {

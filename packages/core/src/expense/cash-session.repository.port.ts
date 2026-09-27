@@ -51,6 +51,22 @@ export class SessionAlreadyOpenError extends Error {
   }
 }
 
+/**
+ * Phase 17.5 (docs/phases/PHASE_17_5.md), review round 2 R2. Thrown by
+ * cash-movement recording/reversal when there is no currently-open
+ * session (`getOpenSession()` returns null) — same typed-error shape as
+ * SessionAlreadyOpenError, never a raw constraint error crossing the
+ * IPC boundary.
+ */
+export class CashSessionNotOpenError extends Error {
+  readonly code = 'CASH_SESSION_NOT_OPEN';
+
+  constructor() {
+    super('No cash session is currently open.');
+    this.name = 'CashSessionNotOpenError';
+  }
+}
+
 export interface CashSessionRepositoryPort {
   /**
    * ONE TRANSACTION: cash_session insert + audit_log + sync_outbox.
@@ -67,4 +83,14 @@ export interface CashSessionRepositoryPort {
   closeSession(input: CloseSessionRepoInput): Promise<CashSessionRecord>;
   /** The session for one date, or null if none was opened. */
   getSessionByDate(date: string): Promise<CashSessionRecord | null>;
+  /**
+   * Phase 17.5, review round 3 R6/R7 — the session with
+   * `closed_at IS NULL`, regardless of what today's wall-clock date is.
+   * This is deliberately NOT `getSessionByDate(todayIso())`: a session
+   * opened on day D and never closed must still be found on wall-clock
+   * D+1 — that's the whole point (BUG-33, PROJECT.md, not fixed by
+   * this method — `cash_movement` uses it to avoid the same defect for
+   * its own writes, nothing more). Null if no session is open at all.
+   */
+  getOpenSession(): Promise<CashSessionRecord | null>;
 }

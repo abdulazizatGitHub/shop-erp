@@ -278,6 +278,27 @@ export class KyselyCashSessionRepository implements CashSessionRepositoryPort {
 
     return row ? toCashSessionRecord(row) : null;
   }
+
+  /**
+   * Phase 17.5, review round 3 R6/R7 (docs/phases/PHASE_17_5.md §2.8).
+   * `WHERE closed_at IS NULL`, deliberately not filtered by
+   * `session_date` — a session opened on day D and never closed must
+   * still be found on wall-clock D+1. If more than one session were
+   * ever simultaneously open (BUG-33, PROJECT.md — not prevented today),
+   * the most recently opened one is used, since that's the one the
+   * owner is most likely actively working with.
+   */
+  async getOpenSession(): Promise<CashSessionRecord | null> {
+    const row = await this.db
+      .selectFrom('cashSession')
+      .select(CASH_SESSION_COLUMNS)
+      .where('tenantId', '=', this.tenantId)
+      .where('closedAt', 'is', null)
+      .orderBy('openedAt', 'desc')
+      .executeTakeFirst();
+
+    return row ? toCashSessionRecord(row) : null;
+  }
 }
 
 function toCashSessionRecord(row: {
