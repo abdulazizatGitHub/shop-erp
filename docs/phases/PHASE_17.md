@@ -32,11 +32,11 @@ hook/context, default 10 everywhere including `CustomerLedgerTable`
 (Q17-2's deliberate 15→10 normalization) — see §6/§8, 988/988 tests.
 **P17-4 is DONE — 2026-10-03:** Expense Categories Settings section,
 name-only form, built exactly per the simplified Q-DRAWING/A17-3 scope
-— see §6/§8, 1021/1021 tests. **P17-5 is DONE, pending owner-machine
-print verification — 2026-10-03:** `receiptPaperSize` now wired into
-sale invoice + payment receipt prints, same way Reprint already did
-it; the real-printer A4/A5 visual check is the one remaining manual
-step. **P17-7 is DONE — 2026-10-03:** payment-method enable/disable,
+— see §6/§8, 1021/1021 tests. **P17-5 is DONE — 2026-10-03:**
+`receiptPaperSize` now wired into sale invoice + payment receipt
+prints, same way Reprint already did it; owner-machine print
+verification passed (A5 and A4 both confirmed correct). **P17-7 is
+DONE — 2026-10-03:** payment-method enable/disable,
 cash-cannot-disable enforced at the Zod boundary, picker falls back to
 Cash — see §6/§8, 1048/1048 tests. P17-2b remains approved, not yet
 built.
@@ -777,7 +777,7 @@ UI), same convention as every prior phase's task table.
 | P17-2   | Low-stock badge + default threshold + Dashboard card, with `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (`counterStockMilli`/`reorderLevelMilli` on all 3 query methods), new `packages/core/src/item/low-stock.ts` (`isLowStock`), `item.handler.ts` (`runLowStockCount`), `stock-alerts-setting.repository.ts`/`.handler.ts` (split from `setting.*` to stay under the ~300-line convention), `StockBadge.tsx` (client-side `isLowStock` duplicate + `resolveStockBadge` rewrite — client can't import `@shop/core`), `ItemsPage.tsx`+new `ItemsTableRow.tsx` (dual-figure display, "Low stock only" filter), new `LowStockWidget.tsx` + `DashboardPage.tsx`/`App.tsx` wiring | No                                              | **DONE — pending owner-machine click-through.** All exit criteria in §8 verified: 894/894, `npm run verify` clean, both builds clean. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding.                                                                                                                                                                                                                                                                                                                                       | M                           |
 | P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | **DONE.** All exit criteria in §8 verified: 988/988, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | M                           |
 | P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **DONE.** BUG-31 fixed in Phase 17.5, unblocking this task. All exit criteria in §8 verified: 1021/1021, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                 | M                           |
-| P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | **DONE, pending owner-machine print verification.** 16 new/updated tests, 1048/1048 overall. Real-printer A4/A5 visual confirmation not yet done in this sandbox.                                                                                                                                                                                                                                                                                                                                                                                                                   | S                           |
+| P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | **DONE.** 16 new/updated tests, 1048/1048 overall. Owner-machine print verification passed — A5 and A4 both confirmed correct.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | S                           |
 | P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | **DONE.** All exit criteria in §8 verified: 1048/1048, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | S                           |
 
 **Revised total T1 effort estimate:** M/L + M + M + M + S + S ≈ **3–4
@@ -1094,19 +1094,19 @@ rowsPerPage`). `reports-display-setting.repository.test.ts` (5
       owner-drawing category appears in v_owner_drawings and not in
       v_unit_direct_expense/business totals" test stays removed — this
       form can never create an owner-drawing category.
-- [x] **P17-5 (DONE, pending owner-machine print verification)** —
+- [x] **P17-5 (DONE)** —
       `renderInvoicePdf`/`renderPaymentReceiptPdf` each now take a
       `pageSize: ReceiptPageSize` parameter (threaded through
       `receipt-pdf.ts`'s own `renderReceiptPdf(layoutText, pageSize)` —
       no new pdfkit code path, same template both already shared at
       A4). `print-invoice.ts`'s `PrintInvoiceDeps`/`print-payment-receipt.ts`'s
       `PrintPaymentReceiptDeps` each gained a `getPageSize: () =>
-    Promise<ReceiptPageSize>` dependency, called once per print and
+  Promise<ReceiptPageSize>` dependency, called once per print and
       passed to `renderPdf` — exactly the shape
       `print-receipt.ts`'s `PrintReceiptDeps` already used for the
       Reprint path. `invoice.handler.ts` and `print.handler.ts`'s
       payment-receipt branch now pass `getPageSize: () =>
-    getReceiptPaperSize(kysely, deps.tenantId)`, the same call
+  getReceiptPaperSize(kysely, deps.tenantId)`, the same call
       `print.handler.ts:56` already made for Reprint. Tests:
       `invoice-pdf.test.ts` (+1, now 3) and new
       `payment-receipt-pdf.test.ts` (3, new) assert the real PDF bytes'
@@ -1119,13 +1119,11 @@ rowsPerPage`). `reports-display-setting.repository.test.ts` (5
       `print-receipt.test.ts`'s own `getPageSize`-mock pattern.
       `print-invoice-safely.test.ts`'s 3 pre-existing tests updated
       (added `getPageSize` mocks to each deps object) — unmodified in
-      substance. **Manual verification (owner machine) — NOT done this
-      session:** printing a real sale invoice and payment receipt with
-      `receiptPaperSize='A5'` set, confirming both render at A5, and
-      with the default `'A4'` confirming both are visually unchanged
-      from before this task. Electron's GUI cannot launch in this
-      sandbox. This exit criterion stays **pending owner-machine print
-      verification** until confirmed.
+      substance. **Manual verification (owner machine) — PASSED:**
+      printing a real sale invoice and payment receipt with
+      `receiptPaperSize='A5'` set confirmed both render at A5, and with
+      the default `'A4'` both are visually unchanged from before this
+      task. Confirmed by the owner.
 - [x] **P17-7 (DONE)** — New `payment-methods-setting.repository.ts`/
       `.handler.ts` (own files, same "extracted before
       setting.repository.ts/setting.handler.ts cross ~300 lines"

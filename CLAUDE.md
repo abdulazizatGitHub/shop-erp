@@ -194,7 +194,13 @@ containing a business `if` has the rule in the wrong file.
   the path before killing — never kill a process you haven't
   identified), then re-run `npm rebuild better-sqlite3`. Found in
   Phase 17.5/17, 2026-09-27: four stray `electron.exe` processes from a
-  prior dev/build run were locking the file.
+  prior dev/build run were locking the file. **If the mismatch recurs
+  with no stray Electron processes, `npm rebuild better-sqlite3` alone
+  is sufficient** — this happens whenever a prior `electron-rebuild`
+  step (e.g. `apps/server`'s own `package`/`rebuild` script) left the
+  module compiled against Electron's ABI and nothing is holding the
+  file open; recurred in Phase 17, 2026-10-03, with `tasklist` showing
+  no `electron.exe` at all.
 
 ### Before ending the session
 
