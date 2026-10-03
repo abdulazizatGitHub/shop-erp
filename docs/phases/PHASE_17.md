@@ -15,14 +15,14 @@ Clone Algorithm does guarantee. **P17-2 is also DONE — pending
 owner-machine click-through** (low-stock badge switched to
 `counterStockMilli`, Items-list dual-figure display, Dashboard widget,
 plus two review rounds: single-source `isLowStock` DTO field and a
-null-as-0 guard fix — see §2.2/§6/§8, 899/899 tests). **P17-4 is
+null-as-0 guard fix — see §2.2/§6/§8, 899/899 tests). **P17-4 was
 BLOCKED — 2026-09-27:** verifying its pre-conditions (owner-drawing
 scope, the cash-close formula) surfaced BUG-31 (PROJECT.md) — no
 existing way to record cash removed from the drawer for a bank deposit,
-which the cash session misreports as a shortage every time. Per this
-session's own STOP instruction, P17-4 was not built; BUG-31 is its own,
-higher-priority task. §9 also logs P17-2b (Q17-7's stock-alert
-taxonomy follow-up, not built this session). **PHASE PAUSED —
+which the cash session misreports as a shortage every time. Per that
+session's own STOP instruction, P17-4 was not built that day; BUG-31
+was its own, higher-priority task. §9 also logs P17-2b (Q17-7's
+stock-alert taxonomy follow-up, still not built). **PHASE PAUSED —
 2026-09-27, RESUMED 2026-09-27:** BUG-31 accepted as a go-live blocker;
 Phase 17.5 (`docs/phases/PHASE_17_5.md` +
 `docs/decisions/ADR-0016-cash-drawer-movements.md`) fixed it and was
@@ -30,7 +30,10 @@ accepted by the owner (click-through passed), unpausing this phase.
 **P17-3 is DONE** — rows-per-page via one shared `useRowsPerPage()`
 hook/context, default 10 everywhere including `CustomerLedgerTable`
 (Q17-2's deliberate 15→10 normalization) — see §6/§8, 988/988 tests.
-P17-4, P17-5, P17-7, and P17-2b remain approved, not yet built.
+**P17-4 is DONE — 2026-10-03:** Expense Categories Settings section,
+name-only form, built exactly per the simplified Q-DRAWING/A17-3 scope
+— see §6/§8, 1021/1021 tests. P17-5, P17-7, and P17-2b remain
+approved, not yet built.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -767,7 +770,7 @@ UI), same convention as every prior phase's task table.
 | P17-1   | `negativeStockPolicy`, one core summed/warehouse-scoped predicate, block+warn, both mechanisms unified (S17-SALE-1)             | `setting.repository.ts`/`setting.handler.ts`, `packages/contracts/src/setting/setting.ts`, `packages/core/src/sale/sale.ts`+`sale.repository.port.ts` (predicate + typed errors), `sale.repository.ts` (rewritten check + throw), `item.repository.ts`+`item.repository.port.ts`+`packages/contracts/src/item/item.ts` (new `counterStockMilli`), `ItemSearchPanel.tsx`+`ItemProductCard.tsx` (switched to `counterStockMilli`), `useSaleFlow.ts`+`SalePage.tsx`+`useSaleKeyboardShortcuts.ts` (Option C confirmation flow), new `sections/StockAlertsSettingsSection.tsx`                   | No                                              | **DONE — pending owner-machine click-through.** All automated exit criteria in §8 verified: 858/858 + review-round additions, `npm run verify` clean, both builds clean, live-DB script (run against the real dev DB — a process mistake corrected going forward, see CLAUDE.md) confirmed all four scenarios. Review round fixed a real IPC-boundary gap: `sale:create` now resolves a discriminated `NegativeStockOutcome` instead of relying on thrown-error properties. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding. | **M/L** (revised up from M) |
 | P17-2   | Low-stock badge + default threshold + Dashboard card, with `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (`counterStockMilli`/`reorderLevelMilli` on all 3 query methods), new `packages/core/src/item/low-stock.ts` (`isLowStock`), `item.handler.ts` (`runLowStockCount`), `stock-alerts-setting.repository.ts`/`.handler.ts` (split from `setting.*` to stay under the ~300-line convention), `StockBadge.tsx` (client-side `isLowStock` duplicate + `resolveStockBadge` rewrite — client can't import `@shop/core`), `ItemsPage.tsx`+new `ItemsTableRow.tsx` (dual-figure display, "Low stock only" filter), new `LowStockWidget.tsx` + `DashboardPage.tsx`/`App.tsx` wiring | No                                              | **DONE — pending owner-machine click-through.** All exit criteria in §8 verified: 894/894, `npm run verify` clean, both builds clean. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding.                                                                                                                                                                                                                                                                                                                                       | M                           |
 | P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | **DONE.** All exit criteria in §8 verified: 988/988, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | M                           |
-| P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **BLOCKED — see BUG-31.** Form wording is CLOSED (Q-DRAWING/A17-3, both settled name-only) — the remaining blocker is the cash-removal gap found while verifying P17-4's pre-conditions, not this task's own scope. Not built this session.                                                                                                                                                                                                                                                                                                                                         | M                           |
+| P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **DONE.** BUG-31 fixed in Phase 17.5, unblocking this task. All exit criteria in §8 verified: 1021/1021, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                 | M                           |
 | P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
 | P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | Ready — **scope-approved this phase**, tier stays T2 in the inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
 
@@ -981,7 +984,7 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       `CustomerLedgerTable.test.tsx` (no test file existed for it
       before): 12 rows render a "Page 2" button, which the old `15`
       would not (`Pagination` renders nothing when `totalRows <=
-    rowsPerPage`). `reports-display-setting.repository.test.ts` (5
+  rowsPerPage`). `reports-display-setting.repository.test.ts` (5
       tests, real temp DB): a fresh DB has no `rowsPerPage` key and
       `getRowsPerPage` returns `10`, confirmed both by the return value
       and a direct `COUNT(*)` query proving the read never writes a row;
@@ -1008,29 +1011,83 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       alongside the other settings `RowsPerPageProvider` now fetches
       unconditionally on every mount, same as `ShopIdentityContext`'s
       existing entries there.
-- [ ] **P17-4** — BLOCKED, see BUG-31 (PROJECT.md) — not built this
-      session; the cash-removal verification below triggered a STOP.
-      Simplified scope, once unblocked, per Q-DRAWING (owner drawings
-      out of scope — form is name-only, `is_owner_drawing` hidden too):
-      Repository tests: create a category (name only); edit its name
-      (succeeds) — the edit input schema itself accepts no other field,
-      so there is no "kind/isBillable/isOwnerDrawing edit rejected" case
-      to test; the two invalid combinations (`is_owner_drawing=1` AND
-      `is_billable=1`; non-null `parts_share_bp` with
-      `allocation_method !== 'shared_fixed'`) stay rejected in
-      `packages/core` as defense-in-depth for any future write path,
-      even though this form can never produce either; deactivate a
-      category with existing expenses (soft, `deletedAt` set) and
-      confirm `expense:list`/`getExpenseSummaryReport` still return the
-      same historical rows/totals unchanged (hand-calculated total in
-      the test comment). UI action: Settings → Expenses → Categories
-      shows the corrected field list — **Name only**, matching the
-      Brands/Service-Charges shell. **Dropped criterion (Q-DRAWING):**
-      the earlier "expense in a new owner-drawing category appears in
-      v_owner_drawings and not in v_unit_direct_expense/business totals"
-      test is removed — this form can never create an owner-drawing
-      category (`is_owner_drawing` is hidden, always `false`), so that
-      scenario is unreachable through the UI this task builds.
+- [x] **P17-4 (DONE)** — BUG-31 fixed in Phase 17.5, unblocking this
+      task. Simplified scope per Q-DRAWING (owner drawings out of
+      scope — form is name-only, `is_owner_drawing` hidden too): new
+      `packages/core/src/expense/expense-category.repository.port.ts`/
+      `.service.ts` (`createExpenseCategory`/`updateExpenseCategoryName`/
+      `toggleExpenseCategoryActive`/`listExpenseCategoriesAdmin`, plus
+      the two defense-in-depth core rules below), new
+      `packages/db/src/repositories/expense-category.repository.ts`
+      (`KyselyExpenseCategoryRepository` — no audit_log/sync_outbox
+      writes, same reference-data convention as
+      `brand.repository.ts`/`service-charge.repository.ts`, unlike
+      `expense.repository.ts`'s own financial-transaction write path),
+      new contracts (`CreateExpenseCategoryInput`/
+      `UpdateExpenseCategoryInput`/`ToggleExpenseCategoryInput`/
+      `ExpenseCategoryAdminDto` — all name-only except the toggle), four
+      new `expense:*Category*` IPC channels added to the existing
+      `expense.handler.ts` (stays well under the ~300-line convention;
+      no new handler file needed, unlike Brand's own top-level channel
+      namespace — these stay under the existing `expense:` group), new
+      `apps/client/src/pages/settings/expense/ExpenseCategoriesTab.tsx`
+      under a new "Expenses → Categories" Settings nav group — mirrors
+      `BrandsTab.tsx`'s immediate-add-plus-per-row-toggle shape, with
+      inline rename (a `TextInput` swapped in for the name cell) instead
+      of a separate modal, since there is exactly one editable field —
+      a modal component for one text input would be the "three
+      near-duplicates means one abstraction was missed" kind of excess
+      CLAUDE.md §9 warns against, not a closer mirror of
+      `ServiceChargesTab.tsx`'s own modal (built for 9 fields, not 1).
+      **Field-lock rule, simplified exactly as the plan anticipated:**
+      `assertExpenseCategoryFieldsLocked` (packages/core/src/expense/
+      expense-category.service.ts) exists and is unit-tested directly,
+      but — per the plan's own correction — is dead code against the
+      real write path: `UpdateExpenseCategoryInput` has no `kind`/
+      `isBillable`/`isOwnerDrawing` field to send, so Zod itself already
+      makes the locked case unreachable through the UI; kept as
+      defense-in-depth for any future, wider write path, documented as
+      such in its own doc comment. Same defense-in-depth framing for
+      `assertExpenseCategoryCombinationValid`'s two invalid-combination
+      checks (`isOwnerDrawing && isBillable`; non-null `partsShareBp`
+      with `allocationMethod !== 'shared_fixed'`) — 8 unit tests in
+      `expense-category.service.test.ts`.
+      `expense-category.repository.test.ts` (12 tests, real temp DB):
+      create with the name-only-form defaults (`kind='variable'`,
+      `isBillable=0`, `isOwnerDrawing=0`, `allocationMethod='direct'`,
+      `partsShareBp=null`); case-insensitive duplicate name rejected on
+      create AND on rename to another category's name; renaming
+      succeeds even once an expense references the category (no lock
+      trips, since the call never carries a locked field); deactivate
+      sets `deleted_at` and flips `isActive` to `false`, reactivate
+      clears it back to `true`; deactivating never edits the referencing
+      `expense` row's `category_id`/`amount`; the admin list includes a
+      deactivated row (so it can be reactivated) unlike the picker's own
+      `listCategories()`. **Priority test (§8):** two expenses
+      (Rs 500 + Rs 300 = Rs 800, 80,000 paisa, hand-calculated in the
+      test's own comment) in a category deactivated AFTER both were
+      recorded — `getExpenseSummaryReport`'s `totalPaisa`/`count` for
+      that category are asserted identical before and after
+      deactivation; a second test confirms `expense:list`'s own
+      category-name join still resolves correctly post-deactivation too.
+      `expense.test.ts` (6 tests, new, contracts package): name
+      trimmed/required; an extra `kind`/`isBillable`/`isOwnerDrawing` key
+      sent alongside `name` is silently stripped by Zod, never reaching
+      the parsed result — proving there is no way to smuggle those
+      fields through this contract at all, not merely that the UI omits
+      them. `ExpenseCategoriesTab.test.tsx` (6 render tests): lists
+      active and inactive with status shown, and asserts no
+      kind/billable/owner-drawing text appears anywhere on the screen;
+      adding calls `createCategory` with just the trimmed name; editing
+      calls `updateCategoryName` with just `{id, name}`; Save starts
+      enabled (the field is pre-filled with the current name) and
+      disables only if cleared blank; Deactivate calls `toggleCategoryActive`
+      with `isActive: false`; Activate (reactivation) calls it with
+      `isActive: true`. **Dropped criterion (Q-DRAWING), confirmed still
+      correctly unreachable:** the earlier "expense in a new
+      owner-drawing category appears in v_owner_drawings and not in
+      v_unit_direct_expense/business totals" test stays removed — this
+      form can never create an owner-drawing category.
 - [ ] **P17-5** — Unit test: `renderInvoicePdf`/`renderPaymentReceiptPdf`
       each accept and thread through a page-size parameter (test asserts
       the parameter reaches the underlying `PDFDocument` call). UI

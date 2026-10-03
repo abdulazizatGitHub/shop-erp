@@ -101,6 +101,8 @@ import type {
   CashSessionDto,
   CloseSessionInput,
   CreateExpenseInput,
+  CreateExpenseCategoryInput,
+  ExpenseCategoryAdminDto,
   ExpenseCategoryDto,
   ExpenseDto,
   GetMonthAttendanceInput,
@@ -109,6 +111,8 @@ import type {
   ListExpensesInput,
   OpenSessionInput,
   RecordAdvanceInput,
+  ToggleExpenseCategoryInput,
+  UpdateExpenseCategoryInput,
   RecordCashMovementInput,
   ReverseCashMovementInput,
   SaveAttendanceInput,
@@ -486,6 +490,16 @@ export interface ElectronApi {
     readonly list: (input: ListExpensesInput) => Promise<readonly ExpenseDto[]>;
     readonly listCategories: () => Promise<readonly ExpenseCategoryDto[]>;
     readonly listBusinessUnits: () => Promise<readonly BusinessUnitOption[]>;
+    readonly createCategory: (
+      input: CreateExpenseCategoryInput,
+    ) => Promise<ExpenseCategoryAdminDto>;
+    readonly updateCategoryName: (
+      input: UpdateExpenseCategoryInput,
+    ) => Promise<ExpenseCategoryAdminDto>;
+    readonly toggleCategoryActive: (
+      input: ToggleExpenseCategoryInput,
+    ) => Promise<ExpenseCategoryAdminDto>;
+    readonly listCategoriesAdmin: () => Promise<readonly ExpenseCategoryAdminDto[]>;
   };
   readonly cashSession: {
     readonly open: (input: OpenSessionInput) => Promise<CashSessionDto>;

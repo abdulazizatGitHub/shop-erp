@@ -7,6 +7,7 @@ import {
   Receipt,
   Store,
   Tag,
+  Wallet,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -62,6 +63,18 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
         title: 'Stock & Alerts',
         hint: 'Negative-stock policy for counter sales',
         icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    label: 'Expenses',
+    items: [
+      {
+        key: 'expense-categories',
+        path: '/settings/expenses/categories',
+        title: 'Categories',
+        hint: 'Create, rename, deactivate',
+        icon: Wallet,
       },
     ],
   },

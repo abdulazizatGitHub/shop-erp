@@ -51,3 +51,39 @@ export const ListExpensesInput = z.object({
   to: z.string().regex(DATE_REGEX),
 });
 export type ListExpensesInput = z.infer<typeof ListExpensesInput>;
+
+/**
+ * P17-4 (docs/phases/PHASE_17.md §2.6, S17-EXP-1, Q-DRAWING/A17-3). Name
+ * only — `kind`/`isBillable`/`isOwnerDrawing`/`allocationMethod`/
+ * `partsShareBp` are deliberately absent from both inputs below, not
+ * merely hidden in the UI: there is no way to send them through this
+ * contract at all.
+ */
+export const CreateExpenseCategoryInput = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+export type CreateExpenseCategoryInput = z.infer<typeof CreateExpenseCategoryInput>;
+
+export const UpdateExpenseCategoryInput = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(100),
+});
+export type UpdateExpenseCategoryInput = z.infer<typeof UpdateExpenseCategoryInput>;
+
+export const ToggleExpenseCategoryInput = z.object({
+  id: z.string().uuid(),
+  isActive: z.boolean(),
+});
+export type ToggleExpenseCategoryInput = z.infer<typeof ToggleExpenseCategoryInput>;
+
+/**
+ * Settings "Expense Categories" admin list row — active AND inactive,
+ * unlike `ExpenseCategoryDto` above (the create-expense form's picker,
+ * active-only via `listCategories()`'s `deleted_at IS NULL` filter).
+ */
+export const ExpenseCategoryAdminDto = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  isActive: z.boolean(),
+});
+export type ExpenseCategoryAdminDto = z.infer<typeof ExpenseCategoryAdminDto>;

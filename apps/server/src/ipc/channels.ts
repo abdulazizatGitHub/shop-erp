@@ -51,6 +51,10 @@ export const channels = {
     list: 'expense:list',
     listCategories: 'expense:listCategories',
     listBusinessUnits: 'expense:listBusinessUnits',
+    createCategory: 'expense:createCategory',
+    updateCategoryName: 'expense:updateCategoryName',
+    toggleCategoryActive: 'expense:toggleCategoryActive',
+    listCategoriesAdmin: 'expense:listCategoriesAdmin',
   },
   cashSession: {
     open: 'cashSession:open',

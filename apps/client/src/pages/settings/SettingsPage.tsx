@@ -5,6 +5,7 @@ import { CommissionApprovalsTab } from './job/CommissionApprovalsTab.js';
 import { ServiceChargesTab } from './job/ServiceChargesTab.js';
 import { BackupSettingsSection } from './sections/BackupSettingsSection.js';
 import { DiscountsSettingsSection } from './sections/DiscountsSettingsSection.js';
+import { ExpenseCategoriesTab } from './expense/ExpenseCategoriesTab.js';
 import { InvoiceReceiptsSettingsSection } from './sections/InvoiceReceiptsSettingsSection.js';
 import { ReportsDisplaySettingsSection } from './sections/ReportsDisplaySettingsSection.js';
 import { StockAlertsSettingsSection } from './sections/StockAlertsSettingsSection.js';
@@ -88,6 +89,17 @@ export function SettingsPage(): React.JSX.Element {
                     description="Negative-stock policy for counter sales."
                   >
                     <StockAlertsSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/expenses/categories"
+                element={
+                  <SettingsSectionFrame
+                    title="Categories"
+                    description="Create, rename, and deactivate expense categories."
+                  >
+                    <ExpenseCategoriesTab />
                   </SettingsSectionFrame>
                 }
               />

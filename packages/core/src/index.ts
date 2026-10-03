@@ -116,6 +116,25 @@ export type {
   ExpenseRepositoryPort,
 } from './expense/expense.repository.port.js';
 
+export {
+  assertExpenseCategoryFieldsLocked,
+  assertExpenseCategoryCombinationValid,
+  createExpenseCategory,
+  updateExpenseCategoryName,
+  toggleExpenseCategoryActive,
+  listExpenseCategoriesAdmin,
+} from './expense/expense-category.service.js';
+export type {
+  ExpenseCategoryFieldChange,
+  ExpenseCategoryCombination,
+} from './expense/expense-category.service.js';
+export type {
+  NewExpenseCategoryInput,
+  UpdateExpenseCategoryInput as UpdateExpenseCategoryRepoInput,
+  ExpenseCategoryAdminRecord,
+  ExpenseCategoryRepositoryPort,
+} from './expense/expense-category.repository.port.js';
+
 export { openSession, closeSession, getOpenSession } from './expense/cash-session.service.js';
 export {
   SessionAlreadyOpenError,

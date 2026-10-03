@@ -41,6 +41,117 @@
 
 ---
 
+## [2026-10-03] Session 98 — H1/H2 housekeeping, Phase 17 P17-4 built: Expense Categories Settings
+
+**Goal:** Two housekeeping fixes (H1: cash-movement row layout overflow;
+H2: document the stray-electron/NODE_MODULE_VERSION symptom in
+CLAUDE.md), committed together, then build P17-4 only — the Expense
+Categories Settings section (name-only form, S17-EXP-1), now unblocked
+since Phase 17.5 fixed BUG-31.
+
+**Done — H1/H2 (commit `2dfff04`):**
+
+- `CashMovementSection.tsx`: the movement row's reversal-input state had
+  no width bound on the left label or the inline `TextInput`, so at
+  normal dashboard card width the row's content overflowed. Fixed: the
+  left label is now a `min-w-0 flex-1 truncate` zone; the amount and
+  the action zone (Reverse, or the input + Confirm + Cancel) are fixed
+  `shrink-0` zones; the reversal input itself is bounded to `w-32`, not
+  full-width. New render test (jsdom has no real layout engine, so it
+  asserts the structural classNames rather than pixel overflow).
+- `CLAUDE.md` §"During the session": documents the
+  `NODE_MODULE_VERSION`/`better_sqlite3.node` symptom that follows a
+  stray `electron.exe` left running from a prior build/dev run, and the
+  `tasklist`/kill-then-rebuild fix — found this session's own prior
+  round (Session 97).
+
+**Done — P17-4:**
+
+- `packages/core/src/expense/expense-category.repository.port.ts`/
+  `.service.ts` (new): `createExpenseCategory`/
+  `updateExpenseCategoryName`/`toggleExpenseCategoryActive`/
+  `listExpenseCategoriesAdmin`, plus two defense-in-depth rules —
+  `assertExpenseCategoryFieldsLocked` (the Q17-5 field-lock rule; dead
+  code against the real write path, since `UpdateExpenseCategoryInput`
+  has no `kind`/`isBillable`/`isOwnerDrawing` field to send — kept for
+  any future, wider write path) and
+  `assertExpenseCategoryCombinationValid` (the two invalid-combination
+  checks, likewise unreachable through this form).
+- `packages/db/src/repositories/expense-category.repository.ts` (new):
+  `KyselyExpenseCategoryRepository` — no audit_log/sync_outbox writes
+  (reference-data table, same convention as `brand.repository.ts`/
+  `service-charge.repository.ts`); deactivate/reactivate toggles
+  `deleted_at` (there is no separate `is_active` column on this table).
+- Contracts: `CreateExpenseCategoryInput`/`UpdateExpenseCategoryInput`/
+  `ToggleExpenseCategoryInput`/`ExpenseCategoryAdminDto` — name-only
+  except the toggle.
+- IPC: four new `expense:createCategory`/`updateCategoryName`/
+  `toggleCategoryActive`/`listCategoriesAdmin` channels added directly
+  to the existing `expense.handler.ts` (stays well under ~300 lines;
+  no new handler file needed, unlike Brand's own separate channel
+  namespace).
+- UI: new `apps/client/src/pages/settings/expense/ExpenseCategoriesTab.tsx`
+  under a new "Expenses → Categories" Settings nav group — mirrors
+  `BrandsTab.tsx`'s immediate-add-plus-per-row-toggle shape, with inline
+  rename instead of a separate modal (one editable field doesn't
+  justify `ServiceChargesTab.tsx`'s own 9-field modal pattern).
+- Tests: `expense-category.service.test.ts` (8, new — the two
+  defense-in-depth functions); `expense-category.repository.test.ts`
+  (12, new, real temp DB — create defaults, duplicate-name rejection on
+  create and rename, rename-while-referenced succeeds, deactivate/
+  reactivate, deactivation never edits the referencing expense row, the
+  priority test: two expenses totalling Rs 800/80,000 paisa in a
+  category deactivated afterward still total correctly in
+  `getExpenseSummaryReport`, hand-calculated in the test's own comment);
+  `expense.test.ts` (6, new, contracts package — name validation, and
+  proof that `kind`/`isBillable`/`isOwnerDrawing` sent alongside `name`
+  are silently stripped by Zod, never reaching the parsed result);
+  `ExpenseCategoriesTab.test.tsx` (6, new — list with status, no
+  kind/billable/owner-drawing text anywhere, add/edit/deactivate/
+  reactivate each call the right IPC method with the right payload).
+- `docs/phases/PHASE_17.md` — P17-4 marked DONE in the task table and §8
+  exit criteria, every test named; phase header status updated.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **1021/1021** (up from 989 before this round: +32 new).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both succeed, no errors.
+
+**Not done / deferred:** P17-5, P17-7, P17-2b remain approved, not
+built this session, per the explicit "build P17-4 only" instruction.
+
+**Bugs found:** none new.
+
+**Decisions taken:** none new — Q-DRAWING/A17-3/Q17-5 were already
+answered in prior planning sessions; this session only implemented
+them. Reactivation (toggling `deleted_at` back to null) was added to
+the admin screen even though the plan's own exit criteria only
+exercise deactivation — without it, a mis-click would be unrecoverable
+through the UI, and it's the same soft mechanism already approved as
+safe.
+
+**Blocked on:** nothing.
+
+**Next session should:** await fresh authorization for the next task —
+P17-5 (paper size wiring) or P17-7 (payment method enable/disable), per
+`docs/phases/PHASE_17.md` §6.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (not touched this round — no
+      bug/status entry there was stale as a result of this change)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P17-5/P17-7 ready, awaiting
+      authorization)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (1021/1021)
+
+---
+
 ## [2026-09-27] Session 97 — Phase 17 resumed, P17-3 built: shared rows-per-page setting
 
 **Goal:** Build P17-3 only — replace all 11 files' own local

@@ -116,6 +116,8 @@ import type {
   CashSessionDto,
   CloseSessionInput,
   CreateExpenseInput,
+  CreateExpenseCategoryInput,
+  ExpenseCategoryAdminDto,
   ExpenseCategoryDto,
   ExpenseDto,
   GetMonthAttendanceInput,
@@ -128,6 +130,8 @@ import type {
   RecordAdvanceInput,
   SaveAttendanceInput,
   SetCashSessionNoteInput,
+  ToggleExpenseCategoryInput,
+  UpdateExpenseCategoryInput,
   StaffCreateInput,
   StaffDto,
   StockValuationReportDto,
@@ -270,6 +274,25 @@ contextBridge.exposeInMainWorld('api', {
     listBusinessUnits: (): Promise<readonly BusinessUnitOption[]> =>
       ipcRenderer.invoke(channels.expense.listBusinessUnits) as Promise<
         readonly BusinessUnitOption[]
+      >,
+    createCategory: (input: CreateExpenseCategoryInput): Promise<ExpenseCategoryAdminDto> =>
+      ipcRenderer.invoke(
+        channels.expense.createCategory,
+        input,
+      ) as Promise<ExpenseCategoryAdminDto>,
+    updateCategoryName: (input: UpdateExpenseCategoryInput): Promise<ExpenseCategoryAdminDto> =>
+      ipcRenderer.invoke(
+        channels.expense.updateCategoryName,
+        input,
+      ) as Promise<ExpenseCategoryAdminDto>,
+    toggleCategoryActive: (input: ToggleExpenseCategoryInput): Promise<ExpenseCategoryAdminDto> =>
+      ipcRenderer.invoke(
+        channels.expense.toggleCategoryActive,
+        input,
+      ) as Promise<ExpenseCategoryAdminDto>,
+    listCategoriesAdmin: (): Promise<readonly ExpenseCategoryAdminDto[]> =>
+      ipcRenderer.invoke(channels.expense.listCategoriesAdmin) as Promise<
+        readonly ExpenseCategoryAdminDto[]
       >,
   },
   cashSession: {

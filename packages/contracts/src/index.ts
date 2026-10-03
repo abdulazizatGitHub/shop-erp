@@ -56,6 +56,10 @@ export {
   ExpenseDto,
   ExpenseCategoryDto,
   ListExpensesInput,
+  CreateExpenseCategoryInput,
+  UpdateExpenseCategoryInput,
+  ToggleExpenseCategoryInput,
+  ExpenseCategoryAdminDto,
 } from './expense/expense.js';
 
 export {
