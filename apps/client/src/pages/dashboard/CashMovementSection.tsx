@@ -217,52 +217,68 @@ export function CashMovementSection({ sessionDate }: CashMovementSectionProps): 
             const alreadyReversed = reversedIds.has(m.id);
             const isReversal = m.reversesId !== null;
             return (
-              <div key={m.id} className="flex items-center justify-between gap-3 text-sm">
-                <div className="flex-1">
+              <div
+                key={m.id}
+                data-testid="cash-movement-row"
+                className="flex flex-nowrap items-center gap-3 text-sm"
+              >
+                <div className="min-w-0 flex-1 truncate">
                   <span className="font-mono text-xs text-ink-faint">{m.docNo}</span>{' '}
                   <span className="text-ink">{description}</span>
-                  <p className="text-xs text-ink-faint">{m.note}</p>
+                  <p className="truncate text-xs text-ink-faint">{m.note}</p>
                 </div>
-                <MoneyDisplay paisaValue={m.amountPaisa} tone={m.amountPaisa < 0 ? 'out' : 'in'} />
-                {reversingId === m.id ? (
-                  <div className="flex items-center gap-2">
-                    <TextInput
-                      value={reversalNote}
-                      placeholder="Reason for correction"
-                      onChange={(e) => {
-                        setReversalNote(e.target.value);
-                      }}
-                    />
-                    <Button
-                      variant="primary"
-                      disabled={busy || reversalNote.trim().length === 0}
-                      onClick={() => {
-                        void handleReverse(m.id);
-                      }}
-                    >
-                      Confirm
-                    </Button>
+                <div className="shrink-0">
+                  <MoneyDisplay
+                    paisaValue={m.amountPaisa}
+                    tone={m.amountPaisa < 0 ? 'out' : 'in'}
+                  />
+                </div>
+                <div
+                  data-testid="cash-movement-row-actions"
+                  className="flex shrink-0 items-center gap-2"
+                >
+                  {reversingId === m.id ? (
+                    <>
+                      <div className="w-32 shrink-0">
+                        <TextInput
+                          value={reversalNote}
+                          placeholder="Reason for correction"
+                          onChange={(e) => {
+                            setReversalNote(e.target.value);
+                          }}
+                        />
+                      </div>
+                      <Button
+                        variant="primary"
+                        disabled={busy || reversalNote.trim().length === 0}
+                        onClick={() => {
+                          void handleReverse(m.id);
+                        }}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setReversingId(null);
+                          setReversalNote('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
                     <Button
                       variant="secondary"
+                      disabled={alreadyReversed || isReversal}
                       onClick={() => {
-                        setReversingId(null);
-                        setReversalNote('');
+                        setReversingId(m.id);
                       }}
                     >
-                      Cancel
+                      Reverse
                     </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    disabled={alreadyReversed || isReversal}
-                    onClick={() => {
-                      setReversingId(m.id);
-                    }}
-                  >
-                    Reverse
-                  </Button>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}

@@ -180,6 +180,21 @@ containing a business `if` has the rule in the wrong file.
   script's committed test sale advanced `document_sequence.next_number`
   past a doc number that then had to stay forever unissued once the test
   row was deleted.
+- **Before running `npm rebuild` or `npm test` after a native-module
+  build failure, check for stray Electron processes first.** Symptom:
+  a `better-sqlite3`/`better_sqlite3.node` test failure with
+  `NODE_MODULE_VERSION` mismatch, right after an Electron build/dev run
+  (`electron-rebuild` compiles the module against Electron's Node ABI,
+  not plain Node's — the next plain `vitest` run then fails against
+  that ABI). If a left-running `electron.exe` is still holding the
+  `.node` file open, `npm rebuild` itself fails with `EBUSY`/`EPERM`
+  before it ever gets the chance to fix the mismatch. Run
+  `tasklist | findstr electron` first; kill any processes running from
+  this repo's own `node_modules\electron\dist\electron.exe` (confirm
+  the path before killing — never kill a process you haven't
+  identified), then re-run `npm rebuild better-sqlite3`. Found in
+  Phase 17.5/17, 2026-09-27: four stray `electron.exe` processes from a
+  prior dev/build run were locking the file.
 
 ### Before ending the session
 

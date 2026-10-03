@@ -166,4 +166,51 @@ describe('CashMovementSection', () => {
       expect(reverse).toHaveBeenCalledWith({ originalId: 'm1', note: 'Data entry mistake' });
     });
   });
+
+  // H1 (housekeeping): with the reversal input open, the row previously
+  // had no width bound on its left label or the inline TextInput, so at
+  // normal dashboard card width the row's content (doc_no/description +
+  // amount + note field + Confirm + Cancel) exceeded the container's
+  // width. jsdom has no real layout engine (scrollWidth/clientWidth are
+  // always 0 in this environment), so an actual pixel overflow can't be
+  // measured here — this instead asserts the structural fix directly:
+  // the row stays a single flex-nowrap line, the left label is
+  // constrained to shrink/truncate rather than force the row wider, and
+  // both the money and the action zone (Reverse, or the input + Confirm
+  // + Cancel) are fixed-width zones that never grow with their content.
+  it('keeps the movement row on one line with the reversal input open — no wrap, left label truncates', async () => {
+    listForDateRange.mockResolvedValue([
+      {
+        id: 'm1',
+        docNo: 'CM-0001',
+        movementDate: '2026-08-15',
+        movementType: 'other',
+        amountPaisa: -50000,
+        note: 'A very long note explaining exactly why this cash left the drawer today, in detail',
+        reversesId: null,
+        createdAt: '2026-08-15T10:00:00.000Z',
+      },
+    ]);
+
+    render(<CashMovementSection sessionDate="2026-08-15" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reverse' }));
+
+    const row = screen.getByTestId('cash-movement-row');
+    expect(row.className).toContain('flex-nowrap');
+
+    const leftLabel = row.querySelector(':scope > div:first-child');
+    expect(leftLabel?.className).toContain('min-w-0');
+    expect(leftLabel?.className).toContain('truncate');
+
+    const actions = screen.getByTestId('cash-movement-row-actions');
+    expect(actions.className).toContain('shrink-0');
+    // The reversal input's own wrapper is a fixed width, not full-width —
+    // it must never expand to fit a long note and push Confirm/Cancel
+    // out of the row.
+    const inputWrapper = actions.querySelector('.w-32');
+    expect(inputWrapper).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
 });
