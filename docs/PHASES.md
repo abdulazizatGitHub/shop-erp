@@ -491,3 +491,139 @@ entirely.
 
 See `docs/phases/PHASE_16.md` for full sub-phase detail, the 12 owner
 decisions (OD-16-1–OD-16-12), ADR-0014/ADR-0015, and verification output.
+
+---
+
+## Phase 17 — Settings Backlog
+
+**Completed: 2026-09-27.** Settings backlog: negative-stock policy
+(warn/block), low-stock alerts with dashboard widget (later extended to
+a four-state stock taxonomy), rows-per-page, expense categories,
+receipt paper-size wiring into invoice/payment-receipt prints,
+payment-method enable/disable toggles.
+
+- P17-1: `negativeStockPolicy` setting — one core summed/
+  warehouse-scoped predicate, block+warn unified (S17-SALE-1)
+- P17-2: Low-stock badge + default threshold + Dashboard card, with
+  `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1)
+- P17-3: Rows-per-page via one shared `useRowsPerPage()` hook/context,
+  default 10 everywhere including `CustomerLedgerTable` (S17-REP-1,
+  Q17-2 — a deliberate 15→10 normalization)
+- P17-4: Expense Categories Settings section, name-only form
+  (S17-EXP-1, Q-DRAWING/A17-3) — unblocked once BUG-31 (Phase 17.5) was
+  fixed
+- P17-5: Wired the existing `receiptPaperSize` setting into sale
+  invoice + payment receipt prints (S17-PRINT-2a) — owner-machine print
+  verification passed (A4 and A5 both confirmed correct)
+- P17-7: Payment-method enable/disable, cash-cannot-disable enforced at
+  the Zod boundary, picker falls back to Cash (S17-EXP-4, A17-5)
+- P17-2b: Four-state stock alert taxonomy (`'out' | 'low' |
+'not_stocked' | null`), replacing the single `isLowStock` boolean
+  (Q17-7 ANSWERED) — distinguishes "never received" from "running low"
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 1057/1057 (baseline 845/845)
+- [x] Negative-stock policy: 'warn' allows with confirmation, 'block'
+      refuses outright, scoped to counter sales only — server-side
+      guarantee proven directly, not UI-only
+- [x] Low-stock badge/filter/Dashboard count agree exactly on the same
+      underlying rule, computed once server-side; custody items (stock
+      held by a technician) read as a real 0 at the counter, not null
+- [x] Every report/list table reads rows-per-page from the one shared
+      hook; changing the setting updates every open table live, no
+      reload
+- [x] Expense categories: create/rename/deactivate/reactivate
+      (name-only form); deactivating a category never edits a
+      historical `expense` row — reports keep showing the historical
+      amount
+- [x] Sale invoice and payment receipt both honour the paper-size
+      setting (A4/A5) — confirmed on the owner's own printer
+- [x] Disabling a non-cash payment method hides it from the picker only
+      (never enforced server-side, never touches a stored historical
+      `payment.method`); Cash cannot be disabled, enforced at the Zod
+      boundary; the picker falls back to Cash if the previously-shown
+      method becomes disabled
+- [x] `stockAlert` distinguishes a never-received item (`'not_stocked'`,
+      grey) from one that's run out (`'out'`, red) or is running low
+      (`'low'`, yellow) — the Dashboard shows both counts separately
+
+See `docs/phases/PHASE_17.md` for full task breakdown, the 7 owner
+decisions (Q17-1–Q17-7), and verification output.
+
+---
+
+## Phase 17.5 — Drawer Cash Movements
+
+**Completed: 2026-09-27.** Cash drawer movements: BUG-31 (no way to
+record cash physically removed from/added to the drawer for a non-sale
+reason) and BUG-32 (`getCashBookReport`'s cash filter gaps) both fixed;
+a single-cash-session-open-at-a-time invariant enforced.
+
+- Append-only `cash_movement` table (migration `0021`) — bank deposits,
+  owner draws, float top-ups, and a free-form "other" category, each
+  requiring a note; corrections are new reversing rows, never edits
+- New `expected_cash` formula term folds signed cash movements directly
+  into the cash session's close-time reconciliation (BUG-31, fixed)
+- `getCashBookReport` cash-filter gap fixed — `sale`/`payment`(in)
+  branches now correctly filter to `method='cash'`, two previously-
+  missing outflow branches added (`expense`, `payment` direction='out')
+  (BUG-32, fixed)
+- Single-open-session invariant (review round 4, R8): `openSession`
+  refuses a second session (same date or a different one still open);
+  `getOpenSession()` throws rather than silently picking one if the
+  invariant is ever violated
+- "Cash In / Cash Out" UI on the dashboard's Cash Session widget, plus
+  a closed-session "Add note" control for the one scenario (reversal
+  past session close) that has no other recourse
+
+**Exit criteria:**
+
+- [x] `npm run verify` passes — 964/964 at close of this sub-phase
+- [x] A cash movement changes the cash session's `expectedCashPaisa` by
+      exactly its signed amount — hand-calculated and compared
+- [x] Reversing a movement inserts a new row negating the original;
+      the original is never edited; reversing an already-reversed
+      movement is refused
+- [x] A cash movement can only be recorded against the currently-open
+      session; at most one session can ever be open at a time
+- [x] `getCashBookReport`'s independently-computed net for a mixed day
+      equals `closeSession`'s own `expectedCashPaisa` for that day —
+      proven directly, not just two separately hand-calculated figures
+- [x] Owner click-through passed
+
+See `docs/phases/PHASE_17_5.md` and
+`docs/decisions/ADR-0016-cash-drawer-movements.md` for full detail.
+
+---
+
+## Phase 18 — Go-live preparation
+
+**Goal:** Retire the paper register. Every criterion below must pass —
+this phase has no code of its own; it is entirely verification against
+the real shop.
+
+**Exit criteria (all must pass before the paper register is retired):**
+
+1. [ ] **Parallel run** — at least 5 consecutive business days where
+       every transaction is entered in both the paper register and the
+       system, and end-of-day cash matches to within Rs 100.
+2. [ ] **Pull-the-plug test** — the SQLite DB file copied to a second
+       machine and opened with no data loss; restore from backup
+       confirmed working.
+3. [ ] **Staff training** — every staff member who will use the system
+       can complete a sale, record a cash movement, and look up a
+       customer's balance without help.
+4. [ ] **Urdu cheat sheet** — one printed A4 page covering the 5 daily
+       workflows (open session, make a sale, receive payment, record
+       cash movement, close session). Owner approves the wording.
+5. [ ] **BUG-33 (sale-dating after session close)** — owner confirms
+       the workflow: does he close the session before or after the
+       last sale of the day? If after, BUG-33 is a non-issue in
+       practice; if before, a warning banner on the Sales screen is
+       required before go-live.
+6. [ ] `npm run verify` exits 0 on the go-live machine.
+
+See `PROJECT.md`'s "Go-live checklist" section (mirrors this list) for
+the live tracking copy — update that one as each criterion clears, not
+this historical plan entry.

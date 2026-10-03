@@ -41,6 +41,73 @@
 
 ---
 
+## [2026-10-03] Session 101 — Phase 17 and 17.5 closed, Phase 18 (go-live preparation) opened
+
+**Goal:** Documentation only, no code. Close out Phase 17 and Phase
+17.5 in `docs/PHASES.md` (owner accepted both), and open Phase 18 —
+go-live preparation — with its 6 exit criteria, mirrored into a new
+`PROJECT.md` "Go-live checklist" section for live tracking.
+
+**Done:**
+
+- `docs/PHASES.md`: added the missing Phase 17 and Phase 17.5 entries
+  (neither had ever been added to this file during their own build
+  sessions — only `docs/phases/PHASE_17.md`/`PHASE_17_5.md` existed).
+  Both marked **Completed: 2026-09-27** with a one-line summary each
+  (Phase 17: settings backlog — negative-stock policy, low-stock
+  alerts, rows-per-page, expense categories, paper-size wiring,
+  payment-method toggles, four-state stock taxonomy; Phase 17.5: cash
+  drawer movements, BUG-31/BUG-32 fixed, single-open-session
+  invariant) and their own exit-criteria checklists, matching every
+  other phase's format in this file. Added a new Phase 18 — Go-live
+  preparation — entry with the 6 exit criteria the owner specified
+  verbatim (parallel run, pull-the-plug test, staff training, Urdu
+  cheat sheet, BUG-33 owner decision, `npm run verify` on the go-live
+  machine).
+- `PROJECT.md` §3 (Phase status table): added rows for Phase 17, 17.5
+  (both ✅ COMPLETE, one-line summaries matching the table's existing
+  style) and Phase 18 (⏳ NOT STARTED). New §3.5 "Go-live checklist"
+  section — the live tracking copy of Phase 18's 6 criteria, to be
+  checked off here as each clears rather than in the phase-plan
+  entry itself.
+- `PROGRESS.md` — this entry.
+
+**Verified:** Documentation-only change — no code, no migrations, no
+test suite impact. `git status` confirms only the 3 doc files touched.
+
+**Not done / deferred:** None of Phase 18's 6 criteria were attempted
+this session — they require the real shop (parallel run, staff
+training) or a decision only the owner can make (BUG-33's workflow
+question), none of which this session could do.
+
+**Bugs found:** none new.
+
+**Decisions taken:** None — this session only recorded decisions and
+closures the owner had already made (Phase 17/17.5 acceptance, the
+Phase 18 criteria list) verbatim.
+
+**Blocked on:** nothing for this session's own scope. Phase 18 itself
+is blocked on the owner's time (parallel run, staff training) and one
+decision (BUG-33's close-before-or-after-last-sale workflow question).
+
+**Next session should:** await the owner's progress on Phase 18's
+criteria — nothing in this codebase is actionable until at least one
+of them is ready to verify (most likely BUG-33's workflow question,
+answerable without waiting on the parallel run).
+
+**Checklist:**
+
+- [x] All verification checks passed (doc-only; no test suite to run)
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (Phase 18 opened, tracked in
+      PROJECT.md §3.5)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (unaffected — doc-only change)
+
+---
+
 ## [2026-10-03] Session 100 — P17-5 print verification confirmed, Phase 17 P17-2b built: four-state stock alert taxonomy
 
 **Goal:** Two doc fixes (remove P17-5's "pending owner-machine print
