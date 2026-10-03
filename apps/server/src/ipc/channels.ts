@@ -20,6 +20,7 @@ export const channels = {
     topSelling: 'item:topSelling',
     priceHistory: 'item:priceHistory',
     lowStockCount: 'item:lowStockCount',
+    notStockedCount: 'item:notStockedCount',
   },
   party: {
     create: 'party:create',

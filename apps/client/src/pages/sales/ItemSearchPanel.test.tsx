@@ -30,7 +30,7 @@ function makeItem(overrides: Partial<ItemDto>): ItemDto {
     stockOnHandMilli: 10000,
     counterStockMilli: 10000,
     reorderLevelMilli: null,
-    isLowStock: false,
+    stockAlert: null,
     ...overrides,
   };
 }

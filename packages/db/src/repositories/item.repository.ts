@@ -1,6 +1,6 @@
 import { sql, type Kysely } from 'kysely';
 import { formatDisplayDocNumber, newId } from '@shop/shared';
-import { isLowStock } from '@shop/core';
+import { computeStockAlert } from '@shop/core';
 import type {
   ItemRecord,
   ItemRepositoryPort,
@@ -174,10 +174,13 @@ export class KyselyItemRepository implements ItemRepositoryPort {
       stockOnHandMilli: null,
       counterStockMilli: null,
       reorderLevelMilli: row.reorderLevel,
-      // counterStockMilli is always null here, and @shop/core's isLowStock
-      // excludes a null counterStockMilli unconditionally — no threshold
-      // fetch needed to know this is always false for this method.
-      isLowStock: false,
+      // counterStockMilli is always null here, so computeStockAlert's
+      // defaultThresholdMilli branch never runs — the dummy 0 below is
+      // never read. P17-2b (Q17-7): this is 'not_stocked' when
+      // reorderLevel is set, not unconditionally false/null the way the
+      // old boolean rule collapsed it — no threshold fetch needed to
+      // know that.
+      stockAlert: computeStockAlert(row.trackStock === 1, null, row.reorderLevel, 0),
     };
   }
 
@@ -278,7 +281,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         stockOnHandMilli: trackStock ? row.stockOnHandMilli : null,
         counterStockMilli,
         reorderLevelMilli: row.reorderLevel,
-        isLowStock: isLowStock(
+        stockAlert: computeStockAlert(
           trackStock,
           counterStockMilli,
           row.reorderLevel,
@@ -372,7 +375,7 @@ export class KyselyItemRepository implements ItemRepositoryPort {
         stockOnHandMilli: trackStock ? row.stockOnHandMilli : null,
         counterStockMilli,
         reorderLevelMilli: row.reorderLevel,
-        isLowStock: isLowStock(
+        stockAlert: computeStockAlert(
           trackStock,
           counterStockMilli,
           row.reorderLevel,

@@ -12,6 +12,9 @@ vi.mock('../lib/ipc.js', () => ({
       topSelling: vi.fn().mockResolvedValue([]),
       search: vi.fn().mockResolvedValue([]),
       lowStockCount: vi.fn().mockResolvedValue(2),
+      // P17-2b (docs/phases/PHASE_17.md §9) — LowStockWidget now fetches
+      // this unconditionally alongside lowStockCount.
+      notStockedCount: vi.fn().mockResolvedValue(0),
     },
     setting: {
       getNegativeStockPolicy: vi.fn().mockResolvedValue('warn'),

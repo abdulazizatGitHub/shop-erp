@@ -486,6 +486,7 @@ export interface ElectronApi {
     readonly topSelling: (input: ItemTopSellingInput) => Promise<readonly ItemDto[]>;
     readonly priceHistory: (input: ItemIdInput) => Promise<readonly ItemPriceHistoryRecord[]>;
     readonly lowStockCount: () => Promise<number>;
+    readonly notStockedCount: () => Promise<number>;
   };
   readonly customer: {
     readonly create: (input: CreateCustomerInput) => Promise<{ id: string; partyCode: string }>;

@@ -6,6 +6,10 @@ vi.mock('../../lib/ipc.js', () => ({
   ipc: {
     item: {
       lowStockCount: vi.fn(),
+      // P17-2b (docs/phases/PHASE_17.md §9) — defaulted to resolve 0 so
+      // every pre-existing test below runs unmodified (no "Not stocked
+      // yet" line expected unless a test overrides this).
+      notStockedCount: vi.fn().mockResolvedValue(0),
     },
   },
 }));
@@ -14,6 +18,7 @@ import { ipc } from '../../lib/ipc.js';
 import { LowStockWidget } from './LowStockWidget.js';
 
 const lowStockCount = vi.mocked(ipc.item.lowStockCount);
+const notStockedCount = vi.mocked(ipc.item.notStockedCount);
 
 afterEach(() => {
   cleanup();
@@ -57,5 +62,26 @@ describe('LowStockWidget', () => {
     render(<LowStockWidget onNavigateToItems={() => {}} />);
 
     expect(await screen.findByText('Unable to load')).toBeTruthy();
+  });
+
+  // P17-2b (docs/phases/PHASE_17.md §9/§8, Q17-7 ANSWERED).
+  it('shows the "Not stocked yet" line when the count is greater than 0', async () => {
+    lowStockCount.mockResolvedValue(3);
+    notStockedCount.mockResolvedValue(2);
+
+    render(<LowStockWidget onNavigateToItems={() => {}} />);
+
+    expect(await screen.findByText('Not stocked yet: 2')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+  });
+
+  it('hides the "Not stocked yet" line entirely when the count is 0', async () => {
+    lowStockCount.mockResolvedValue(3);
+    notStockedCount.mockResolvedValue(0);
+
+    render(<LowStockWidget onNavigateToItems={() => {}} />);
+
+    await screen.findByText('3');
+    expect(screen.queryByText(/Not stocked yet/)).toBeNull();
   });
 });

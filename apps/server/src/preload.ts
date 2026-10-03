@@ -220,6 +220,8 @@ contextBridge.exposeInMainWorld('api', {
       >,
     lowStockCount: (): Promise<number> =>
       ipcRenderer.invoke(channels.item.lowStockCount) as Promise<number>,
+    notStockedCount: (): Promise<number> =>
+      ipcRenderer.invoke(channels.item.notStockedCount) as Promise<number>,
   },
   customer: {
     create: (input: CreateCustomerInput): Promise<CreateCustomerResult> =>

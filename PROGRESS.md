@@ -41,6 +41,122 @@
 
 ---
 
+## [2026-10-03] Session 100 — P17-5 print verification confirmed, Phase 17 P17-2b built: four-state stock alert taxonomy
+
+**Goal:** Two doc fixes (remove P17-5's "pending owner-machine print
+verification" caveat now that it passed; extend CLAUDE.md's
+NODE_MODULE_VERSION note for the no-stray-process case), then build
+P17-2b only — replacing `ItemDto.isLowStock: boolean` with
+`stockAlert: 'out' | 'low' | 'not_stocked' | null` (Q17-7 ANSWERED).
+
+**Done — doc fixes (commit `bd4048e`):**
+
+- `docs/phases/PHASE_17.md`: P17-5 marked fully DONE — owner-machine
+  print verification confirmed A5 and A4 both render correctly.
+  Removed the "pending" caveat from the task table, §8 exit criteria,
+  and the phase header.
+- `CLAUDE.md`: the `NODE_MODULE_VERSION`/`better_sqlite3.node` note now
+  also covers the no-stray-process case — a plain `npm rebuild
+better-sqlite3` is sufficient when nothing is holding the file open,
+  which recurred this session with `tasklist` showing no `electron.exe`
+  at all (traced to an earlier `electron-rebuild` step leaving the
+  module compiled against Electron's ABI).
+
+**Done — P17-2b:**
+
+- **Pre-code report** (per instruction): every one of the 18
+  `isLowStock` call sites across `@shop/core`/`@shop/db`/
+  `apps/server`/`apps/client` was listed by file:line — 12 were pure
+  renames, 3 needed real logic changes (`low-stock.ts` itself,
+  `item.repository.ts`'s `getItemById` hardcode, `StockBadge.tsx`'s new
+  grey branch), 1 was a genuinely new addition
+  (`LowStockWidget.tsx`'s second count). `/mnt/user-data/uploads` (the
+  owner's real item CSV) was not available in this environment —
+  reported the dev-DB count instead (7 seeded items, 1 with
+  `reorder_level` set, that same 1 with zero `stock_movement` rows
+  ever), explicitly flagged as not representative.
+- `packages/core/src/item/low-stock.ts`: `isLowStock` → `computeStockAlert`,
+  returning the 4-state `StockAlert` type per the exact rules table in
+  `docs/phases/PHASE_17.md` §9 (Q17-7).
+- `ItemRecord.isLowStock: boolean` → `ItemRecord.stockAlert: StockAlert`;
+  `ItemDto.isLowStock: z.boolean()` → `ItemDto.stockAlert:
+z.enum(['out','low','not_stocked']).nullable()`.
+- `item.repository.ts`'s three `ItemRecord`-returning methods
+  (`getItemById`, `searchItems`, `topSellingItems`) all call
+  `computeStockAlert` — `getItemById`'s old hardcoded `isLowStock: false`
+  is gone; it was wrong under the new rule whenever `reorderLevel` is
+  set on a never-moved item (now correctly `'not_stocked'`).
+- `item.handler.ts`: `runLowStockCount` filters `'out' || 'low'` (same
+  external behaviour as before for every existing scenario); new
+  `runNotStockedCount` + new `item:notStockedCount` channel — a new
+  channel, not a change to `item:lowStockCount`'s existing contract,
+  so `LowStockWidget.test.tsx`'s 4 pre-existing tests needed zero body
+  changes.
+- `ItemsPage.tsx`'s "Low stock only" filter: `'out' || 'low'` (same
+  user-visible scope; `'not_stocked'` items excluded — "never received"
+  isn't "running low").
+- `resolveStockBadge` (`StockBadge.tsx`) extended, not rewritten: new
+  grey branch for `counterStockMilli === null && stockAlert ===
+'not_stocked'` alongside the unchanged red/yellow/green/null branches.
+  `ItemsTableRow.tsx`/`ItemProductCard.tsx` both just pass
+  `item.stockAlert` through.
+- `LowStockWidget.tsx`: a second count (`notStockedCount()`), rendering
+  "Not stocked yet: N" only when N > 0.
+- Tests: `low-stock.test.ts` (7, was 6), `StockBadge.test.ts` (6, was
+  4), `item.handler.test.ts` gained a new `runNotStockedCount` describe
+  block (4 tests, including the priority scenarios: a `not_stocked`
+  item is counted by the new function, excluded from
+  `runLowStockCount`, and excluded from the Items-list filter),
+  `LowStockWidget.test.tsx` gained 2 tests (N > 0 shows the line, N = 0
+  hides it entirely). All pre-existing P17-2 tests pass with the same
+  scenarios and same outcomes (values adapted from boolean to the new
+  enum where the type itself changed) — nothing deleted or weakened.
+- `docs/phases/PHASE_17.md` §9 marked DONE with every test named; §6's
+  T2 table row struck through with a DONE note; phase header updated.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **1057/1057** (up from 1048 before this round: +9 new).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both succeed, no errors.
+
+**Not done / deferred:** nothing — this closes every remaining item in
+Phase 17's T1 scope plus the one T2 follow-up (P17-2b) that was
+explicitly scheduled.
+
+**Bugs found:** none new. (The `NODE_MODULE_VERSION` mismatch recurred
+once more mid-session, confirmed no stray `electron.exe` this time,
+fixed with a plain `npm rebuild better-sqlite3` — exactly the
+no-stray-process case just added to CLAUDE.md.)
+
+**Decisions taken:** `getItemById`'s stock-alert computation now goes
+through `computeStockAlert` with a dummy `defaultThresholdMilli` of 0
+rather than fetching the real shop default — safe because
+`counterStockMilli` is always `null` for this method (confirmed: it
+has zero callers today), so that branch of the function never reads
+the threshold argument at all.
+
+**Blocked on:** nothing.
+
+**Next session should:** await fresh authorization. P17-6 and P17-8
+remain the only documented-but-not-built T2 items; otherwise Phase 17
+is now fully built.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (not touched this round — no
+      bug/status entry there was stale as a result of this change)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P17-6/P17-8 ready, awaiting
+      authorization)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (1057/1057)
+
+---
+
 ## [2026-10-03] Session 99 — D1 doc note, Phase 17 P17-5 + P17-7 built: receipt paper size wired into invoice/payment-receipt prints, payment-method enable/disable
 
 **Goal:** D1 (a one-line `@future` JSDoc addition, no code/test change)

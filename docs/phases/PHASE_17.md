@@ -38,8 +38,11 @@ prints, same way Reprint already did it; owner-machine print
 verification passed (A5 and A4 both confirmed correct). **P17-7 is
 DONE — 2026-10-03:** payment-method enable/disable,
 cash-cannot-disable enforced at the Zod boundary, picker falls back to
-Cash — see §6/§8, 1048/1048 tests. P17-2b remains approved, not yet
-built.
+Cash — see §6/§8, 1048/1048 tests. **P17-2b is DONE — 2026-10-03:**
+four-state stock alert taxonomy (`'out' | 'low' | 'not_stocked' |
+null`), replacing the old `isLowStock` boolean — see §9, 1057/1057
+tests. This closes every item in Phase 17's T1 scope plus this one T2
+follow-up.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -786,11 +789,11 @@ reflecting P17-1's re-estimate and P17-7's addition).
 
 ### T2 — stays documented, not built this phase
 
-| Task ID | Description                                                                            | Files likely touched                                                                                                                                                                                               | Migration? | Effort |
-| ------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------ |
-| P17-6   | Wire `receiptPaperSize` into purchase-order + customer-statement prints (S17-PRINT-2b) | `purchase-pdf.ts` (needs a size parameter added first), `customer-statement-pdf.ts`, `purchase-print.handler.ts`, `print.handler.ts` (customer-statement branch)                                                   | No         | M      |
-| P17-8   | Half-day wage fraction + Leave/Holiday paid toggles (S17-STAFF-2, S17-STAFF-3)         | `wage.service.ts` (read settings instead of hardcoded constants), `setting.repository.ts`/`setting.handler.ts`, new `sections/PayrollSettingsSection.tsx`                                                          | No         | S      |
-| P17-2b  | New "Not stocked yet" badge/count state for never-received items (Q17-7 follow-up, §9) | `packages/core/src/item/low-stock.ts` (replace `isLowStock` boolean with a `stockAlert` enum), `item.repository.ts`, `packages/contracts/src/item/item.ts`, `StockBadge.tsx`, `LowStockWidget.tsx`/`ItemsPage.tsx` | No         | S/M    |
+| Task ID | Description                                                                                                               | Files likely touched                                                                                                                                                                                               | Migration? | Effort |
+| ------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------ |
+| P17-6   | Wire `receiptPaperSize` into purchase-order + customer-statement prints (S17-PRINT-2b)                                    | `purchase-pdf.ts` (needs a size parameter added first), `customer-statement-pdf.ts`, `purchase-print.handler.ts`, `print.handler.ts` (customer-statement branch)                                                   | No         | M      |
+| P17-8   | Half-day wage fraction + Leave/Holiday paid toggles (S17-STAFF-2, S17-STAFF-3)                                            | `wage.service.ts` (read settings instead of hardcoded constants), `setting.repository.ts`/`setting.handler.ts`, new `sections/PayrollSettingsSection.tsx`                                                          | No         | S      |
+| P17-2b  | ~~New "Not stocked yet" badge/count state for never-received items (Q17-7 follow-up, §9)~~ — **DONE, 2026-10-03, see §9** | `packages/core/src/item/low-stock.ts` (replace `isLowStock` boolean with a `stockAlert` enum), `item.repository.ts`, `packages/contracts/src/item/item.ts`, `StockBadge.tsx`, `LowStockWidget.tsx`/`ItemsPage.tsx` | No         | S/M    |
 
 **Settings-nav wiring** (the new groups/items from §5) is folded into
 whichever of P17-1/P17-3/P17-4/P17-7 lands first — no separate task.
@@ -1101,12 +1104,12 @@ rowsPerPage`). `reports-display-setting.repository.test.ts` (5
       no new pdfkit code path, same template both already shared at
       A4). `print-invoice.ts`'s `PrintInvoiceDeps`/`print-payment-receipt.ts`'s
       `PrintPaymentReceiptDeps` each gained a `getPageSize: () =>
-  Promise<ReceiptPageSize>` dependency, called once per print and
+Promise<ReceiptPageSize>` dependency, called once per print and
       passed to `renderPdf` — exactly the shape
       `print-receipt.ts`'s `PrintReceiptDeps` already used for the
       Reprint path. `invoice.handler.ts` and `print.handler.ts`'s
       payment-receipt branch now pass `getPageSize: () =>
-  getReceiptPaperSize(kysely, deps.tenantId)`, the same call
+getReceiptPaperSize(kysely, deps.tenantId)`, the same call
       `print.handler.ts:56` already made for Reprint. Tests:
       `invoice-pdf.test.ts` (+1, now 3) and new
       `payment-receipt-pdf.test.ts` (3, new) assert the real PDF bytes'
@@ -1179,7 +1182,7 @@ rowsPerPage`). `reports-display-setting.repository.test.ts` (5
 
 ---
 
-## 9. Follow-up task P17-2b — Q17-7 stock-alert taxonomy (not part of this phase's build)
+## 9. Follow-up task P17-2b — Q17-7 stock-alert taxonomy — **DONE, 2026-10-03**
 
 **Q17-7, ANSWERED (developer decision, 2026-09-27 — owner to confirm
 before P17-2b is built):** replaces the provisional P17-2 answer
@@ -1228,9 +1231,85 @@ shared/StockBadge.tsx`, post-P17-2-review-fix): `null` → no badge
   — the existing red/yellow states are unchanged**, confirming the
   taxonomy above extends rather than duplicates today's badge.
 
-**Not built this session** — logged here and in §6's T2 table only, per
-explicit instruction. STOP condition from the cash-removal check (§10)
-took priority; P17-4 itself was also not built this session as a result.
+**Not built that session** — logged here and in §6's T2 table only, per
+explicit instruction at the time. STOP condition from the cash-removal
+check (§10) took priority; P17-4 itself was also not built that
+session as a result.
+
+**BUILT — 2026-10-03.** Before writing any code: every consumer of the
+old `isLowStock` boolean was listed by file:line (18 call sites across
+`@shop/core`/`@shop/db`/`apps/server`/`apps/client`) and reported —
+12 were pure renames, 3 needed real logic changes
+(`low-stock.ts` itself, `item.repository.ts`'s `getItemById` hardcode,
+`StockBadge.tsx`'s new grey branch), and 1 was a genuinely new
+addition (`LowStockWidget.tsx`'s second count) rather than a rename.
+`/mnt/user-data/uploads` (the owner's real item CSV) was not available
+in this environment — reported the dev-DB count instead, flagged as
+not representative (7 seeded items total; 1 with `reorder_level` set;
+that same 1 with zero `stock_movement` rows ever, i.e. the exact
+`not_stocked` case).
+
+- `packages/core/src/item/low-stock.ts`: `isLowStock` replaced with
+  `computeStockAlert`, returning `StockAlert = 'out' | 'low' |
+'not_stocked' | null` — the exact rules table above, implemented
+  directly (no behavior guesswork).
+- `ItemRecord.isLowStock: boolean` → `ItemRecord.stockAlert: StockAlert`
+  (`packages/core/src/item/item.repository.port.ts`); `ItemDto.isLowStock:
+z.boolean()` → `ItemDto.stockAlert: z.enum(['out','low','not_stocked']).nullable()`
+  (`packages/contracts/src/item/item.ts`).
+- `item.repository.ts`'s three `ItemRecord`-returning methods
+  (`getItemById`, `searchItems`, `topSellingItems`) all call
+  `computeStockAlert` — `getItemById`'s old hardcoded `isLowStock: false`
+  is gone (it was wrong under the new rule whenever `reorderLevel` is
+  set on an item with no history; now correctly resolves to
+  `'not_stocked'` in that case).
+- `item.handler.ts`: `runLowStockCount` now filters `stockAlert ===
+'out' || stockAlert === 'low'` (same external behaviour as the old
+  boolean filter for every existing scenario); new `runNotStockedCount`
+  counts `stockAlert === 'not_stocked'`, behind a new `item:notStockedCount`
+  channel — a new channel, not a change to `item:lowStockCount`'s
+  existing contract, so `LowStockWidget.test.tsx`'s 4 pre-existing tests
+  needed zero changes to their bodies (only the shared `ipc.js` mock
+  factory gained one more key, defaulted to resolve `0`).
+- `ItemsPage.tsx`'s "Low stock only" filter: `stockAlert === 'out' ||
+stockAlert === 'low'` (unchanged user-visible scope — `'not_stocked'`
+  items are excluded, since "never received" isn't "running low").
+- `resolveStockBadge` (`StockBadge.tsx`) extended, not rewritten: new
+  parameter type `ItemDto['stockAlert']` in place of the old boolean;
+  one new branch — `counterStockMilli === null && stockAlert ===
+'not_stocked'` → `{ label: 'Not stocked yet', className: 'text-ink-faint' }`
+  (grey) — alongside the unchanged red/yellow/green/null branches.
+  `ItemsTableRow.tsx`/`ItemProductCard.tsx` both just pass
+  `item.stockAlert` through (pure renames, confirmed in the pre-code
+  report).
+- `LowStockWidget.tsx`: a second `useState`/`useEffect` pair calls the
+  new `notStockedCount()`, rendering "Not stocked yet: N" only when
+  N > 0 — hidden entirely at N = 0, independent of the existing count's
+  loading/error states.
+- Tests: `low-stock.test.ts` (7, was 6 — two scenarios for
+  `'not_stocked'` with and without a reorder level, rest adapted to
+  the new return type); `StockBadge.test.ts` (6, was 4 — the grey-badge
+  case plus the still-null case); `item.handler.test.ts` gained a new
+  `describe('runNotStockedCount', ...)` block (4 tests): counts a
+  never-received item with a reorder level set; that same item is
+  excluded from `runLowStockCount` (0, confirming the two counts are
+  disjoint); a never-received item with NO reorder level set is
+  excluded from `runNotStockedCount` too (plain `null`, not
+  `'not_stocked'`); a `not_stocked` item is excluded from the exact
+  `stockAlert === 'out' || 'low'` filter `ItemsPage.tsx` uses.
+  `LowStockWidget.test.tsx` gained 2 tests: the "Not stocked yet: N"
+  line shows when N > 0; it's hidden entirely at N = 0. All pre-existing
+  P17-2 tests (`low-stock.test.ts`'s original 6 scenarios adapted in
+  value only, `StockBadge.test.ts`'s original 4, `item.handler.test.ts`'s
+  `runLowStockCount` describe block's 6, `item.repository.test.ts`'s
+  `isLowStock`/custody assertions renamed to `stockAlert`, `ItemsPage.tsx`'s
+  filter, `App.test.tsx`'s 2 Dashboard-navigation tests) pass with the
+  same scenarios and same pass/fail outcomes — nothing deleted or
+  weakened, per instruction.
+- `npm run typecheck`/`npm run lint` clean. `npm test` —
+  **1057/1057** (up from 1048 before this round: +9 new). Both
+  `apps/client` and `apps/server` production builds pass with no
+  errors.
 
 ---
 

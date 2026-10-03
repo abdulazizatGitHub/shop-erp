@@ -56,9 +56,10 @@ export function ItemProductCard({
   const pill = resolveBusinessUnitPill(item.businessUnitId, lookups);
   // P17-1 (D17-3): counterStockMilli, never the all-warehouse
   // stockOnHandMilli — this badge must reflect what the counter can
-  // actually sell, not the unit's total owned stock. isLowStock is
-  // server-computed (P17-2 review fix) — never re-derived here.
-  const badge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.isLowStock);
+  // actually sell, not the unit's total owned stock. stockAlert is
+  // server-computed (P17-2 review fix, extended P17-2b) — never
+  // re-derived here.
+  const badge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.stockAlert);
   const isRepair = pill?.letter === 'R';
 
   return (

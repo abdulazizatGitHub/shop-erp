@@ -71,10 +71,14 @@ export function ItemsPage({ initialLowStockOnly = false }: ItemsPageProps): Reac
     loadItems();
   }, []);
 
-  // P17-2 review fix: `isLowStock` is a plain server-computed field on
-  // ItemDto (item.repository.ts, via @shop/core's isLowStock) — filtering
-  // on it here is a trivial boolean check, not a re-derivation of the
-  // rule. No pagination exists on this list (loadItems fetches the whole
+  // P17-2 review fix, extended P17-2b: `stockAlert` is a plain
+  // server-computed field on ItemDto (item.repository.ts, via
+  // @shop/core's computeStockAlert) — filtering on it here is a trivial
+  // check, not a re-derivation of the rule. "Low stock only" means
+  // 'out' + 'low', same scope as the old `isLowStock` boolean —
+  // 'not_stocked' items are excluded from this filter (never received
+  // isn't "running low"; the Dashboard surfaces that count separately).
+  // No pagination exists on this list (loadItems fetches the whole
   // catalogue in one call, no LIMIT anywhere in searchItems' SQL — see
   // item.repository.ts), so this filter always runs over the exact same
   // complete set runLowStockCount() counts over (item.handler.test.ts's
@@ -88,7 +92,7 @@ export function ItemsPage({ initialLowStockOnly = false }: ItemsPageProps): Reac
       );
     }
     if (lowStockOnly) {
-      result = result.filter((item) => item.isLowStock);
+      result = result.filter((item) => item.stockAlert === 'out' || item.stockAlert === 'low');
     }
     return result;
   }, [items, searchQuery, lowStockOnly]);

@@ -36,17 +36,38 @@ export interface ItemHandlerDeps {
  * P17-2 (docs/phases/PHASE_17.md §2.2, S17-DASH-1). Extracted as a plain
  * function so it can be tested directly (matching
  * customer-balance-import.handler.ts's precedent) — no electron mocking.
- * Counts `item.isLowStock` — the one field `KyselyItemRepository.searchItems`
- * already computes (via `@shop/core`'s pure `isLowStock`) for every
- * consumer (Items-list badge/filter, POS badge, this count). Never
+ * Counts `item.stockAlert` — the one field `KyselyItemRepository.searchItems`
+ * already computes (via `@shop/core`'s pure `computeStockAlert`) for
+ * every consumer (Items-list badge/filter, POS badge, this count). Never
  * re-derived here — review fix, see docs/phases/PHASE_17.md §8 P17-2.
+ *
+ * P17-2b (§9, Q17-7 ANSWERED): counts 'out' + 'low' only, same scope as
+ * the old `isLowStock` boolean — 'not_stocked' is a separate concept
+ * (never received at all, not "running low") with its own count, see
+ * `runNotStockedCount` below.
  */
 export async function runLowStockCount(deps: ItemHandlerDeps): Promise<number> {
   const db = openDatabase(deps.dbPath);
   try {
     const repo = new KyselyItemRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
     const items = await searchItems(repo, { query: '', categoryId: null });
-    return items.filter((item) => item.isLowStock).length;
+    return items.filter((item) => item.stockAlert === 'out' || item.stockAlert === 'low').length;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * P17-2b (docs/phases/PHASE_17.md §9, Q17-7 ANSWERED). Same shape as
+ * `runLowStockCount` above — one extra query call, same "whole
+ * catalogue, no pagination" reliance `searchItems` already documents.
+ */
+export async function runNotStockedCount(deps: ItemHandlerDeps): Promise<number> {
+  const db = openDatabase(deps.dbPath);
+  try {
+    const repo = new KyselyItemRepository(createKyselyDb(db), deps.tenantId, deps.deviceCode);
+    const items = await searchItems(repo, { query: '', categoryId: null });
+    return items.filter((item) => item.stockAlert === 'not_stocked').length;
   } finally {
     db.close();
   }
@@ -147,5 +168,10 @@ export function registerItemHandlers(deps: ItemHandlerDeps): void {
   ipcMain.handle(
     channels.item.lowStockCount,
     withError((): Promise<number> => runLowStockCount(deps)),
+  );
+
+  ipcMain.handle(
+    channels.item.notStockedCount,
+    withError((): Promise<number> => runNotStockedCount(deps)),
   );
 }

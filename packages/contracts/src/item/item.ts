@@ -101,10 +101,15 @@ export const ItemDto = z.object({
   // today only via CSV import ("Low Stock Alert Qty"). Null means "use
   // the shop-wide default" (see setting:getDefaultLowStockThreshold).
   reorderLevelMilli: z.number().int().nullable(),
-  // P17-2 review fix. Computed server-side (`@shop/core`'s `isLowStock`,
-  // against counterStockMilli + the shop-wide default threshold) — the
-  // client only renders this, it never re-derives the rule itself.
-  isLowStock: z.boolean(),
+  // P17-2 review fix, extended by P17-2b (docs/phases/PHASE_17.md §9,
+  // Q17-7 ANSWERED). Computed server-side (`@shop/core`'s
+  // `computeStockAlert`, against counterStockMilli + the shop-wide
+  // default threshold) — the client only renders this, it never
+  // re-derives the rule itself. 'not_stocked' means never received
+  // (no stock_movement row ever) with a reorder level set; null means
+  // no alert at all (including trackStock=false and no-history-no-
+  // threshold items).
+  stockAlert: z.enum(['out', 'low', 'not_stocked']).nullable(),
 });
 export type ItemDto = z.infer<typeof ItemDto>;
 

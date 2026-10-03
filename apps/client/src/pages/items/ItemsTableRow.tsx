@@ -27,7 +27,7 @@ export function ItemsTableRow({
   uomName,
   onHistoryClick,
 }: ItemsTableRowProps): React.JSX.Element {
-  const stockBadge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.isLowStock);
+  const stockBadge = resolveStockBadge(item.counterStockMilli, item.trackStock, item.stockAlert);
   const technicianMilli =
     item.stockOnHandMilli !== null && item.counterStockMilli !== null
       ? item.stockOnHandMilli - item.counterStockMilli

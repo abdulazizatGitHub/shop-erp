@@ -1,3 +1,5 @@
+import type { StockAlert } from './low-stock.js';
+
 /**
  * Repository interface (port) — defined here in core, implemented in db.
  * Dependency inversion: core never imports db. See docs/ARCHITECTURE.md
@@ -43,14 +45,15 @@ export interface ItemRecord {
   /** P17-2 (docs/phases/PHASE_17.md §2.2): item.reorder_level, milli-units. Null means "use the shop-wide default low-stock threshold". */
   readonly reorderLevelMilli: number | null;
   /**
-   * P17-2 review fix. Computed once here (`@shop/core`'s `isLowStock`,
-   * against `counterStockMilli` + the shop-wide default threshold) —
-   * the single source of truth for every consumer (Items-list badge and
-   * filter, POS badge, Dashboard count). `apps/client` may never import
-   * `@shop/core` directly (lint-enforced), so this field is how the one
-   * rule reaches the renderer — never re-derived client-side.
+   * P17-2 review fix, extended by P17-2b (Q17-7). Computed once here
+   * (`@shop/core`'s `computeStockAlert`, against `counterStockMilli` +
+   * the shop-wide default threshold) — the single source of truth for
+   * every consumer (Items-list badge and filter, POS badge, Dashboard
+   * counts). `apps/client` may never import `@shop/core` directly
+   * (lint-enforced), so this field is how the one rule reaches the
+   * renderer — never re-derived client-side.
    */
-  readonly isLowStock: boolean;
+  readonly stockAlert: StockAlert;
 }
 
 export interface ItemSearchQuery {

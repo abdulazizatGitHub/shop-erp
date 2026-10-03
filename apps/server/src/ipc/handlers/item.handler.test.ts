@@ -13,7 +13,7 @@ import {
   KyselyItemRepository,
   setDefaultLowStockThresholdMilli,
 } from '@shop/db';
-import { runLowStockCount, type ItemHandlerDeps } from './item.handler.js';
+import { runLowStockCount, runNotStockedCount, type ItemHandlerDeps } from './item.handler.js';
 
 const migrationsDir = path.join(import.meta.dirname, '../../../../../packages/db/src/migrations');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -220,7 +220,7 @@ describe('runLowStockCount', () => {
   // fetch-all-pages loop instead of a single call.
   it(
     'review fix: with low-stock items scattered across a catalogue larger than any assumed page ' +
-      "size, the Items list's client-side filter (item.isLowStock, no re-derivation) and the " +
+      "size, the Items list's client-side filter (item.stockAlert, no re-derivation) and the " +
       'Dashboard count agree exactly — because item.repository.ts.searchItems has no LIMIT/OFFSET ' +
       'at all (confirmed by reading the SQL), there is no page boundary for either side to disagree ' +
       'across',
@@ -261,7 +261,9 @@ describe('runLowStockCount', () => {
       const expectedLowStockCount = itemIds.filter((_, i) => i % 4 === 0).length;
       expect(expectedLowStockCount).toBe(8); // hand-calculated: ceil(30/4) = 8 (indices 0,4,...,28)
 
-      const filteredListCount = items.filter((item) => item.isLowStock).length;
+      const filteredListCount = items.filter(
+        (item) => item.stockAlert === 'out' || item.stockAlert === 'low',
+      ).length;
       const dashboardCount = await runLowStockCount(deps);
 
       expect(filteredListCount).toBe(expectedLowStockCount);
@@ -269,4 +271,104 @@ describe('runLowStockCount', () => {
       expect(filteredListCount).toBe(dashboardCount);
     },
   );
+});
+
+/**
+ * P17-2b (docs/phases/PHASE_17.md §9/§8, Q17-7 ANSWERED). An item with
+ * a reorder_level set but zero stock_movement rows ever is
+ * 'not_stocked' — a distinct state from 'out'/'low', so it must be
+ * counted by runNotStockedCount but excluded from both
+ * runLowStockCount and the Items-list "Low stock only" filter.
+ */
+describe('runNotStockedCount', () => {
+  it('counts an item with a reorder_level set and zero stock_movement rows ever', async () => {
+    const db = openDatabase(dbPath);
+    const itemRepo = new KyselyItemRepository(createKyselyDb(db), TENANT_ID, DEVICE_CODE);
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Never Received Item',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: pieceUomId,
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    db.close();
+    rawDb = openDatabase(dbPath);
+    rawDb.prepare(`UPDATE item SET reorder_level = 5000 WHERE id = ?`).run(item.id);
+    rawDb.close();
+    // Deliberately no insertStockMovement call — this item has never moved.
+
+    const count = await runNotStockedCount(deps);
+    expect(count).toBe(1);
+  });
+
+  it('excludes an item with a reorder_level set but no stock history from runLowStockCount — not_stocked is distinct from out/low', async () => {
+    const db = openDatabase(dbPath);
+    const itemRepo = new KyselyItemRepository(createKyselyDb(db), TENANT_ID, DEVICE_CODE);
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Never Received Item 2',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: pieceUomId,
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    db.close();
+    rawDb = openDatabase(dbPath);
+    rawDb.prepare(`UPDATE item SET reorder_level = 5000 WHERE id = ?`).run(item.id);
+    rawDb.close();
+
+    expect(await runLowStockCount(deps)).toBe(0);
+    expect(await runNotStockedCount(deps)).toBe(1);
+  });
+
+  it('excludes an item with no reorder_level and no stock history (plain null, not not_stocked)', async () => {
+    const db = openDatabase(dbPath);
+    const itemRepo = new KyselyItemRepository(createKyselyDb(db), TENANT_ID, DEVICE_CODE);
+    await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Never Received, No Threshold',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: pieceUomId,
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    db.close();
+    // No reorder_level set, no stock movement — this must be null, not 'not_stocked'.
+
+    expect(await runNotStockedCount(deps)).toBe(0);
+  });
+
+  it("excludes a 'not_stocked' item from the Items-list 'Low stock only' filter (the same stockAlert === 'out' || 'low' check ItemsPage.tsx uses)", async () => {
+    const db = openDatabase(dbPath);
+    const itemRepo = new KyselyItemRepository(createKyselyDb(db), TENANT_ID, DEVICE_CODE);
+    const item = await itemRepo.createItem({
+      itemCode: null,
+      nameEn: 'Never Received Item 3',
+      nameUr: null,
+      businessUnitId,
+      stockUomId: pieceUomId,
+      trackStock: true,
+      retailPricePaisa: 100000,
+    });
+    db.close();
+    rawDb = openDatabase(dbPath);
+    rawDb.prepare(`UPDATE item SET reorder_level = 5000 WHERE id = ?`).run(item.id);
+    rawDb.close();
+
+    const readDb = openDatabase(dbPath);
+    const readRepo = new KyselyItemRepository(createKyselyDb(readDb), TENANT_ID, DEVICE_CODE);
+    const items = await searchItems(readRepo, { query: '', categoryId: null });
+    readDb.close();
+
+    const created = items.find((i) => i.id === item.id);
+    expect(created?.stockAlert).toBe('not_stocked');
+    const lowStockOnlyFiltered = items.filter(
+      (i) => i.stockAlert === 'out' || i.stockAlert === 'low',
+    );
+    expect(lowStockOnlyFiltered.find((i) => i.id === item.id)).toBeUndefined();
+  });
 });
