@@ -181,6 +181,12 @@ export const channels = {
     setDefaultLowStockThreshold: 'setting:setDefaultLowStockThreshold',
     getRowsPerPage: 'setting:getRowsPerPage',
     setRowsPerPage: 'setting:setRowsPerPage',
+    getPaymentMethodsEnabled: 'setting:getPaymentMethodsEnabled',
+    setPaymentMethodCashEnabled: 'setting:setPaymentMethodCashEnabled',
+    setPaymentMethodBankEnabled: 'setting:setPaymentMethodBankEnabled',
+    setPaymentMethodEasypaisaEnabled: 'setting:setPaymentMethodEasypaisaEnabled',
+    setPaymentMethodJazzcashEnabled: 'setting:setPaymentMethodJazzcashEnabled',
+    setPaymentMethodChequeEnabled: 'setting:setPaymentMethodChequeEnabled',
   },
   print: {
     reprintReceipt: 'print:reprintReceipt',

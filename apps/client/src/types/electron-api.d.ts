@@ -378,6 +378,34 @@ export interface SetRowsPerPageInput {
   readonly value: RowsPerPage;
 }
 
+export interface PaymentMethodsEnabledDto {
+  readonly cash: boolean;
+  readonly bank: boolean;
+  readonly easypaisa: boolean;
+  readonly jazzcash: boolean;
+  readonly cheque: boolean;
+}
+
+export interface SetPaymentMethodCashEnabledInput {
+  readonly value: true;
+}
+
+export interface SetPaymentMethodBankEnabledInput {
+  readonly value: boolean;
+}
+
+export interface SetPaymentMethodEasypaisaEnabledInput {
+  readonly value: boolean;
+}
+
+export interface SetPaymentMethodJazzcashEnabledInput {
+  readonly value: boolean;
+}
+
+export interface SetPaymentMethodChequeEnabledInput {
+  readonly value: boolean;
+}
+
 export interface SetShopNameInput {
   readonly value: string;
 }
@@ -665,6 +693,22 @@ export interface ElectronApi {
     ) => Promise<void>;
     readonly getRowsPerPage: () => Promise<RowsPerPage>;
     readonly setRowsPerPage: (input: SetRowsPerPageInput) => Promise<void>;
+    readonly getPaymentMethodsEnabled: () => Promise<PaymentMethodsEnabledDto>;
+    readonly setPaymentMethodCashEnabled: (
+      input: SetPaymentMethodCashEnabledInput,
+    ) => Promise<void>;
+    readonly setPaymentMethodBankEnabled: (
+      input: SetPaymentMethodBankEnabledInput,
+    ) => Promise<void>;
+    readonly setPaymentMethodEasypaisaEnabled: (
+      input: SetPaymentMethodEasypaisaEnabledInput,
+    ) => Promise<void>;
+    readonly setPaymentMethodJazzcashEnabled: (
+      input: SetPaymentMethodJazzcashEnabledInput,
+    ) => Promise<void>;
+    readonly setPaymentMethodChequeEnabled: (
+      input: SetPaymentMethodChequeEnabledInput,
+    ) => Promise<void>;
     readonly getShopIdentity: () => Promise<ShopIdentityDto>;
     readonly setShopIdentity: (input: SetShopIdentityInput) => Promise<void>;
   };

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { SaleIdInput } from '@shop/contracts';
-import { createKyselyDb, getSaleInvoiceData, openDatabase } from '@shop/db';
+import { createKyselyDb, getReceiptPaperSize, getSaleInvoiceData, openDatabase } from '@shop/db';
 import { channels } from '../channels.js';
 import { withError } from '../middleware/with-error.js';
 import {
@@ -34,6 +34,7 @@ export function registerInvoiceHandlers(deps: InvoiceHandlerDeps): void {
         const kysely = createKyselyDb(db);
         return await printInvoiceSafely(input.id, {
           getInvoiceData: (id) => getSaleInvoiceData(kysely, deps.tenantId, id),
+          getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId),
           renderPdf: renderInvoicePdf,
           saveFile: saveInvoiceToTempFile,
           print: printFile,

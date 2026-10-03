@@ -21,6 +21,8 @@ export interface ExpenseCategoryFieldChange {
  * (packages/core/src/job/service-charge.service.ts) protects
  * `service_charge` — logic lives in `packages/core`, never a DB
  * constraint (CLAUDE.md §3.7).
+ *
+ * @future If a new write path is added to expense_category, this guard must be called before the write.
  */
 export function assertExpenseCategoryFieldsLocked(
   isReferencedByAnyExpense: boolean,
@@ -51,6 +53,8 @@ export interface ExpenseCategoryCombination {
  * `allocationMethod='direct'`, `partsShareBp=null`, which both checks
  * below accept. Stated here as a core-level rule for any future write
  * path to `expense_category`, exactly as the plan calls for.
+ *
+ * @future If a new write path is added to expense_category, this guard must be called before the write.
  */
 export function assertExpenseCategoryCombinationValid(fields: ExpenseCategoryCombination): void {
   if (fields.isOwnerDrawing && fields.isBillable) {

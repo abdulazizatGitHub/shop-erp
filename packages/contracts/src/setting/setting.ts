@@ -67,6 +67,49 @@ export const SetDiscountPctPresetsInput = z.object({
 });
 export type SetDiscountPctPresetsInput = z.infer<typeof SetDiscountPctPresetsInput>;
 
+/**
+ * P17-7 (docs/phases/PHASE_17.md §2.6, S17-EXP-4, A17-5). One combined
+ * read (used both by PaymentMethodToggle.tsx, the picker, and by
+ * PaymentMethodsSettingsSection.tsx on load) — same "combined read for
+ * display, individual setters for Settings" shape as
+ * DiscountConfigDto/getDiscountConfig. All five default `true` — "every
+ * method enabled" is today's behaviour, unlike every other boolean
+ * setting in this file (which default `false` when unset).
+ */
+export const PaymentMethodsEnabledDto = z.object({
+  cash: z.boolean(),
+  bank: z.boolean(),
+  easypaisa: z.boolean(),
+  jazzcash: z.boolean(),
+  cheque: z.boolean(),
+});
+export type PaymentMethodsEnabledDto = z.infer<typeof PaymentMethodsEnabledDto>;
+
+/**
+ * A17-5 — cash can never be disabled. Enforced here, at the Zod
+ * boundary the IPC handler parses against, not just by the Settings
+ * UI's own disabled toggle: a `{ value: false }` payload fails
+ * validation before the handler body (or the repository) ever runs.
+ */
+export const SetPaymentMethodCashEnabledInput = z.object({ value: z.literal(true) });
+export type SetPaymentMethodCashEnabledInput = z.infer<typeof SetPaymentMethodCashEnabledInput>;
+
+export const SetPaymentMethodBankEnabledInput = z.object({ value: z.boolean() });
+export type SetPaymentMethodBankEnabledInput = z.infer<typeof SetPaymentMethodBankEnabledInput>;
+
+export const SetPaymentMethodEasypaisaEnabledInput = z.object({ value: z.boolean() });
+export type SetPaymentMethodEasypaisaEnabledInput = z.infer<
+  typeof SetPaymentMethodEasypaisaEnabledInput
+>;
+
+export const SetPaymentMethodJazzcashEnabledInput = z.object({ value: z.boolean() });
+export type SetPaymentMethodJazzcashEnabledInput = z.infer<
+  typeof SetPaymentMethodJazzcashEnabledInput
+>;
+
+export const SetPaymentMethodChequeEnabledInput = z.object({ value: z.boolean() });
+export type SetPaymentMethodChequeEnabledInput = z.infer<typeof SetPaymentMethodChequeEnabledInput>;
+
 /** settings:getDiscountConfig — the sale screen's single combined read. PKR
  * presets arrive already converted to paisa; percentages stay plain numbers. */
 export const DiscountConfigDto = z.object({

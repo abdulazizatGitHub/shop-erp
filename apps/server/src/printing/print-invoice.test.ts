@@ -27,15 +27,17 @@ const KNOWN_INVOICE_DATA: InvoiceData = {
   technicianName: null,
 };
 
-describe('printInvoiceForSale (P4-2 wiring) — always A4, no page-size parameter', () => {
-  it('looks up the invoice data, builds the layout, and calls the PDF generator with the correct content', async () => {
+describe('printInvoiceForSale (P4-2 wiring, rewired P17-5) — reads receiptPaperSize, no longer hardcoded to A4', () => {
+  it('looks up the invoice data, builds the layout, and calls the PDF generator with the correct content and page size', async () => {
     const getInvoiceData = vi.fn().mockResolvedValue(KNOWN_INVOICE_DATA);
+    const getPageSize = vi.fn().mockResolvedValue('A5' as const);
     const renderPdf = vi.fn().mockResolvedValue(Buffer.from('%PDF-fake'));
     const saveFile = vi.fn().mockResolvedValue('C:\\temp\\invoice-sale1-x.pdf');
     const print = vi.fn().mockResolvedValue(undefined);
 
     const result = await printInvoiceForSale('sale-1', {
       getInvoiceData,
+      getPageSize,
       renderPdf,
       saveFile,
       print,
@@ -43,19 +45,36 @@ describe('printInvoiceForSale (P4-2 wiring) — always A4, no page-size paramete
 
     expect(getInvoiceData).toHaveBeenCalledWith('sale-1');
 
-    // renderPdf for the invoice takes only layoutText — no page-size
-    // argument, unlike the receipt's renderPdf(layoutText, pageSize).
-    const call = renderPdf.mock.calls[0] as [string];
-    expect(call).toHaveLength(1);
-    const layoutText = call[0];
+    // renderPdf for the invoice now takes layoutText AND the page-size
+    // argument read from getPageSize — S17-PRINT-2a's whole point.
+    const call = renderPdf.mock.calls[0] as [string, string];
+    expect(call).toHaveLength(2);
+    const [layoutText, pageSizeArg] = call;
     expect(layoutText).toContain('INV-0010');
     expect(layoutText).toContain('Malik Traders');
     expect(layoutText).toContain('Compressor 1.5 Ton');
     expect(layoutText).toContain('Balance Due');
+    expect(pageSizeArg).toBe('A5');
 
     expect(saveFile).toHaveBeenCalledWith('sale-1', Buffer.from('%PDF-fake'));
     expect(print).toHaveBeenCalledWith('C:\\temp\\invoice-sale1-x.pdf');
     expect(result.filePath).toBe('C:\\temp\\invoice-sale1-x.pdf');
+  });
+
+  it('passes A4 through unchanged when that is the configured size (default, visually unchanged from before P17-5)', async () => {
+    const getPageSize = vi.fn().mockResolvedValue('A4' as const);
+    const renderPdf = vi.fn().mockResolvedValue(Buffer.from('%PDF-fake'));
+
+    await printInvoiceForSale('sale-1', {
+      getInvoiceData: vi.fn().mockResolvedValue(KNOWN_INVOICE_DATA),
+      getPageSize,
+      renderPdf,
+      saveFile: vi.fn().mockResolvedValue('x.pdf'),
+      print: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const [, pageSizeArg] = renderPdf.mock.calls[0] as [string, string];
+    expect(pageSizeArg).toBe('A4');
   });
 
   it('throws a clear error when the sale cannot be found, without calling the PDF generator', async () => {
@@ -65,6 +84,7 @@ describe('printInvoiceForSale (P4-2 wiring) — always A4, no page-size paramete
     await expect(
       printInvoiceForSale('missing-sale', {
         getInvoiceData,
+        getPageSize: vi.fn(),
         renderPdf,
         saveFile: vi.fn(),
         print: vi.fn(),
@@ -81,6 +101,7 @@ describe('printInvoiceForSale (P4-2 wiring) — always A4, no page-size paramete
     await expect(
       printInvoiceForSale('empty-sale', {
         getInvoiceData,
+        getPageSize: vi.fn(),
         renderPdf,
         saveFile: vi.fn(),
         print: vi.fn(),

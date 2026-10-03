@@ -41,6 +41,146 @@
 
 ---
 
+## [2026-10-03] Session 99 — D1 doc note, Phase 17 P17-5 + P17-7 built: receipt paper size wired into invoice/payment-receipt prints, payment-method enable/disable
+
+**Goal:** D1 (a one-line `@future` JSDoc addition, no code/test change)
+plus P17-5 (wire `receiptPaperSize` into sale invoice + payment
+receipt prints, S17-PRINT-2a) and P17-7 (enable/disable payment
+methods, S17-EXP-4) in one session, one commit.
+
+**Done — D1:**
+
+- `assertExpenseCategoryFieldsLocked` and
+  `assertExpenseCategoryCombinationValid`
+  (`packages/core/src/expense/expense-category.service.ts`) each gained
+  an `@future` JSDoc line: "If a new write path is added to
+  expense_category, this guard must be called before the write." No
+  code or test change.
+
+**Done — P17-5:**
+
+- `renderInvoicePdf`/`renderPaymentReceiptPdf` each now take a
+  `pageSize: ReceiptPageSize` parameter (threaded through
+  `receipt-pdf.ts`'s own `renderReceiptPdf`, no new pdfkit code path —
+  both already shared that template at a hardcoded A4).
+  `print-invoice.ts`'s `PrintInvoiceDeps`/`print-payment-receipt.ts`'s
+  `PrintPaymentReceiptDeps` each gained a `getPageSize` dependency,
+  called once per print — the exact shape `print-receipt.ts`'s
+  `PrintReceiptDeps` already used for the Reprint path.
+  `invoice.handler.ts` and `print.handler.ts`'s payment-receipt branch
+  now pass `getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId)`,
+  the same call the Reprint channel already made.
+- Tests: `invoice-pdf.test.ts` (+1, now 3 — A5 real-PDF-bytes
+  `/MediaBox` dimension check) and new `payment-receipt-pdf.test.ts`
+  (3, new) assert real PDF bytes at both A4 (595.28×841.89pt) and A5
+  (419.53×595.28pt) — the same real-bytes verification
+  `receipt-pdf.test.ts` already established, not mocked.
+  `print-invoice.test.ts` (+1, now 4) and new
+  `print-payment-receipt.test.ts` (3, new) assert the page-size
+  argument reaches `renderPdf`, mirroring `print-receipt.test.ts`'s own
+  `getPageSize`-mock pattern. `print-invoice-safely.test.ts`'s 3
+  pre-existing tests updated (added `getPageSize` mocks) — unmodified
+  in substance.
+- **Not done this session:** the manual owner-machine print
+  verification (printing a real sale invoice and payment receipt with
+  `receiptPaperSize='A5'`, confirming A5 dimensions; confirming the
+  default `'A4'` is visually unchanged). Electron's GUI cannot launch
+  in this sandbox. `docs/phases/PHASE_17.md` marks P17-5 "DONE, pending
+  owner-machine print verification" rather than fully DONE, per
+  instruction.
+
+**Done — P17-7:**
+
+- New `payment-methods-setting.repository.ts`/`.handler.ts` (own
+  files, same "extracted before setting.repository.ts/
+  setting.handler.ts cross ~300 lines" convention as
+  `stock-alerts-setting.*`/`reports-display-setting.*`): one combined
+  `getPaymentMethodsEnabled` read (used by both `PaymentMethodToggle.tsx`
+  and the new Settings section — mirrors `getDiscountConfig`'s
+  combined-read shape) plus 5 individual setters, all defaulting
+  `true` (opposite of every other boolean setting in
+  `setting.repository.ts`, which default `false`).
+- **Cash cannot be disabled, enforced at the Zod boundary** —
+  `SetPaymentMethodCashEnabledInput` only accepts `{ value: true }`, so
+  a `false` payload fails `.parse()` before the handler body or the
+  repository ever runs — not just by the Settings UI's own
+  permanently-disabled checkbox. `setPaymentMethodCashEnabled`'s own
+  `value` parameter is typed as the literal `true`, not `boolean`, so
+  even a caller bypassing Zod cannot pass `false` without a compile
+  error.
+- `PaymentMethodToggle.tsx` now owns its own `getPaymentMethodsEnabled`
+  read (picker-only behaviour lives in the one shared picker, not
+  every caller) — hides a disabled method from the list, falls back to
+  `'cash'` via `onChange` if the currently-selected method becomes
+  disabled.
+- New `sections/PaymentMethodsSettingsSection.tsx` under Settings →
+  Sales → Payment Methods, following `DiscountsSettingsSection.tsx`'s
+  exact dirty-tracking/individual-setters-on-Save shape; its own
+  comment states explicitly that hiding a method is picker-only, never
+  enforced server-side, and never touches a stored historical
+  `payment.method` value.
+- Tests: `setting.test.ts` (3, new, contracts package) — `{value:
+false}` against `SetPaymentMethodCashEnabledInput` throws, proving a
+  real Zod-boundary rejection; `payment-methods-setting.repository.test.ts`
+  (8, new, real temp DB) — fresh-DB default `true` for all five;
+  independent get/set round-trips; the **priority test**: an easypaisa
+  payment is created, easypaisa is then disabled, and both a raw
+  `payment` table read and `getCustomerLedger` still show the method
+  unchanged; a second test creates a brand-new payment with an
+  already-disabled method directly, proving the write path never
+  consults this setting at all. `PaymentMethodToggle.test.tsx` (4,
+  new) and `PaymentMethodsSettingsSection.test.tsx` (4, new) — render
+  coverage for the hide/fallback behaviour and the Cash-locked/Save
+  flow.
+- `docs/phases/PHASE_17.md` — P17-5 and P17-7 marked done in the task
+  table and §8 exit criteria (P17-5 with the print-verification
+  caveat), every test named; phase header status updated.
+
+**Verified:**
+
+- `npm run typecheck` / `npm run lint` — both clean.
+- `npm test` — **1048/1048** (up from 1021 before this round: +27 new).
+- `npm run build --workspace=@shop/client` and
+  `--workspace=@shop/server` — both succeed, no errors.
+
+**Not done / deferred:** the P17-5 manual print verification (see
+above); P17-2b remains approved, not built this session.
+
+**Bugs found:** none new. (A stray `NODE_MODULE_VERSION` mismatch on
+`better-sqlite3` resurfaced mid-session from an earlier build's
+`electron-rebuild` step — no stray Electron process this time, just a
+plain `npm rebuild better-sqlite3` per the H2 note added last session.)
+
+**Decisions taken:** `setPaymentMethodCashEnabled`'s parameter is typed
+as the literal `true` rather than `boolean`, as an extra compile-time
+backstop behind the Zod-boundary enforcement — not strictly requested,
+but free given TypeScript already supports literal types and
+consistent with the "defense-in-depth, logic lives in the type system
+or packages/core, never trust the caller" pattern used throughout this
+phase.
+
+**Blocked on:** nothing (P17-5's print verification needs the owner's
+machine, not a blocker on further Phase 17 work).
+
+**Next session should:** await fresh authorization. P17-2b (Q17-7's
+stock-alert taxonomy follow-up) is the only remaining approved-but-
+unbuilt Phase 17 item; otherwise Phase 17's T1 scope is now complete
+pending the one manual print check.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status (not touched this round — no
+      bug/status entry there was stale as a result of this change)
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met (P17-2b ready, awaiting
+      authorization; P17-5's print check awaits the owner's machine)
+- [x] Any new bugs documented in PROJECT.md (none new)
+- [x] Test suite passing (1048/1048)
+
+---
+
 ## [2026-10-03] Session 98 — H1/H2 housekeeping, Phase 17 P17-4 built: Expense Categories Settings
 
 **Goal:** Two housekeeping fixes (H1: cash-movement row layout overflow;

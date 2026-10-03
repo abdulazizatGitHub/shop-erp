@@ -222,6 +222,12 @@ export {
   SetDiscountPkrPresetsInput,
   SetDiscountPctPresetsInput,
   DiscountConfigDto,
+  PaymentMethodsEnabledDto,
+  SetPaymentMethodCashEnabledInput,
+  SetPaymentMethodBankEnabledInput,
+  SetPaymentMethodEasypaisaEnabledInput,
+  SetPaymentMethodJazzcashEnabledInput,
+  SetPaymentMethodChequeEnabledInput,
   ShopIdentityDto,
   SetShopIdentityInput,
 } from './setting/setting.js';

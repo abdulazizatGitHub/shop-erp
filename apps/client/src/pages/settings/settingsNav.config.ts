@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckSquare,
+  CreditCard,
   DatabaseBackup,
   LayoutList,
   Percent,
@@ -63,6 +64,13 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
         title: 'Stock & Alerts',
         hint: 'Negative-stock policy for counter sales',
         icon: AlertTriangle,
+      },
+      {
+        key: 'payment-methods',
+        path: '/settings/sales/payment-methods',
+        title: 'Payment Methods',
+        hint: 'Hide unused methods from the picker',
+        icon: CreditCard,
       },
     ],
   },

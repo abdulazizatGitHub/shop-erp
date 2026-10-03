@@ -1,16 +1,19 @@
 import { buildInvoiceLayout } from '@shop/core';
 import type { InvoiceData } from '@shop/db';
+import type { ReceiptPageSize } from './receipt-pdf.js';
 
 /**
- * P4-2 wiring. Mirrors print-receipt.ts's printReceiptForSale, used by
- * the invoice:printSaleInvoice IPC handler. Always A4 — renderPdf here
- * takes only layoutText, no page-size parameter (unlike the receipt's
- * renderPdf(layoutText, pageSize)), matching invoice-pdf.ts's
- * renderInvoicePdf signature.
+ * P4-2 wiring, rewired P17-5 (docs/phases/PHASE_17.md §2.9,
+ * S17-PRINT-2a). Mirrors print-receipt.ts's printReceiptForSale, used
+ * by the invoice:printSaleInvoice IPC handler. `getPageSize` reads the
+ * owner's `receiptPaperSize` setting — same shape as the receipt's own
+ * `getPageSize`/`renderPdf(layoutText, pageSize)` — no longer hardcoded
+ * to 'A4'.
  */
 export interface PrintInvoiceDeps {
   readonly getInvoiceData: (saleId: string) => Promise<InvoiceData | null>;
-  readonly renderPdf: (layoutText: string) => Promise<Buffer>;
+  readonly getPageSize: () => Promise<ReceiptPageSize>;
+  readonly renderPdf: (layoutText: string, pageSize: ReceiptPageSize) => Promise<Buffer>;
   readonly saveFile: (saleId: string, pdfBytes: Buffer) => Promise<string>;
   readonly print: (filePath: string) => Promise<void>;
 }
@@ -31,8 +34,9 @@ export async function printInvoiceForSale(
     throw new Error(`Sale ${saleId} has no line items to print`);
   }
 
+  const pageSize = await deps.getPageSize();
   const layoutText = buildInvoiceLayout(invoiceData);
-  const pdfBuffer = await deps.renderPdf(layoutText);
+  const pdfBuffer = await deps.renderPdf(layoutText, pageSize);
   const filePath = await deps.saveFile(saleId, pdfBuffer);
   await deps.print(filePath);
 

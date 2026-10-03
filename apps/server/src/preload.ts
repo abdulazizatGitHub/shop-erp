@@ -98,7 +98,13 @@ import type {
   SetDefaultLowStockThresholdInput,
   SetNegativeStockPolicyInput,
   SetReceiptPaperSizeInput,
+  PaymentMethodsEnabledDto,
   RowsPerPage,
+  SetPaymentMethodBankEnabledInput,
+  SetPaymentMethodCashEnabledInput,
+  SetPaymentMethodChequeEnabledInput,
+  SetPaymentMethodEasypaisaEnabledInput,
+  SetPaymentMethodJazzcashEnabledInput,
   SetRowsPerPageInput,
   SetShopNameInput,
   DiscountConfigDto,
@@ -627,6 +633,22 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getRowsPerPage) as Promise<RowsPerPage>,
     setRowsPerPage: (input: SetRowsPerPageInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setRowsPerPage, input) as Promise<void>,
+    getPaymentMethodsEnabled: (): Promise<PaymentMethodsEnabledDto> =>
+      ipcRenderer.invoke(
+        channels.setting.getPaymentMethodsEnabled,
+      ) as Promise<PaymentMethodsEnabledDto>,
+    setPaymentMethodCashEnabled: (input: SetPaymentMethodCashEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setPaymentMethodCashEnabled, input) as Promise<void>,
+    setPaymentMethodBankEnabled: (input: SetPaymentMethodBankEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setPaymentMethodBankEnabled, input) as Promise<void>,
+    setPaymentMethodEasypaisaEnabled: (
+      input: SetPaymentMethodEasypaisaEnabledInput,
+    ): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setPaymentMethodEasypaisaEnabled, input) as Promise<void>,
+    setPaymentMethodJazzcashEnabled: (input: SetPaymentMethodJazzcashEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setPaymentMethodJazzcashEnabled, input) as Promise<void>,
+    setPaymentMethodChequeEnabled: (input: SetPaymentMethodChequeEnabledInput): Promise<void> =>
+      ipcRenderer.invoke(channels.setting.setPaymentMethodChequeEnabled, input) as Promise<void>,
     getShopIdentity: (): Promise<ShopIdentityDto> =>
       ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
     setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>

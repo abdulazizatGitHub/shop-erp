@@ -73,6 +73,7 @@ export function registerPrintHandlers(deps: PrintHandlerDeps): void {
         const kysely = createKyselyDb(db);
         return await printPaymentReceiptSafely(input.paymentId, {
           getReceiptData: (id) => getPaymentReceiptData(kysely, deps.tenantId, id),
+          getPageSize: () => getReceiptPaperSize(kysely, deps.tenantId),
           renderPdf: renderPaymentReceiptPdf,
           saveFile: savePaymentReceiptToTempFile,
           print: printFile,

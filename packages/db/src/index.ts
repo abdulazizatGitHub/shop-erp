@@ -129,6 +129,15 @@ export {
   setRowsPerPage,
 } from './repositories/reports-display-setting.repository.js';
 export type { RowsPerPage } from './repositories/reports-display-setting.repository.js';
+export {
+  getPaymentMethodsEnabled,
+  setPaymentMethodCashEnabled,
+  setPaymentMethodBankEnabled,
+  setPaymentMethodEasypaisaEnabled,
+  setPaymentMethodJazzcashEnabled,
+  setPaymentMethodChequeEnabled,
+} from './repositories/payment-methods-setting.repository.js';
+export type { PaymentMethodsEnabled } from './repositories/payment-methods-setting.repository.js';
 export { getShopIdentity, setShopIdentity } from './repositories/shop-identity.repository.js';
 export {
   getCustomerLedger,

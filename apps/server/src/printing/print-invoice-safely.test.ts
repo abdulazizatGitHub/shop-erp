@@ -31,6 +31,7 @@ describe('printInvoiceSafely (P4-2 wiring) — same error isolation as the recei
   it('returns filePath, printError null, on success', async () => {
     const deps = {
       getInvoiceData: vi.fn().mockResolvedValue(KNOWN_INVOICE_DATA),
+      getPageSize: vi.fn().mockResolvedValue('A4' as const),
       renderPdf: vi.fn().mockResolvedValue(Buffer.from('%PDF-fake')),
       saveFile: vi.fn().mockResolvedValue('C:\\temp\\invoice-sale1-x.pdf'),
       print: vi.fn().mockResolvedValue(undefined),
@@ -44,6 +45,7 @@ describe('printInvoiceSafely (P4-2 wiring) — same error isolation as the recei
   it('returns printError instead of throwing when the print step fails', async () => {
     const deps = {
       getInvoiceData: vi.fn().mockResolvedValue(KNOWN_INVOICE_DATA),
+      getPageSize: vi.fn().mockResolvedValue('A4' as const),
       renderPdf: vi.fn().mockResolvedValue(Buffer.from('%PDF-fake')),
       saveFile: vi.fn().mockResolvedValue('C:\\temp\\invoice-sale1-x.pdf'),
       print: vi.fn().mockRejectedValue(new Error('Printer offline')),
@@ -58,6 +60,7 @@ describe('printInvoiceSafely (P4-2 wiring) — same error isolation as the recei
   it('returns printError instead of throwing when the sale/invoice data cannot be found', async () => {
     const deps = {
       getInvoiceData: vi.fn().mockResolvedValue(null),
+      getPageSize: vi.fn(),
       renderPdf: vi.fn(),
       saveFile: vi.fn(),
       print: vi.fn(),

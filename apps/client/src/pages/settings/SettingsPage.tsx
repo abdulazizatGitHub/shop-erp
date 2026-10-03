@@ -6,6 +6,7 @@ import { ServiceChargesTab } from './job/ServiceChargesTab.js';
 import { BackupSettingsSection } from './sections/BackupSettingsSection.js';
 import { DiscountsSettingsSection } from './sections/DiscountsSettingsSection.js';
 import { ExpenseCategoriesTab } from './expense/ExpenseCategoriesTab.js';
+import { PaymentMethodsSettingsSection } from './sections/PaymentMethodsSettingsSection.js';
 import { InvoiceReceiptsSettingsSection } from './sections/InvoiceReceiptsSettingsSection.js';
 import { ReportsDisplaySettingsSection } from './sections/ReportsDisplaySettingsSection.js';
 import { StockAlertsSettingsSection } from './sections/StockAlertsSettingsSection.js';
@@ -89,6 +90,17 @@ export function SettingsPage(): React.JSX.Element {
                     description="Negative-stock policy for counter sales."
                   >
                     <StockAlertsSettingsSection />
+                  </SettingsSectionFrame>
+                }
+              />
+              <Route
+                path="/settings/sales/payment-methods"
+                element={
+                  <SettingsSectionFrame
+                    title="Payment Methods"
+                    description="Hide unused payment methods from the picker."
+                  >
+                    <PaymentMethodsSettingsSection />
                   </SettingsSectionFrame>
                 }
               />

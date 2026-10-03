@@ -16,9 +16,9 @@ const SAMPLE_LAYOUT = [
   'Balance Due: Rs 8,000',
 ].join('\n');
 
-describe('renderInvoicePdf (P4-2) — always A4, no page-size parameter', () => {
-  it('produces a real PDF, always at A4 size — real bytes inspected, not mocked', async () => {
-    const buffer = await renderInvoicePdf(SAMPLE_LAYOUT);
+describe('renderInvoicePdf (P4-2, rewired P17-5) — takes a page-size parameter, no longer hardcoded to A4', () => {
+  it('produces a real PDF at A4 size — real bytes inspected, not mocked', async () => {
+    const buffer = await renderInvoicePdf(SAMPLE_LAYOUT, 'A4');
 
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(buffer.length).toBeGreaterThan(500);
@@ -46,14 +46,23 @@ describe('renderInvoicePdf (P4-2) — always A4, no page-size parameter', () => 
     expect(buffer.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
   });
 
-  it('draws the exact same layoutText it is given, unmodified — the layer boundary that makes the structural-only check above sufficient', async () => {
+  it('produces a real PDF at A5 size when asked (P17-5, S17-PRINT-2a)', async () => {
+    const buffer = await renderInvoicePdf(SAMPLE_LAYOUT, 'A5');
+
+    expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    // pdfkit's built-in A5 dimensions: 419.53 x 595.28 pt — same value
+    // receipt-pdf.test.ts already confirms for renderReceiptPdf('A5').
+    expect(buffer.toString('latin1')).toContain('/MediaBox [0 0 419.53 595.28]');
+  });
+
+  it('draws the exact same layoutText it is given, unmodified, at a given size — the layer boundary that makes the structural-only check above sufficient', async () => {
     // renderInvoicePdf must not reformat, truncate, or otherwise alter
     // the already-tested layout text — it only draws it. Two different
-    // layouts must produce two different (non-identical) PDF byte
-    // sequences, proving the input actually reaches pdfkit's text
-    // drawing call rather than being ignored.
-    const bufferA = await renderInvoicePdf(SAMPLE_LAYOUT);
-    const bufferB = await renderInvoicePdf('INV-9999\nCustomer: Someone Else\n');
+    // layouts at the same page size must produce two different
+    // (non-identical) PDF byte sequences, proving the input actually
+    // reaches pdfkit's text drawing call rather than being ignored.
+    const bufferA = await renderInvoicePdf(SAMPLE_LAYOUT, 'A4');
+    const bufferB = await renderInvoicePdf('INV-9999\nCustomer: Someone Else\n', 'A4');
 
     expect(bufferA.equals(bufferB)).toBe(false);
   });

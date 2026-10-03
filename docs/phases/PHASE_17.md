@@ -32,8 +32,14 @@ hook/context, default 10 everywhere including `CustomerLedgerTable`
 (Q17-2's deliberate 15→10 normalization) — see §6/§8, 988/988 tests.
 **P17-4 is DONE — 2026-10-03:** Expense Categories Settings section,
 name-only form, built exactly per the simplified Q-DRAWING/A17-3 scope
-— see §6/§8, 1021/1021 tests. P17-5, P17-7, and P17-2b remain
-approved, not yet built.
+— see §6/§8, 1021/1021 tests. **P17-5 is DONE, pending owner-machine
+print verification — 2026-10-03:** `receiptPaperSize` now wired into
+sale invoice + payment receipt prints, same way Reprint already did
+it; the real-printer A4/A5 visual check is the one remaining manual
+step. **P17-7 is DONE — 2026-10-03:** payment-method enable/disable,
+cash-cannot-disable enforced at the Zod boundary, picker falls back to
+Cash — see §6/§8, 1048/1048 tests. P17-2b remains approved, not yet
+built.
 **Started:** 2026-09-26
 **Completed:** —
 **Branch:** main
@@ -771,8 +777,8 @@ UI), same convention as every prior phase's task table.
 | P17-2   | Low-stock badge + default threshold + Dashboard card, with `trackStock`/deleted exclusions (S17-ITEM-1, S17-ITEM-2, S17-DASH-1) | `item.repository.ts` (`counterStockMilli`/`reorderLevelMilli` on all 3 query methods), new `packages/core/src/item/low-stock.ts` (`isLowStock`), `item.handler.ts` (`runLowStockCount`), `stock-alerts-setting.repository.ts`/`.handler.ts` (split from `setting.*` to stay under the ~300-line convention), `StockBadge.tsx` (client-side `isLowStock` duplicate + `resolveStockBadge` rewrite — client can't import `@shop/core`), `ItemsPage.tsx`+new `ItemsTableRow.tsx` (dual-figure display, "Low stock only" filter), new `LowStockWidget.tsx` + `DashboardPage.tsx`/`App.tsx` wiring | No                                              | **DONE — pending owner-machine click-through.** All exit criteria in §8 verified: 894/894, `npm run verify` clean, both builds clean. Electron's GUI cannot launch in this sandbox — the real running-app click-through is still outstanding.                                                                                                                                                                                                                                                                                                                                       | M                           |
 | P17-3   | Rows-per-page via one shared hook/context, default 10 everywhere including `CustomerLedgerTable` (S17-REP-1)                    | `setting.repository.ts`/`setting.handler.ts`, new `useRowsPerPage()` hook, new `sections/ReportsDisplaySettingsSection.tsx`, one-line edits to all 11 files (9 reports + `JobsPage.tsx` + `CustomerLedgerTable.tsx`)                                                                                                                                                                                                                                                                                                                                                                         | No                                              | **DONE.** All exit criteria in §8 verified: 988/988, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | M                           |
 | P17-4   | Expense Categories Settings section, name-only form (S17-EXP-1)                                                                 | New `expense-category.repository.ts` (write path: create/update-name-only-if-referenced/toggle `deleted_at`), new core enforcement check (defense-in-depth invalid-combination rules), new contracts, new IPC channels, new `ExpenseCategoriesTab.tsx` + modal (mirror `BrandsTab.tsx`/`ServiceChargesTab.tsx`)                                                                                                                                                                                                                                                                              | No — `deleted_at` already exists, safe to reuse | **DONE.** BUG-31 fixed in Phase 17.5, unblocking this task. All exit criteria in §8 verified: 1021/1021, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                 | M                           |
-| P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | Ready                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
-| P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | Ready — **scope-approved this phase**, tier stays T2 in the inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S                           |
+| P17-5   | Wire `receiptPaperSize` into sale invoice + payment receipt prints (S17-PRINT-2a)                                               | `invoice-pdf.ts`, `payment-receipt-pdf.ts`, `invoice.handler.ts`, `print.handler.ts` (payment-receipt branch)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | No                                              | **DONE, pending owner-machine print verification.** 16 new/updated tests, 1048/1048 overall. Real-printer A4/A5 visual confirmation not yet done in this sandbox.                                                                                                                                                                                                                                                                                                                                                                                                                   | S                           |
+| P17-7   | Enable/disable payment methods, cash-cannot-disable + fallback rule (S17-EXP-4)                                                 | `setting.repository.ts`/`setting.handler.ts`, `PaymentMethodToggle.tsx`, new `sections/PaymentMethodsSettingsSection.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | No                                              | **DONE.** All exit criteria in §8 verified: 1048/1048, `npm run verify` clean, both builds clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | S                           |
 
 **Revised total T1 effort estimate:** M/L + M + M + M + S + S ≈ **3–4
 focused sessions** (up slightly from the prior "3 sessions" estimate,
@@ -984,7 +990,7 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       `CustomerLedgerTable.test.tsx` (no test file existed for it
       before): 12 rows render a "Page 2" button, which the old `15`
       would not (`Pagination` renders nothing when `totalRows <=
-  rowsPerPage`). `reports-display-setting.repository.test.ts` (5
+rowsPerPage`). `reports-display-setting.repository.test.ts` (5
       tests, real temp DB): a fresh DB has no `rowsPerPage` key and
       `getRowsPerPage` returns `10`, confirmed both by the return value
       and a direct `COUNT(*)` query proving the read never writes a row;
@@ -1088,19 +1094,85 @@ key='negativeStockPolicy'` returns no row, and the getter's default
       owner-drawing category appears in v_owner_drawings and not in
       v_unit_direct_expense/business totals" test stays removed — this
       form can never create an owner-drawing category.
-- [ ] **P17-5** — Unit test: `renderInvoicePdf`/`renderPaymentReceiptPdf`
-      each accept and thread through a page-size parameter (test asserts
-      the parameter reaches the underlying `PDFDocument` call). UI
-      action / manual print: with `receiptPaperSize='A5'`, printing a
-      sale invoice and a payment receipt both render at A5 dimensions;
-      with the default `'A4'`, both are visually unchanged from today.
-- [ ] **P17-7** — new tests: attempting to disable the last remaining
-      enabled payment method (or Cash specifically) is refused by the
-      settings section's save handler; a historical `payment` row whose
-      `method` was later disabled still displays correctly by name in
-      `expense`/payment reports and the customer ledger (disabling never
-      touches the stored value); the picker falls back to Cash when the
-      previously-selected default method is disabled.
+- [x] **P17-5 (DONE, pending owner-machine print verification)** —
+      `renderInvoicePdf`/`renderPaymentReceiptPdf` each now take a
+      `pageSize: ReceiptPageSize` parameter (threaded through
+      `receipt-pdf.ts`'s own `renderReceiptPdf(layoutText, pageSize)` —
+      no new pdfkit code path, same template both already shared at
+      A4). `print-invoice.ts`'s `PrintInvoiceDeps`/`print-payment-receipt.ts`'s
+      `PrintPaymentReceiptDeps` each gained a `getPageSize: () =>
+    Promise<ReceiptPageSize>` dependency, called once per print and
+      passed to `renderPdf` — exactly the shape
+      `print-receipt.ts`'s `PrintReceiptDeps` already used for the
+      Reprint path. `invoice.handler.ts` and `print.handler.ts`'s
+      payment-receipt branch now pass `getPageSize: () =>
+    getReceiptPaperSize(kysely, deps.tenantId)`, the same call
+      `print.handler.ts:56` already made for Reprint. Tests:
+      `invoice-pdf.test.ts` (+1, now 3) and new
+      `payment-receipt-pdf.test.ts` (3, new) assert the real PDF bytes'
+      `/MediaBox` dimensions at both `'A4'` (595.28×841.89pt) and
+      `'A5'` (419.53×595.28pt) — the same real-bytes verification
+      `receipt-pdf.test.ts` already established, not a mock.
+      `print-invoice.test.ts` (+1, now 4) and new
+      `print-payment-receipt.test.ts` (3, new) assert the page-size
+      argument reaches `renderPdf` for both `'A4'` and `'A5'`, mirroring
+      `print-receipt.test.ts`'s own `getPageSize`-mock pattern.
+      `print-invoice-safely.test.ts`'s 3 pre-existing tests updated
+      (added `getPageSize` mocks to each deps object) — unmodified in
+      substance. **Manual verification (owner machine) — NOT done this
+      session:** printing a real sale invoice and payment receipt with
+      `receiptPaperSize='A5'` set, confirming both render at A5, and
+      with the default `'A4'` confirming both are visually unchanged
+      from before this task. Electron's GUI cannot launch in this
+      sandbox. This exit criterion stays **pending owner-machine print
+      verification** until confirmed.
+- [x] **P17-7 (DONE)** — New `payment-methods-setting.repository.ts`/
+      `.handler.ts` (own files, same "extracted before
+      setting.repository.ts/setting.handler.ts cross ~300 lines"
+      convention as `stock-alerts-setting.*`/`reports-display-setting.*`):
+      one combined `getPaymentMethodsEnabled` read (used by both
+      `PaymentMethodToggle.tsx` and the new Settings section, mirroring
+      `getDiscountConfig`'s combined-read shape) plus 5 individual
+      setters, all 5 defaulting `true` (opposite of every other
+      boolean setting in `setting.repository.ts`, which default
+      `false`). **Cash cannot be disabled, enforced at the Zod boundary
+      the IPC handler parses against** (`SetPaymentMethodCashEnabledInput`
+      only accepts `{ value: true }` — a `false` payload fails
+      `.parse()` before the handler body or the repository ever runs),
+      not just by the Settings UI's own permanently-disabled checkbox;
+      `setPaymentMethodCashEnabled`'s own `value` parameter is typed as
+      the literal `true`, not `boolean`, so even a caller bypassing Zod
+      cannot pass `false` without a compile error. `PaymentMethodToggle.tsx`
+      now owns its own `getPaymentMethodsEnabled` read — hides a
+      disabled method from the list, and falls back to `'cash'` via
+      `onChange` if the currently-selected method becomes disabled.
+      New `sections/PaymentMethodsSettingsSection.tsx` under Settings →
+      Sales → Payment Methods, following `DiscountsSettingsSection.tsx`'s
+      exact dirty-tracking/individual-setters-on-Save shape; its own
+      comment states explicitly that hiding a method is picker-only,
+      never enforced server-side, and never touches a stored historical
+      `payment.method` value. Tests: `setting.test.ts` (3, new,
+      contracts package) — `{value: false}` against
+      `SetPaymentMethodCashEnabledInput` throws, proving the refusal is
+      a real Zod-boundary rejection, not merely a UI convention;
+      `payment-methods-setting.repository.test.ts` (8, new, real temp
+      DB) — fresh-DB default `true` for all five; independent
+      get/set round-trips; the **priority test**: an easypaisa payment
+      is created, then easypaisa is disabled, then both a raw `payment`
+      table read and `getCustomerLedger` are asserted to still show
+      `method`/`paymentMethod` as `'easypaisa'` unchanged; a second
+      test creates a NEW payment with an already-disabled method
+      directly, proving the write path itself never consults this
+      setting at all. `PaymentMethodToggle.test.tsx` (4, new) — all
+      five shown by default; a disabled method is hidden entirely;
+      selecting a method that's since been disabled calls `onChange('cash')`;
+      an enabled selection never triggers a fallback call.
+      `PaymentMethodsSettingsSection.test.tsx` (4, new) — Cash's
+      checkbox is permanently checked and disabled; toggling a non-cash
+      method marks the section dirty without calling its setter until
+      Save; Save calls exactly the four non-cash setters with the
+      toggled values (never a cash setter — there is nothing to send);
+      the picker-only explanation text is visible.
 - [ ] `npm run verify` exits 0 after every task above, count pasted each
       time (Golden Rule #4 — one thing at a time, verified before the
       next begins).
