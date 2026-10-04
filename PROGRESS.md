@@ -41,6 +41,123 @@
 
 ---
 
+## [2026-10-04] Session 104 — Phase 18: owner backup/recovery document (owner's item 3 of 3)
+
+**Goal:** Find the exact production (packaged) path where the app
+stores its SQLite database on Windows, then write a plain-English,
+half-A4-page PDF for the shop owner covering: where the data is,
+how to back it up, what to do if the PC dies, and what the system
+cannot do yet. Also answer whether any automatic backup/reminder
+feature exists today, and log it as a future request if not. No code
+changes (none were in scope — no IPC, no migrations, no schema).
+
+**Found:** `apps/server/src/main.ts`'s `resolveDbPath()` —
+`app.isPackaged ? path.join(app.getPath('userData'), 'shop.db') : ...`
+— with `app.setName('ShopERP')` set at module load, before
+`getPath('userData')` is ever called. On Windows this resolves to:
+
+```
+C:\Users\<Windows login name>\AppData\Roaming\ShopERP\shop.db
+```
+
+Cross-checked against `docs/SYSTEM_DESIGN.md` line 278
+(`%APPDATA%\ShopERP\shop.db — data — never in Program Files`), which
+states the same path independently — live code and design doc agree.
+
+Also checked: does the app have any automatic backup or backup
+reminder? **No.** `backup:now`
+(`apps/server/src/ipc/handlers/backup.handler.ts`, surfaced in
+Settings via `BackupSettingsSection.tsx`'s "Backup Now" button) is
+entirely manual, one click at a time — no schedule, no "last backed
+up N days ago" indicator, nothing runs it automatically. The only
+thing that resembles an automatic backup is `migration-runner.ts`'s
+`backupDatabaseFile` — a safety copy taken only when a new schema
+migration is about to run against an existing database, not a
+recurring backup of business data, and silent on every ordinary day
+the app version hasn't changed. Logged as a future feature request in
+PROJECT.md §"Future feature requests" (weekly reminder on app start,
+no phase assigned) rather than built this session — this task's scope
+was documentation only.
+
+**Done:**
+
+- `docs/owner-backup-guide.pdf` (NEW) — one A4 page, content filling
+  roughly its top half, plain English throughout, no owner/shop name
+  (applies to any install). Exactly the four sections requested, in
+  order:
+  1. Where your data is stored — the literal path above, with the
+     Windows-login-name segment called out as the one part that
+     varies per computer, plus a practical one-line tip (type
+     `%AppData%\ShopERP` into any folder's address bar) so the owner
+     does not need to know their own exact file path by heart.
+  2. How to back up — a 4-step weekly Friday routine: plug in a USB
+     drive, find `shop.db` in the folder above, copy it over, keep the
+     drive somewhere safe.
+  3. If the PC dies — exactly the four steps given: new computer,
+     install the app, copy the backup file into the same folder,
+     open the app.
+  4. What the system cannot do yet — no internet, no second computer,
+     no phone, no automatic copy — closing with a bolded, plain
+     warning: lose the computer with no USB backup and the data is
+     gone for good.
+     Built with reportlab (Python) in the session scratchpad, not
+     committed to the repo — CLAUDE.md §4 is TypeScript-only for this
+     codebase; the generator script is incidental tooling, not part of
+     the shippable project, so only the finished PDF is checked in.
+- PROJECT.md — Phase 18 status row updated (all three added items now
+  done); new "Future feature requests" bullet for the weekly backup
+  reminder, with the automatic-backup finding above recorded in full
+  so a future session does not have to re-derive it.
+
+**Verified:**
+
+- Rendered the PDF to an image (PyMuPDF) and read it back — one page,
+  all four sections present in the required order, nothing else on
+  the page, content ending at roughly the page's midpoint.
+- Path cross-checked two independent sources (live code in `main.ts`
+  and `docs/SYSTEM_DESIGN.md`) agreeing exactly, per CLAUDE.md's
+  "live code is the truth, but verify" standard.
+- No code was touched this session, so `npm run verify` carries
+  forward unchanged from Session 103 (167 files / 1081 tests passing)
+  — re-run anyway as a sanity check; still 0 exit code.
+
+**Not done / deferred:**
+
+- The weekly backup reminder itself — logged as a future feature
+  request only, per this task's explicit "documentation only, no
+  code" framing. No phase assigned.
+- The pre-loaded-items CSV-vs-installer question (raised Session 102)
+  remains open — this document does not depend on its answer.
+
+**Bugs found:** none.
+
+**Decisions taken:** none requiring an ADR. One judgment call: the
+PDF's generator script stays out of the repository (Python, and this
+is a TypeScript-only codebase per CLAUDE.md §4) — only the rendered
+PDF is a tracked project asset.
+
+**Blocked on:** nothing. All three of the owner's Phase 18 scope
+items (banner, wizard, document) are now complete. Remaining go-live
+exit criteria (parallel run, pull-the-plug test, staff training, Urdu
+cheat sheet, `npm run verify` on the go-live machine) are verification
+work against the real shop, not code — see PROJECT.md §3.5.
+
+**Next session should:** Confirm the parallel run start date with the
+owner now that all three Phase 18 code/document items are done, and
+begin tracking the remaining go-live exit criteria in §3.5.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (1081/1081, unchanged — no code this session)
+
+---
+
 ## [2026-10-04] Session 103 — Phase 18: first-run setup wizard (owner's item 2 of 3)
 
 **Goal:** Build the first-run setup wizard: when the database has no
