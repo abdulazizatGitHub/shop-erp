@@ -11,6 +11,7 @@ import { QueueStrip } from './QueueStrip.js';
 import { SaleAlerts } from './SaleAlerts.js';
 import { SaleSuccessModal } from './SaleSuccessModal.js';
 import { SalesTopbar } from './SalesTopbar.js';
+import { useCashSessionNotice } from './useCashSessionNotice.js';
 import { useSaleFlow } from './useSaleFlow.js';
 import { useSaleQueue } from './useSaleQueue.js';
 
@@ -20,6 +21,7 @@ export function SalePage(): React.JSX.Element {
     setCheckoutModalOpen(true);
   });
   const queue = useSaleQueue();
+  const cashSessionNotice = useCashSessionNotice();
   const [helpOpen, setHelpOpen] = useState(false);
   const [lastSaleOpen, setLastSaleOpen] = useState(false);
 
@@ -99,12 +101,14 @@ export function SalePage(): React.JSX.Element {
         error={flow.error}
         notice={flow.notice}
         printError={flow.printError}
+        noCashSession={cashSessionNotice.showNoCashSessionNotice}
         onDismissNotice={() => {
           flow.setNotice(null);
         }}
         onDismissPrintError={() => {
           flow.setPrintError(null);
         }}
+        onDismissNoCashSession={cashSessionNotice.dismissNoCashSessionNotice}
       />
 
       <div className="flex min-h-0 flex-1 gap-2.5 p-4">
