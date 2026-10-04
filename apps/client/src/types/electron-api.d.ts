@@ -129,6 +129,7 @@ import type {
   WageMonthRowDto,
   ShopIdentityDto,
   SetShopIdentityInput,
+  FinishSetupInput,
 } from '@shop/contracts';
 
 export interface ImportResult {
@@ -137,6 +138,15 @@ export interface ImportResult {
   readonly itemsAccepted: number;
   readonly itemsRejected: number;
   readonly itemsSkipped: number;
+}
+
+export interface SetupStatusResult {
+  readonly tenantExists: boolean;
+}
+
+export interface FinishSetupResult {
+  readonly itemsImport: ImportResult | null;
+  readonly itemsImportError: string | null;
 }
 
 export interface OpeningStockImportResult {
@@ -734,6 +744,10 @@ export interface ElectronApi {
     readonly itemSoldSummary: (
       input: ItemSoldSummaryInput,
     ) => Promise<readonly ItemSoldSummaryRowDto[]>;
+  };
+  readonly setup: {
+    readonly status: () => Promise<SetupStatusResult>;
+    readonly finish: (input: FinishSetupInput) => Promise<FinishSetupResult>;
   };
 }
 

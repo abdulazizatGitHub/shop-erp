@@ -1,0 +1,28 @@
+-- =====================================================================
+--  ADDENDUM 22 - TENANT.OWNER_NAME
+--  Migration version 22.
+-- =====================================================================
+--
+--  WHY THIS EXISTS
+--  Phase 18, go-live preparation, first-run setup wizard. The wizard
+--  collects both a shop name and an owner name on first launch — the
+--  shop name already had a home (the `shopName` key in the generic
+--  `setting` table, read by getShopName/getShopIdentity and printed on
+--  every document), but nothing anywhere records an owner name. This is
+--  NOT an app_user row (app_user has username/password_hash/role and
+--  is dormant — no login screen exists yet, BUG-ADR9) — it is a plain
+--  identity fact about the shop itself, the same nature as
+--  tenant.business_name, so it is added as a sibling column on the one
+--  table that already holds that kind of fact.
+--
+--  Nullable: every existing row (any dev/shop DB that already has a
+--  tenant row from before this wizard existed) predates this field and
+--  stays NULL, which is correct — no owner name was ever recorded for
+--  it, not "no owner" as a meaningful value.
+--
+--  No BEGIN/COMMIT here — migration-runner.ts already wraps
+--  db.exec(migration.sql) in its own db.transaction() closure, same
+--  note as every migration from 0006 on.
+-- =====================================================================
+
+ALTER TABLE tenant ADD COLUMN owner_name TEXT;

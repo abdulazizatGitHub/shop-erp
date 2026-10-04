@@ -256,3 +256,5 @@ export {
   WageMonthInput,
   WageMonthRowDto,
 } from './report/report.js';
+
+export { FinishSetupInput } from './setup/setup.js';

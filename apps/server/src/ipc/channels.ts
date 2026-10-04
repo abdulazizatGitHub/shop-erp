@@ -196,6 +196,7 @@ export const channels = {
   },
   invoice: { printSaleInvoice: 'invoice:printSaleInvoice' },
   system: { ping: 'system:ping' },
+  setup: { status: 'setup:status', finish: 'setup:finish' },
 } as const;
 
 export type Channel = typeof channels;

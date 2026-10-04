@@ -4,7 +4,10 @@ import { ImportFileState } from './ImportFileState.js';
 import { ImportItemsInstructions } from './ImportItemsInstructions.js';
 import { ITEM_COLUMNS, useImportItemsFlow } from './useImportItemsFlow.js';
 
-const ITEM_SAMPLE_ROW = [
+// Exported for reuse by the Phase 18 first-run setup wizard's own
+// optional item-import step (SetupWizardPage.tsx) — same sample file,
+// same instructions block, not a second copy of this data.
+export const ITEM_SAMPLE_ROW = [
   '',
   'Gas R-134a',
   '',

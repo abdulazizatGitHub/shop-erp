@@ -49,12 +49,13 @@ describe('migrate', () => {
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
       '0021_cash_movement.sql',
+      '0022_tenant_owner_name.sql',
     ]);
     expect(result.skipped).toEqual([]);
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it("applies exactly 56 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 and 0020 are column adds only, not new tables; +1 for 0021's cash_movement", () => {
+  it("applies exactly 56 tables and 11 views — the 51-table baseline (through 0016, job_client); 0017 (brand.is_active) is a column add, not a new table; +4 for 0018's commission_claim/commission_decision/commission_decision_recipient/commission_decision_reversal; 0019 and 0020 are column adds only, not new tables; +1 for 0021's cash_movement; 0022 (tenant.owner_name) is a column add, not a new table", () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
     const tables = db
@@ -119,6 +120,20 @@ describe('migrate', () => {
     expect(indexes.some((i) => i.name === 'idx_cm_date')).toBe(true);
   });
 
+  it('applies 0022 to a fresh database — tenant.owner_name exists and is nullable', () => {
+    migrate(dbPath, migrationsDir, backupDir);
+    const db = new Database(dbPath);
+    const columns = db.prepare(`PRAGMA table_info(tenant)`).all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    db.close();
+
+    const ownerName = columns.find((c) => c.name === 'owner_name');
+    expect(ownerName).toBeDefined();
+    expect(ownerName?.notnull).toBe(0);
+  });
+
   it('every view executes without error on an empty database', () => {
     migrate(dbPath, migrationsDir, backupDir);
     const db = new Database(dbPath);
@@ -159,6 +174,7 @@ describe('migrate', () => {
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
       '0021_cash_movement.sql',
+      '0022_tenant_owner_name.sql',
     ]);
     expect(second.backupPath).not.toBeNull();
     expect(existsSync(second.backupPath as string)).toBe(true);
@@ -193,6 +209,7 @@ describe('migrate', () => {
       { version: 19, name: '0019_commission_claim_snapshot.sql' },
       { version: 20, name: '0020_job_technician_unassign_reason.sql' },
       { version: 21, name: '0021_cash_movement.sql' },
+      { version: 22, name: '0022_tenant_owner_name.sql' },
     ]);
   });
 
@@ -318,6 +335,7 @@ describe('migrate', () => {
       '0019_commission_claim_snapshot.sql',
       '0020_job_technician_unassign_reason.sql',
       '0021_cash_movement.sql',
+      '0022_tenant_owner_name.sql',
     ]);
 
     db = new Database(dbPath);

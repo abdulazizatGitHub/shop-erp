@@ -41,6 +41,277 @@
 
 ---
 
+## [2026-10-04] Session 103 — Phase 18: first-run setup wizard (owner's item 2 of 3)
+
+**Goal:** Build the first-run setup wizard: when the database has no
+tenant row, show a setup screen (shop name, owner name, paper size,
+optional CSV item import) before the main app loads; on finish, seed
+the tenant and open the main app normally. Item 3 (owner-facing
+backup/recovery document) is explicitly deferred to the next session,
+per the owner's stated order.
+
+**Found before writing any code (reported as a real architectural
+conflict, not improvised past):** seed() (packages/db/src/bootstrap.ts)
+has always auto-inserted the tenant row with a placeholder name
+('Shop') on EVERY app startup, unconditionally, idempotently — called
+from main.ts's whenReady() before createWindow(). If left unchanged,
+"no tenant row" could never be observed by anything downstream —
+seed() would always have already created one by the time any wizard
+check ran. Resolution: main.ts now checks hasTenant() (new) BEFORE
+calling seed(), and skips seed() entirely — not just the tenant
+insert, since every other seed* step (business units, uoms, price
+level, warehouse, expense categories, brands) needs the tenant row to
+already exist via its own tenant_id foreign key (connection.ts's
+`foreign_keys = ON`) — until the wizard's own setup:finish calls
+seed() itself with the owner's real names. An existing install (tenant
+row already present) is unaffected: seed() still runs on every startup
+exactly as before.
+
+A second gap found the same way: the task said "insert the tenant row
+with the shop name and owner name," but no "owner name" field existed
+anywhere in the schema (tenant has business_name, not an owner field;
+app_user was considered and rejected — it's a dormant, unimplemented
+login concept with username/password_hash/role, BUG-ADR9, not a plain
+identity fact, and the wizard asks for neither a username nor a
+password). Added as a sibling column on tenant via a migration, the
+same nature as business_name.
+
+**Done:**
+
+- packages/db/src/migrations/0022_tenant_owner_name.sql (NEW) —
+  ALTER TABLE tenant ADD COLUMN owner_name TEXT (nullable — every
+  pre-existing tenant row predates this field).
+- packages/db/src/bootstrap.ts — new exported hasTenant(db, tenantId)
+  (read-only existence check). seed() gained an optional 3rd
+  options: { businessName?, ownerName? } param, consulted only on the
+  tenant row's first insert; every existing caller (main.ts's own
+  unconditional per-startup call, every test) omits it and keeps the
+  pre-Phase-18 'Shop'/null default unchanged.
+- apps/server/src/main.ts — whenReady() now calls hasTenant() first;
+  seed() runs only when a tenant row already exists.
+  registerSetupHandlers wired alongside the existing
+  registerIpcHandlers.
+- apps/server/src/ipc/handlers/setup.handler.ts (NEW) — getSetupStatus
+  (sync; better-sqlite3 itself is synchronous) and finishSetup, in
+  strict order: (1) seed() with the owner's real names — the one call
+  that can write the tenant row, so an abandoned wizard never leaves
+  one behind (the interrupted-setup edge case); (2) setShopName /
+  setReceiptPaperSize — shopName duplicates tenant.business_name
+  deliberately, because settings.shopName (not the tenant row) is
+  what getShopIdentity/every printed document actually reads
+  (shop-identity.repository.ts) — writing only the tenant column
+  would make the wizard's own "shop name" field invisible everywhere
+  it matters; (3) CSV import, if provided — reuses runImport, the
+  exact same function the Items screen's own import:commit channel
+  calls, so validation and error reporting are identical, not
+  re-implemented. A thrown import error (e.g. an unparseable CSV) is
+  caught and reported in the result, never thrown onward —
+  tenant/business units/settings written in steps 1-2 are already
+  committed by then, matching the owner's explicit instruction that
+  CSV errors must not block setup completion.
+- packages/contracts/src/setup/setup.ts (NEW) — FinishSetupInput
+  (Zod boundary validation: shopName/ownerName required after trim,
+  paperSize enum, itemsCsv optional).
+- apps/server/src/ipc/channels.ts, preload.ts,
+  apps/client/src/types/electron-api.d.ts — new setup.status /
+  setup.finish channels, mirroring every other namespace's own
+  three-point wiring exactly.
+- apps/client/src/app/AppRoot.tsx (NEW) — the gate. Calls setup:status
+  once; renders SetupWizardPage (no tenant), App unchanged (tenant
+  exists), or a LoadingState while the check is in flight. A failed
+  status check falls through to the main app rather than trapping an
+  existing, already-set-up shop behind a wizard it can never pass.
+  main.tsx now renders AppRoot, not App directly; App.tsx itself is
+  untouched.
+- apps/client/src/pages/setup/useSetupWizard.ts +
+  SetupWizardPage.tsx (NEW) — the wizard itself. The CSV step reuses
+  useImportItemsFlow's own ITEM_COLUMNS / parseHeaderLine /
+  validateHeaders / countDataRows / ImportFileState verbatim for the
+  file-picker and header check — "same validation" per the owner's
+  instruction — but does NOT call ipc.importData.commit itself the
+  way that hook does: the business units/uoms/etc. the import's
+  lookups resolve against do not exist yet at that point (no tenant
+  row), so the raw CSV text is held here and sent as part of the one
+  setup:finish call instead. ImportItemsModal.tsx's private
+  ITEM_SAMPLE_ROW was exported (one-line change) so the wizard's
+  "Import items" card can show the exact same instructions/sample-file
+  block as the Items screen's own import modal, not a second copy of
+  that content.
+- Required-field enforcement is client-side (Finish stays disabled
+  until both names are non-empty) rather than left to the server's
+  generic ZodError -> "Invalid input." mapping, which would have been
+  a poor message for a first-run form.
+
+**Verified:**
+
+- `npm run verify` — exits 0. typecheck clean, `eslint --max-warnings=0`
+  clean, Test Files 167 passed (167) / Tests 1081 passed (1081).
+- New tests, by the owner's required list:
+  - "No tenant row -> wizard shown, main app not loaded" /
+    "Tenant row exists -> wizard skipped, main app loads" —
+    apps/client/src/app/AppRoot.test.tsx (3 tests; the 3rd covers the
+    status-check-itself-fails fallback).
+  - "Setup with no CSV completes and writes tenant + settings" /
+    "Setup with a valid CSV completes and imports items" / "a CSV that
+    has errors completes anyway" / "interrupted setup... shows wizard
+    on next launch" — all in
+    apps/server/src/ipc/handlers/setup.handler.test.ts (7 tests,
+    against a real migrated SQLite file in a temp dir, never the dev
+    DB, per CLAUDE.md's session-protocol note).
+  - Wizard UI itself (required-field disable, A4/A5 default and
+    switch, CSV-with-rejections still completes and shows a summary
+    toast, a thrown setup:finish keeps the wizard open with the error
+    shown) — apps/client/src/pages/setup/SetupWizardPage.test.tsx
+    (5 tests).
+  - packages/db/src/bootstrap.test.ts (+3) / migration-runner.test.ts
+    (+1, plus the 4 existing exact-migration-list assertions extended
+    for 0022) — hasTenant, the new options param, and the new
+    column's nullability.
+- **Mutation-tested the two load-bearing branches, same discipline as
+  Session 102.** Inverting AppRoot's tenantExists ? 'app' : 'wizard'
+  failed both of the two tests that matter (confirmed, then reverted).
+  Inverting useSetupWizard's "only send itemsCsv when a file is ready"
+  failed the no-CSV test (confirmed, then reverted).
+
+**Not done / deferred:**
+
+- Item 3, the owner-facing backup/recovery document — next session,
+  per the owner's stated order. Still carries one open question: items
+  baked into the installer vs. a CSV the owner imports on first run —
+  recommended CSV in Session 102, which is also what this wizard's own
+  optional import step assumes; no starter catalogue was built this
+  session (explicitly out of scope, per the owner's own instruction).
+- docs/PHASES.md's Phase 18 section was deliberately NOT edited — its
+  own text says to update PROJECT.md's live copy instead, not that
+  historical plan entry.
+- Parallel run start date — still TBC; owner confirms once the owner
+  document is ready (next session's output).
+
+**Bugs found:** none in existing code. (The seed()-always-creates-a-
+placeholder-tenant behavior above was a real design conflict with the
+new requirement, not a pre-existing bug — nothing before this feature
+ever needed "no tenant row" to be an observable state.)
+
+**Decisions taken:** none requiring an ADR. Two judgment calls made
+explicit above: writing shopName to BOTH tenant.business_name (what
+the task literally asked for) and the setting table's shopName key
+(what the app actually reads) — the task's intent requires the
+wizard's field to take visible effect, not just populate an unread
+column; and putting owner name on tenant rather than creating an
+app_user row.
+
+**Blocked on:** nothing for item 3's document content, except the
+pre-loaded-items CSV-vs-installer question raised in Session 102
+(still open).
+
+**Next session should:** Write the owner-facing backup/recovery
+document (plain text or PDF) — DB file location (resolved via
+app.getPath('userData') in packaged builds, see main.ts's
+resolveDbPath), weekly USB backup instructions, PC-dies recovery
+steps, no-cloud-sync disclosure, and the CSV-vs-installer
+recommendation.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (1081/1081)
+
+---
+
+## [2026-10-03] Session 102 — Phase 18: BUG-33 no-cash-session warning banner (go-live criterion 5)
+
+**Goal:** Build item 1 of the owner's new pre-go-live scope — a
+non-blocking warning on the Sales screen when no cash session is
+open — then mark go-live criterion 5 (BUG-33) DONE. Items 2 (first-run
+setup wizard) and 3 (owner backup/recovery document) are explicitly
+deferred to later sessions, in that order.
+
+**Done:**
+
+- `apps/client/src/pages/sales/useCashSessionNotice.ts` (NEW) — owns the
+  banner condition and its per-visit dismissal. Condition is
+  `cashSession:today === null`. That channel resolves the currently-OPEN
+  session and nothing else (Phase 17.5 R8, `getOpenSession` in
+  `packages/core/src/expense/cash-session.service.ts`), so `null` covers
+  both the never-opened case and the already-closed case — the latter
+  being the one BUG-33 is actually about. Reads through
+  `lib/ipc.ts`, never `window.api` directly, per that module's own
+  "ONLY place it is touched" contract.
+- `apps/client/src/pages/sales/SaleAlerts.tsx` — new `noCashSession` /
+  `onDismissNoCashSession` props and a `variant="warning"` (yellow)
+  `Alert`. Reused the existing banner stack rather than adding a new
+  component: the screen already had an error/notice/print-error
+  stack in exactly this shape.
+- `apps/client/src/pages/sales/SalePage.tsx` — instantiates the hook and
+  passes it through. 3 lines; the page stays at 286 lines, under the
+  ~300 cap.
+- Message is a plain string constant, per owner instruction. This
+  matches the existing local convention — the print-error copy
+  alongside it is also a plain string, so the screen is internally
+  consistent rather than half-migrated.
+
+**Verified:**
+
+- `npm run verify` — exits 0. typecheck clean, `eslint --max-warnings=0`
+  clean, `Test Files 164 passed (164) / Tests 1061 passed (1061)`.
+- New test `useCashSessionNotice.test.tsx` — 4 tests, all passing:
+  shows when no session open / stays hidden when one is open / hides
+  after dismissal / stays hidden when the IPC lookup fails.
+- **Mutation-tested, and it mattered.** First version of the suite
+  passed 4/4 but two of those tests were worthless: inverting the
+  hook's `session === null` left "stays hidden when a session is open"
+  _still passing_, because `no` is also the pre-resolution state and
+  the test only awaited a single microtask. Rewrote both weak tests to
+  wait for the lookup to settle, then re-ran the same mutant — 3 of 4
+  now fail, including the previously-blind one. A second mutant
+  (catch branch set to warn on failure) fails the error-path test
+  alone, as expected. Both mutants reverted; clean run re-confirmed.
+
+**Not done / deferred:**
+
+- Item 2, first-run setup wizard — next session, owner's stated order.
+- Item 3, owner backup/recovery document — after item 2. It carries an
+  open question for the owner (see "Blocked on").
+- BUG-33 parts (a) and (b) themselves remain UNFIXED in §4. This
+  banner warns the operator; it does not make a post-close sale reach
+  that session's totals. Deliberate — the owner asked for the warning,
+  not the fix, and fixing it is not a Phase 18 item.
+
+**Bugs found:** none
+
+**Decisions taken:** none (no ADR). Two owner instructions recorded in
+PROJECT.md §3.5: the banner was built without the before/after
+workflow answer being given, so criterion 5 no longer depends on it;
+and i18n was waived for this string.
+
+**Blocked on:** Two owner answers, neither blocking item 2:
+(1) parallel run start date — owner will confirm once the wizard is
+ready; (2) pre-loaded items — baked into the installer vs. a CSV the
+owner imports on first run. Recommendation is CSV, which is also what
+item 2's optional import step assumes.
+
+**Next session should:** Build item 2, the first-run setup wizard —
+detect "no tenant row", show shop name / owner name / paper size
+(A4 default) before the main app loads, optional CSV item import
+reusing the existing import logic, seed the tenant row on finish.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (none found)
+- [x] Test suite passing (1061/1061)
+
+---
+
 ## [2026-10-03] Session 101 — Phase 17 and 17.5 closed, Phase 18 (go-live preparation) opened
 
 **Goal:** Documentation only, no code. Close out Phase 17 and Phase

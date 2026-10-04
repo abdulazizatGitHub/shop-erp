@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
-import { migrate, openDatabase, seed } from '@shop/db';
+import { hasTenant, migrate, openDatabase, seed } from '@shop/db';
 import { channels } from './ipc/channels.js';
 import { registerItemHandlers } from './ipc/handlers/item.handler.js';
 import { registerCustomerHandlers } from './ipc/handlers/customer.handler.js';
@@ -41,6 +41,7 @@ import { registerPrintHandlers } from './ipc/handlers/print.handler.js';
 import { registerInvoiceHandlers } from './ipc/handlers/invoice.handler.js';
 import { registerReportHandlers } from './ipc/handlers/report.handler.js';
 import { registerPurchasePrintHandlers } from './ipc/handlers/purchase-print.handler.js';
+import { registerSetupHandlers } from './ipc/handlers/setup.handler.js';
 
 // CLAUDE.md 3.5: tenant_id is a constant in local mode. Matches
 // .env.example's TENANT_ID so a fresh dev DB and a packaged install agree.
@@ -204,14 +205,38 @@ app
     console.warn('Database path:', dbPath);
     console.warn('Migrations dir:', migrationsDir);
     migrate(dbPath, migrationsDir, resolveBackupDir());
+
+    // Phase 18, first-run setup wizard. seed()'s own seedTenant has
+    // always auto-created the tenant row (with a placeholder name) on
+    // every startup, idempotently — which would make "no tenant row"
+    // impossible for the wizard to ever observe if seed() still ran
+    // unconditionally here. So: check first, and skip seed() entirely
+    // (not just the tenant insert — every other seed* step needs the
+    // tenant row to already exist first, via its own tenant_id foreign
+    // key) until the wizard's own setup:finish calls seed() itself with
+    // the owner's real shop/owner name. An existing install (tenant row
+    // already present) is completely unaffected — seed() still runs on
+    // every startup exactly as before, filling in anything newly added
+    // since that install's last run.
+    const tenantId = resolveTenantId();
     const seedDb = openDatabase(dbPath);
     try {
-      const seedResult = seed(seedDb, resolveTenantId());
-      console.warn('Seed result:', JSON.stringify(seedResult));
+      if (hasTenant(seedDb, tenantId)) {
+        const seedResult = seed(seedDb, tenantId);
+        console.warn('Seed result:', JSON.stringify(seedResult));
+      } else {
+        console.warn('No tenant row yet — first-run setup wizard will be shown.');
+      }
     } finally {
       seedDb.close();
     }
     registerIpcHandlers(dbPath);
+    registerSetupHandlers({
+      dbPath,
+      tenantId,
+      deviceCode: resolveDeviceCode(),
+      logDir: resolveLogDir(),
+    });
     createWindow();
   })
   .catch((error: unknown) => {

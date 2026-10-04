@@ -2146,7 +2146,7 @@ for any new icon need in apps/client going forward.
 | 16           | Jobs Settings — Service Charges, Brands, Commission Claims                                                           | ✅ COMPLETE — P16-1 (service charge CRUD), P16-1b (Settings shell redesign, OD-16-11), P16-2 (brand management), P16-3a (commission claim schema + core calc + delivery-transaction claim insert + approve/reject/reverse, retiring Phase 7's automatic commission entirely — ADR-0015), P16-3b (Commission Approvals UI + wage-report sign fix), P16-3c (technician-list lock covering both assign and unassign, OD-16-5, required removal reason), P16-4 (Shop Identity persistence, owner-verified). Closes BUG-COMMISSION-MULTI as SUPERSEDED. Owner additionally hand-verified the full end-to-end commission flow and the P16-3c lock/reason flow in the running app.                                                                                                                                             | P16-1–P16-4 (2026-09-23/26). 845/845 tests. See `docs/phases/PHASE_16.md`                                                                                                          |
 | 17           | Settings Backlog                                                                                                     | ✅ COMPLETE — negative-stock policy (P17-1), low-stock alerts + Dashboard widget (P17-2), rows-per-page via one shared hook (P17-3), Expense Categories Settings section (P17-4, unblocked once BUG-31 was fixed in Phase 17.5), receipt paper-size wired into invoice/payment-receipt prints (P17-5, owner-machine print verification passed), payment-method enable/disable with Cash locked at the Zod boundary (P17-7), four-state stock alert taxonomy replacing the single `isLowStock` boolean (P17-2b, Q17-7)                                                                                                                                                                                                                                                                                                   | P17-1–P17-7, P17-2b (2026-09-27). 1057/1057 tests. See `docs/phases/PHASE_17.md`                                                                                                   |
 | 17.5         | Drawer Cash Movements                                                                                                | ✅ COMPLETE — new append-only `cash_movement` table + "Cash In / Cash Out" UI fixing BUG-31 (no way to record cash physically removed from/added to the drawer for a non-sale reason); `getCashBookReport`'s cash-filter gap fixed (BUG-32); single-open-cash-session-at-a-time invariant enforced (review round 4, R8); owner click-through passed                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 2026-09-27. 964/964 tests at close. See `docs/phases/PHASE_17_5.md`, `docs/decisions/ADR-0016-cash-drawer-movements.md`                                                            |
-| 18           | Go-live preparation                                                                                                  | ⏳ NOT STARTED — 6 exit criteria (parallel run, pull-the-plug test, staff training, Urdu cheat sheet, BUG-33 owner decision, `npm run verify` on the go-live machine), no code of its own. See "Go-live checklist" (§3.5) for live tracking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Not started.                                                                                                                                                                       |
+| 18           | Go-live preparation                                                                                                  | 🔄 IN PROGRESS (started 2026-10-03) — 6 exit criteria (parallel run, pull-the-plug test, staff training, Urdu cheat sheet, BUG-33 banner, `npm run verify` on the go-live machine). 1 of 6 done: BUG-33 banner. Scope now includes two code items the original plan did not have — the BUG-33 banner (done, 2026-10-03) and a first-run setup wizard (done, 2026-10-04) — plus an owner-facing backup/recovery document (not started). Parallel run start date: TBC, owner will confirm once the owner-facing document is ready. See "Go-live checklist" (§3.5) for live tracking                                                                                                                                                                                                                                       | Not started.                                                                                                                                                                       |
 
 ---
 
@@ -2169,11 +2169,26 @@ retired.**
 - [ ] **Urdu cheat sheet** — one printed A4 page covering the 5 daily
       workflows (open session, make a sale, receive payment, record
       cash movement, close session). Owner approves the wording.
-- [ ] **BUG-33 (sale-dating after session close)** — owner confirms
-      the workflow: does he close the session before or after the
-      last sale of the day? If after, BUG-33 is a non-issue in
-      practice; if before, a warning banner on the Sales screen is
-      required before go-live.
+- [x] **BUG-33 (sale-dating after session close)** — **DONE
+      (2026-10-03).** Owner directed the warning banner be built
+      rather than resolving the before/after workflow question, so
+      the banner is in place unconditionally and the criterion no
+      longer depends on that answer. The Sales screen now shows a
+      non-blocking yellow notice — "No cash session is open. This
+      sale will not appear in today's cash count." — whenever no
+      cash session is open, dismissible per visit. The sale is never
+      gated: a late sale stays a legitimate entry, the operator is
+      simply told it falls outside the count.
+      Implementation: `apps/client/src/pages/sales/useCashSessionNotice.ts`
+      (condition + per-visit dismissal), rendered through the existing
+      `SaleAlerts.tsx` banner stack. Condition is
+      `cashSession:today === null`, which since Phase 17.5 R8 resolves
+      the currently-OPEN session only — so it covers both the
+      never-opened and the already-closed case, the latter being the
+      one BUG-33 is actually about.
+      Note: this banner is a workflow warning, not a fix. BUG-33's
+      underlying parts (a/b) remain open at §4 — a sale entered after
+      close still does not reach that session's totals.
 - [ ] `npm run verify` exits 0 on the go-live machine.
 
 ---

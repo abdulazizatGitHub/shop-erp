@@ -4,7 +4,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from './migration-runner.js';
-import { seed } from './bootstrap.js';
+import { hasTenant, seed } from './bootstrap.js';
 
 const migrationsDir = path.join(import.meta.dirname, 'migrations');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -20,6 +20,16 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(workDir, { recursive: true, force: true });
+});
+
+describe('hasTenant', () => {
+  it('is false before seeding and true after', () => {
+    const db = new Database(dbPath);
+    expect(hasTenant(db, TENANT_ID)).toBe(false);
+    seed(db, TENANT_ID);
+    expect(hasTenant(db, TENANT_ID)).toBe(true);
+    db.close();
+  });
 });
 
 describe('seed', () => {
@@ -54,6 +64,49 @@ describe('seed', () => {
       expenseCategoriesInserted: 0,
       brandsInserted: 0,
     });
+  });
+
+  it('Phase 18: options.businessName/ownerName are written on first insert', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID, { businessName: 'Malakand AC & Fridge Repair', ownerName: 'Zahid Khan' });
+    const row = db
+      .prepare(
+        `SELECT business_name AS businessName, owner_name AS ownerName FROM tenant WHERE id = ?`,
+      )
+      .get(TENANT_ID) as { businessName: string; ownerName: string | null };
+    db.close();
+
+    expect(row).toEqual({
+      businessName: 'Malakand AC & Fridge Repair',
+      ownerName: 'Zahid Khan',
+    });
+  });
+
+  it('Phase 18: options are ignored once a tenant row already exists', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    seed(db, TENANT_ID, { businessName: 'Should not apply', ownerName: 'Should not apply' });
+    const row = db
+      .prepare(
+        `SELECT business_name AS businessName, owner_name AS ownerName FROM tenant WHERE id = ?`,
+      )
+      .get(TENANT_ID) as { businessName: string; ownerName: string | null };
+    db.close();
+
+    expect(row).toEqual({ businessName: 'Shop', ownerName: null });
+  });
+
+  it('with no options, keeps the pre-Phase-18 default: business_name "Shop", owner_name null', () => {
+    const db = new Database(dbPath);
+    seed(db, TENANT_ID);
+    const row = db
+      .prepare(
+        `SELECT business_name AS businessName, owner_name AS ownerName FROM tenant WHERE id = ?`,
+      )
+      .get(TENANT_ID) as { businessName: string; ownerName: string | null };
+    db.close();
+
+    expect(row).toEqual({ businessName: 'Shop', ownerName: null });
   });
 
   it('P16-2/OD-16-7: seeds exactly 18 brands, all is_active=1, no case-insensitive duplicates', () => {

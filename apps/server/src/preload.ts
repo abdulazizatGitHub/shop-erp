@@ -148,6 +148,7 @@ import type {
   UnitPlReportInput,
   WageMonthInput,
   WageMonthRowDto,
+  FinishSetupInput,
 } from '@shop/contracts';
 import type {
   GrnCsvValidationResult,
@@ -188,6 +189,7 @@ import type { InvoicePrintOutcome } from './printing/print-invoice-safely.js';
 import type { PaymentReceiptPrintOutcome } from './printing/print-payment-receipt-safely.js';
 import type { CustomerStatementPrintOutcome } from './printing/print-customer-statement-safely.js';
 import type { PurchasePrintOutcome } from './printing/print-purchase-safely.js';
+import type { FinishSetupResult, SetupStatusResult } from './ipc/handlers/setup.handler.js';
 
 interface CreateItemResult {
   readonly id: string;
@@ -655,5 +657,11 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke(channels.setting.getShopIdentity) as Promise<ShopIdentityDto>,
     setShopIdentity: (input: SetShopIdentityInput): Promise<void> =>
       ipcRenderer.invoke(channels.setting.setShopIdentity, input) as Promise<void>,
+  },
+  setup: {
+    status: (): Promise<SetupStatusResult> =>
+      ipcRenderer.invoke(channels.setup.status) as Promise<SetupStatusResult>,
+    finish: (input: FinishSetupInput): Promise<FinishSetupResult> =>
+      ipcRenderer.invoke(channels.setup.finish, input) as Promise<FinishSetupResult>,
   },
 });

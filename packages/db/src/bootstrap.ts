@@ -91,12 +91,31 @@ const BASE_UOM_CONVERSIONS: readonly UomConversionSeed[] = [
   { fromName: 'Meter', toName: 'Centimeter', factorMilli: 100_000 },
 ];
 
-function seedTenant(db: Database.Database, tenantId: string, now: string): boolean {
+/**
+ * Read-only existence check — used by the first-run setup wizard
+ * (Phase 18) to decide whether to show the wizard at all, BEFORE
+ * `seed()` runs. Every other seed* function below needs the tenant row
+ * to already exist (tenant_id foreign keys, enforced — connection.ts's
+ * `foreign_keys = ON`), so this must be checked ahead of calling seed(),
+ * not inferred from its result afterward.
+ */
+export function hasTenant(db: Database.Database, tenantId: string): boolean {
+  const existing = db.prepare(`SELECT id FROM tenant WHERE id = ?`).get(tenantId);
+  return existing !== undefined;
+}
+
+function seedTenant(
+  db: Database.Database,
+  tenantId: string,
+  now: string,
+  businessName: string,
+  ownerName: string | null,
+): boolean {
   const existing = db.prepare(`SELECT id FROM tenant WHERE id = ?`).get(tenantId);
   if (existing) return false;
   db.prepare(
-    `INSERT INTO tenant (id, business_name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-  ).run(tenantId, 'Shop', now, now);
+    `INSERT INTO tenant (id, business_name, owner_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+  ).run(tenantId, businessName, ownerName, now, now);
   return true;
 }
 
@@ -273,15 +292,33 @@ function seedWarehouse(db: Database.Database, tenantId: string): number {
   return 1;
 }
 
+export interface SeedOptions {
+  /** Only consulted on first insert — ignored once a tenant row exists. Defaults to 'Shop', matching every caller from before Phase 18. */
+  readonly businessName?: string;
+  /** Only consulted on first insert — ignored once a tenant row exists. Defaults to null (not recorded), matching every caller from before Phase 18. */
+  readonly ownerName?: string;
+}
+
 /**
  * Idempotent first-launch bootstrap: tenant row, the three fixed business
  * units, the default Retail price level, the base units of measure, and
  * a default "Shop" warehouse (stock_movement.warehouse_id is required —
  * P1-2's opening-stock import needs somewhere to post against). Safe to
  * call on every startup — each piece is inserted only if missing.
+ *
+ * Phase 18: `options` lets the first-run setup wizard's `setup:finish`
+ * supply the owner's real shop/owner name at the one moment it has them
+ * (the tenant INSERT itself). Every pre-Phase-18 caller (including the
+ * unconditional startup call in main.ts's `whenReady`, run every launch
+ * once a tenant row already exists) omits `options` and keeps getting
+ * the 'Shop'/null placeholder behaviour — options are a no-op on every
+ * call after the first anyway, since seedTenant returns early once a row
+ * exists.
  */
-export function seed(db: Database.Database, tenantId: string): SeedResult {
+export function seed(db: Database.Database, tenantId: string, options?: SeedOptions): SeedResult {
   const now = new Date().toISOString();
+  const businessName = options?.businessName ?? 'Shop';
+  const ownerName = options?.ownerName ?? null;
   let result: SeedResult = {
     tenantInserted: false,
     businessUnitsInserted: 0,
@@ -293,7 +330,7 @@ export function seed(db: Database.Database, tenantId: string): SeedResult {
   };
 
   const runSeed = db.transaction(() => {
-    const tenantInserted = seedTenant(db, tenantId, now);
+    const tenantInserted = seedTenant(db, tenantId, now, businessName, ownerName);
     const businessUnitsInserted = seedBusinessUnits(db, tenantId, now);
     const priceLevelsInserted = seedPriceLevel(db, tenantId);
     const uomsInserted = seedUoms(db, tenantId);
