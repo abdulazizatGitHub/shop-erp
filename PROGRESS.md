@@ -41,6 +41,167 @@
 
 ---
 
+## [2026-10-06] Session 105 — Phase 18: app icon + NSIS installer wizard
+
+**Goal:** Two tasks. (1) Generate a shop/tools-themed app icon, wire it
+into electron-builder and the BrowserWindow, verify it stays out of
+the asar. (2) Enable the NSIS assisted-installer wizard (icons,
+license page, shortcuts, uninstall entry), build the installer, report
+its size. No auto-update code — explicitly deferred pending a hosting
+decision, per the owner's own framing of this session.
+
+**Done:**
+
+- `apps/server/build/icon.png` / `icon.ico` (NEW) — a flat wrench
+  silhouette (two closed rings joined by a diagonal bar — a classic
+  combination-wrench pictogram) in `brand.default` (#1B5E8C, from
+  `packages/ui/src/tokens/colors.ts` — same identity as the rest of
+  the UI, not a separately-invented palette), on a rounded-square
+  background. Generated with Pillow (Python) — no `sharp`/`canvas`
+  node packages installed in this repo, Pillow was already available
+  and fully sufficient. Built as opaque shape layering (background,
+  then white shapes, then background-colour "holes") rather than alpha
+  compositing + rotation — an earlier version using
+  `Image.rotate()`+`alpha_composite` produced visible edge artifacts;
+  rotating point coordinates by hand and drawing directly avoided that
+  entirely. `.ico` contains all five requested sizes (256/128/64/32/16
+  — confirmed via `Image.open('icon.ico').info['sizes']`). Not
+  committed: the generator script itself (Python, in a TypeScript-only
+  codebase per CLAUDE.md §4) — only the two rendered output files.
+- `apps/server/build/LICENSE.txt` (NEW) — exactly the one paragraph
+  specified, for the NSIS license page.
+- `apps/server/package.json` — `build.extraResources` gained a
+  `build/icon.ico` → `icon.ico` entry (same mechanism as the existing
+  migrations entry — outside `app.asar`, not inside it). `build.win`
+  gained `icon: "build/icon.ico"`. New `build.nsis` block: `oneClick:
+false`, `createDesktopShortcut`/`createStartMenuShortcut: true`,
+  `shortcutName: "Shop ERP"`, `installerIcon`/`uninstallerIcon:
+"build/icon.ico"`, `license: "build/LICENSE.txt"`. One correction
+  from the task's literal field list: `allowDirChange` is not a real
+  electron-builder NSIS option — the actual field (confirmed in
+  `node_modules/app-builder-lib/out/targets/nsis/nsisOptions.d.ts`) is
+  `allowToChangeInstallationDirectory`; used the real name, since the
+  one given would have been silently ignored.
+- `apps/server/src/main.ts` — new `resolveIconPath()` (same dev/
+  packaged branching pattern as `resolveMigrationsDir()`), wired into
+  `createWindow()`'s `BrowserWindow({ icon: resolveIconPath() })`.
+  This sets the running app's own title-bar/taskbar icon via
+  Electron's API directly — independent of, and unblocked by, the
+  packaged `.exe`'s own PE-resource icon (see BUG-34 below).
+
+**Found, investigated, and worked around (reported as BUG-34, not
+silently patched past):** electron-builder only stamps the packaged
+`.exe`'s own icon resource when `win.signAndEditExecutable` is `true`
+— it has been `false` since Phase 0, apparently for
+`forceCodeSigning`-adjacent reasons unrelated to icons. Flipping it to
+`true` to test: confirmed via extracted-icon comparison that the exe's
+icon still didn't change, AND the build failed outright — `signApp()`
+unconditionally tries to resolve a Windows signtool path, which
+requires downloading+extracting `winCodeSign-2.6.0.7z`
+(electron-builder's own vendor bundle), whose archive contains macOS
+`.dylib` symlinks that 7-Zip cannot create without
+`SeCreateSymbolicLinkPrivilege` — confirmed absent on this account
+(not Administrator; Developer Mode registry key absent). A manual
+`7za.exe x -snl-` extraction of the identical archive succeeds
+cleanly, confirming the archive and 7-Zip binary are both fine — only
+the privilege is missing, and electron-builder's own extraction always
+targets a fresh random temp directory per attempt, so a one-off manual
+extraction can't be cached in its place. Reverted
+`signAndEditExecutable` to `false` (restoring a working build — the
+task needed an actual installer to size) and documented the real,
+narrower scope of what this blocks: only the packaged exe's own PE
+icon (and, likely, shortcuts that inherit it) — NOT the NSIS
+installer/uninstaller icons (separate code path, compiled directly by
+`makensis`, confirmed correct below) and NOT the running app's window
+icon (Electron API, confirmed correct by design above).
+
+**Verified:**
+
+- `npx asar list release/win-unpacked/resources/app.asar | grep -i
+icon` — zero matches. `icon.ico` (26,947 bytes, matches the
+  generated file exactly) sits in `release/win-unpacked/resources/`
+  alongside `migrations/`, outside the archive.
+- Installer built: `release/Shop ERP Setup 0.1.0.exe`, **89,642,297
+  bytes (85.49 MB)**.
+- NSIS config took effect — build log: `building target=nsis
+file=...Shop ERP Setup 0.1.0.exe archs=x64 oneClick=false
+perMachine=false` (previous build, before this session's config,
+  showed `oneClick=true` by default).
+- Installer's own icon: extracted via
+  `[System.Drawing.Icon]::ExtractAssociatedIcon` from a fresh copy (to
+  rule out Explorer icon-cache staleness) of `Shop ERP Setup 0.1.0.exe`
+  — the wrench icon, correctly. Confirms `installerIcon` took effect
+  independent of the `signAndEditExecutable` limitation above.
+- Packaged app exe's own icon: same extraction method on
+  `win-unpacked\Shop ERP.exe` — still Electron's generic default icon,
+  as BUG-34 describes; this is the one known, documented gap.
+- Uninstall-registry-entry requirement: did **not** verify via a live
+  install — running the installer (even silently with `/S`) was
+  correctly blocked by this session's own auto-mode classifier as a
+  real system-modifying action (registry writes, real file install),
+  and that boundary was respected rather than worked around. Verified
+  instead by source: `CommonWindowsInstallerConfiguration`'s
+  `uninstallDisplayName` (defaults to `${productName} ${version}`)
+  confirms entry creation is default, unconditional NSIS-target
+  behaviour, not something needing separate opt-in config. A
+  pre-existing, unrelated `Shop ERP 0.1.0` entry already on this
+  machine (from earlier, unrelated testing — old `@shopserver` install
+  path, not from this session) independently corroborates the
+  mechanism works as documented.
+- `npm run verify` — typecheck clean, `eslint --max-warnings=0` clean,
+  167 test files / 1081 tests passing.
+- Mid-session false alarm, resolved per CLAUDE.md's own documented
+  procedure: after the repeated `npm run package` runs (each invoking
+  `electron-rebuild`), a plain `npm run test` failed 53 files / 490
+  tests — the documented ABI mismatch (native module rebuilt against
+  Electron's Node, not plain Node's). No stray `electron.exe`
+  processes were running, so per CLAUDE.md's own noted shortcut, a
+  plain `npm rebuild better-sqlite3` alone fixed it — back to
+  167/1081 passing immediately after.
+
+**Not done / deferred (explicitly, per the owner's own framing):**
+
+- Auto-update code — needs a hosting decision first, not attempted.
+- BUG-34's actual fix (enabling Developer Mode or building elevated)
+  — needs the real build/release machine, not this session's sandbox.
+
+**Bugs found:** BUG-34 (new, logged in PROJECT.md §4, LOW/not
+blocking — see above).
+
+**Decisions taken:** none requiring an ADR. One correction made to
+the task's own instructions: `allowDirChange` → the real field name
+`allowToChangeInstallationDirectory`.
+
+**Also found, not touched:** an unexplained `app-logo.png` (447×447,
+a generic purple/blue stock "ERP" gear-and-laptop icon — not
+resembling anything generated this session) sitting untracked at the
+repo root. Did not create it, don't know its origin, left it alone
+rather than guess — flagged for the owner's attention.
+
+**Blocked on:** BUG-34's actual fix needs owner/ops access to the real
+build machine (Developer Mode toggle or an elevated build) — nothing
+further to do here until then.
+
+**Next session should:** Whoever next does a release build: enable
+Developer Mode (or build elevated) on that machine first, flip
+`signAndEditExecutable` back to `true`, rebuild, and re-verify the
+packaged exe's own icon with the same `ExtractAssociatedIcon` check
+used this session — then BUG-34 can be closed.
+
+**Checklist:**
+
+- [x] All verification checks passed
+- [x] No unresolved bugs introduced by this phase (BUG-34 is a
+      pre-existing machine-capability gap, not something this
+      session's changes caused)
+- [x] PROJECT.md updated with new status
+- [x] PROGRESS.md updated with session entry
+- [x] Next phase prerequisites are met
+- [x] Any new bugs documented in PROJECT.md (BUG-34)
+- [x] Test suite passing (167 files / 1081 tests)
+
+---
+
 ## [2026-10-04] Session 104 — Phase 18: owner backup/recovery document (owner's item 3 of 3)
 
 **Goal:** Find the exact production (packaged) path where the app

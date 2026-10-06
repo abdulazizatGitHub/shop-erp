@@ -4413,6 +4413,70 @@ future pre-go-live task, owner input needed first. Not blocking Phase
 17.5 itself, which avoids the same defect for its own new table by
 design (§2.8/§2.9, `docs/phases/PHASE_17_5.md`).
 
+### BUG-34: Packaged app's own .exe icon cannot be stamped on this build machine — `signAndEditExecutable: true` needs Developer Mode/Administrator — LOW, not blocking
+
+Found in: Phase 18, app icon + NSIS installer task, 2026-10-06, while
+wiring `win.icon` and verifying it actually took effect on the built
+`.exe`.
+Description: `apps/server/package.json`'s `build.win.icon` is
+correctly set to `build/icon.ico`, but electron-builder only stamps an
+icon onto the packaged `.exe`'s own PE resource (via `rcedit`) when
+`win.signAndEditExecutable` is `true` — it has been `false` since the
+very first commit that added electron-builder config (Phase 0,
+2026-08-15, `199930749`), apparently set alongside `forceCodeSigning:
+false` without anyone realizing the same flag also gates icon/version
+resource editing, not just Authenticode signing (`app-builder-lib`'s
+own `winPackager.js`: `signApp()`'s first line is `if
+(signAndEditExecutable === false) return false`, skipping rcedit
+entirely). Flipping it to `true` and rebuilding reproduced this
+exactly — confirmed by extracting the `.exe`'s embedded icon
+(`System.Drawing.Icon.ExtractAssociatedIcon`, from a path-cache-bypassing
+copy) both before and after: still Electron's generic default icon,
+unchanged, in both the plain-`icon`-field build and the
+`signAndEditExecutable: true` build. The `true` build also failed to
+complete at all: `signApp()`'s later `this.sign(file)` call
+unconditionally resolves a Windows signtool path, which requires
+downloading and extracting `electron-builder-binaries`' `winCodeSign-2.6.0.7z`
+— that archive bundles macOS `.dylib` symlinks, and 7-Zip cannot
+create them without `SeCreateSymbolicLinkPrivilege` (granted by
+Windows Developer Mode, or by running elevated) — confirmed this build
+account has neither (`[Security.Principal.WindowsPrincipal]...IsInRole(Administrator)`
+→ `false`; `HKLM:\...\AppModelUnlock\AllowDevelopmentWithoutDevLicense`
+→ absent). A manual `7za.exe x -snl-` extraction of the same archive
+succeeds cleanly (confirms the archive/tool combination works fine
+once the privilege exists) — but electron-builder's own extraction
+invocation always uses a fresh, randomly-named temp directory per
+attempt, so a one-off manual pre-extraction cannot be cached in its
+place to work around this.
+Impact: The packaged `win-unpacked\Shop ERP.exe` (and therefore the
+installed app's own exe, and — since NSIS shortcuts typically inherit
+their target exe's icon — likely the Desktop/Start Menu shortcuts
+too) shows Electron's generic default icon rather than the shop/tools
+wrench icon, until this is resolved on a machine with Developer Mode
+or an elevated build. **Everything else icon-related already works
+regardless**, confirmed on the same build: the NSIS installer and
+uninstaller's own icons (`installerIcon`/`uninstallerIcon` — compiled
+directly into those two binaries by `makensis`, a wholly separate code
+path from `signAndEditExecutable`) extract as the correct wrench icon;
+the running app's own title-bar/taskbar icon is correct in both dev
+and packaged mode (set via `BrowserWindow({ icon: resolveIconPath()
+})` in `main.ts`, which is Electron's own API, independent of the
+exe's PE resource); and the icon file itself is correctly outside
+`app.asar` (`extraResources`, verified via `asar list`).
+Fix: On the actual build/release machine, enable Windows Developer
+Mode (Settings → Privacy & Security → For developers → Developer
+Mode) once, **or** run `npm run package` from an elevated terminal —
+either grants `SeCreateSymbolicLinkPrivilege`, letting
+`winCodeSign-2.6.0.7z` extract cleanly. Then flip
+`apps/server/package.json`'s `build.win.signAndEditExecutable` to
+`true` (this does not newly attempt real Authenticode signing —
+`forceCodeSigning: false` and no certificate config means signing
+still no-ops with "no signing info identified, signing is skipped",
+exactly as today) and rebuild.
+Status: UNFIXED — waiting for a build machine with Developer Mode or
+admin rights; not blocking, since the installer/uninstaller icon and
+the running app's own window icon are both already correct.
+
 ### BUG-1: [Title] — [CRITICAL/HIGH/MEDIUM/LOW]
 
 Found in: Phase [X], [YYYY-MM-DD]

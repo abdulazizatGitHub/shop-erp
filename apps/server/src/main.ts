@@ -94,6 +94,26 @@ function resolveMigrationsDir(): string {
   return path.join(repoRootDev, 'packages/db/src/migrations');
 }
 
+function resolveIconPath(): string {
+  // Packaged: copied to resources/icon.ico via extraResources (see
+  // apps/server/package.json "build") — not inside app.asar, same
+  // reasoning as resolveMigrationsDir above.
+  //
+  // This is NOT redundant with win.icon ("build/icon.ico" in that same
+  // config): win.icon only takes effect when electron-builder's own
+  // signAndEditExecutable runs (rcedit stamping the .exe's own PE
+  // resource) — that flag is currently false (PROJECT.md: enabling it
+  // needs Windows Developer Mode or an elevated build, to let
+  // electron-builder's winCodeSign vendor download extract its bundled
+  // macOS symlinks). Until that's resolved, the packaged .exe's own
+  // file icon stays Electron's default — this option is what actually
+  // puts the real icon on the window's title bar and taskbar entry
+  // regardless, both packaged and in dev (where the raw node_modules
+  // electron.exe has no custom icon baked in either).
+  if (app.isPackaged) return path.join(process.resourcesPath, 'icon.ico');
+  return path.join(repoRootDev, 'apps/server/build/icon.ico');
+}
+
 function registerIpcHandlers(dbPath: string): void {
   const tenantId = resolveTenantId();
   const deviceCode = resolveDeviceCode();
@@ -154,6 +174,7 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
+    icon: resolveIconPath(),
     webPreferences: {
       preload: path.join(currentDir, '../preload/preload.cjs'),
       nodeIntegration: false,
